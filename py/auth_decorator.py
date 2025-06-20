@@ -87,7 +87,47 @@ def get_trusted_internal_ips():
     logger.info(f"初始化受信任的内部IP列表: {trusted_ips}")
     return trusted_ips
 
-# 受信任的内部服务IP列表
+# 实时获取受信任的内部服务IP列表
+def get_current_trusted_ips():
+    """实时获取受信任的内部服务IP列表"""
+    trusted_ips = [
+        'localhost',
+        '127.0.0.1'
+    ]
+    
+    # 从环境变量添加静态IP
+    java_service_ip = os.environ.get('JAVA_SERVICE_IP', 'poetize-java')
+    if java_service_ip:
+        trusted_ips.append(java_service_ip)
+    
+    prerender_service_ip = os.environ.get('PRERENDER_SERVICE_IP', 'poetize-prerender')
+    if prerender_service_ip:
+        trusted_ips.append(prerender_service_ip)
+    
+    trusted_ips_env = os.environ.get('TRUSTED_IPS', '')
+    if trusted_ips_env:
+        for ip in trusted_ips_env.split(','):
+            ip = ip.strip()
+            if ip:
+                trusted_ips.append(ip)
+    
+    # 实时解析容器名到IP
+    try:
+        import socket
+        container_names = ['poetize-java', 'poetize-prerender', 'poetize-nginx']
+        for container_name in container_names:
+            try:
+                ip = socket.gethostbyname(container_name)
+                if ip not in trusted_ips:
+                    trusted_ips.append(ip)
+            except socket.gaierror:
+                pass  # 忽略解析失败
+    except Exception:
+        pass  # 忽略异常
+    
+    return trusted_ips
+
+# 受信任的内部服务IP列表（初始化时获取）
 TRUSTED_INTERNAL_IPS = get_trusted_internal_ips()
 
 # FastAPI Security scheme
@@ -112,28 +152,40 @@ async def admin_required(
         # 使用最左侧的IP（通常是客户端真实IP）
         client_ip = request.headers.get('X-Forwarded-For').split(',')[0].strip()
     
-    # 检查是否来自内部服务的请求 - 使用精确的IP列表
-    if client_ip in TRUSTED_INTERNAL_IPS:
-        logger.info(f"来自内部服务的请求，直接信任: {client_ip}, 请求: {request.url.path}")
+    # 详细记录所有请求头用于调试
+    all_headers = dict(request.headers)
+    logger.info(f"收到API请求: {request.url.path}, IP: {client_ip}")
+    logger.info(f"所有请求头: {all_headers}")
+    
+    # 实时获取受信任的IP列表
+    current_trusted_ips = get_current_trusted_ips()
+    logger.info(f"当前受信任的IP列表: {current_trusted_ips}")
+    
+    # 检查是否来自内部服务的请求 - 使用实时IP列表
+    if client_ip in current_trusted_ips:
+        logger.info(f"✅ 内部IP匹配成功，直接信任: {client_ip}, 请求: {request.url.path}")
         return True
     
     # 检查是否是通过User-Agent识别的内部服务
     user_agent = request.headers.get('User-Agent', '')
-    if 'node-fetch' in user_agent or 'axios' in user_agent or 'python-requests' in user_agent:
+    logger.info(f"检查User-Agent: {user_agent}")
+    if 'node-fetch' in user_agent or 'axios' in user_agent or 'python-requests' in user_agent or 'poetize-prerender' in user_agent:
         # 内部服务通常使用这些HTTP客户端
-        logger.info(f"检测到内部服务User-Agent，直接信任: {client_ip}, UA: {user_agent}")
+        logger.info(f"✅ User-Agent匹配成功，直接信任: {client_ip}, UA: {user_agent}")
         return True
     
     # 检查是否有Java服务传来的管理员标志
     admin_flag = request.headers.get('X-Admin-Request')
+    logger.info(f"检查X-Admin-Request头: {admin_flag}")
     if admin_flag == 'true':
-        logger.info(f"检测到Java服务的管理员标志，直接通过: {request.url.path}")
+        logger.info(f"✅ Java服务管理员标志匹配，直接通过: {request.url.path}")
         return True
     
     # 检查是否有内部服务标识头
     internal_service = request.headers.get('X-Internal-Service')
+    logger.info(f"检查X-Internal-Service头: {internal_service}")
     if internal_service in ['poetize-java', 'poetize-prerender', 'poetize-nginx']:
-        logger.info(f"检测到内部服务标识，直接通过: {internal_service}, IP: {client_ip}")
+        logger.info(f"✅ 内部服务标识匹配成功，直接通过: {internal_service}, IP: {client_ip}")
         return True
     
     # 检查限流
