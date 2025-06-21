@@ -7,6 +7,7 @@ const MarkdownIt = require('markdown-it');
 const hljs = require('highlight.js');
 const cheerio = require('cheerio');
 const Critters = require('critters');
+const { decode: decodeHtmlEntities } = require('html-entities');
 
 const app = express();
 app.use(bodyParser.json());
@@ -1489,7 +1490,10 @@ async function renderIds(ids = [], options = {}) {
             logger.debug('Translation applied', { taskId, articleId: id, lang });
           }
 
-          // markdown -> html, 移除条件判断，强制执行渲染，更加稳妥
+          // 对内容进行 HTML 实体解码，避免 &gt; 等导致 markdown 失效
+          contentHtml = decodeHtmlEntities(contentHtml);
+
+          // markdown -> html
           contentHtml = md.render(contentHtml);
           logger.debug('Markdown content rendered to HTML', { taskId, articleId: id, lang });
 
