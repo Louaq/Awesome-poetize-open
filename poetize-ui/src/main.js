@@ -164,8 +164,19 @@ store.watch(
   { immediate: false }
 );
 
-new Vue({
+const app = new Vue({
   router,
   store,
   render: h => h(App)
-}).$mount('#app')
+})
+
+// 通过检查 window.PRERENDER_DATA 来判断是否需要注水
+if (window.PRERENDER_DATA) {
+  // 注水模式：平滑接管已有的DOM
+  app.$mount('#app', true)
+  console.log('客户端注水模式启动')
+} else {
+  // 正常挂载模式：用于开发环境或非预渲染页面
+  app.$mount('#app')
+  console.log('客户端正常挂载模式启动')
+}

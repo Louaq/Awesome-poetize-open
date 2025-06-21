@@ -1485,14 +1485,9 @@ async function renderIds(ids = [], options = {}) {
             logger.debug('Translation applied', { taskId, articleId: id, lang });
           }
 
-          // markdown -> html，使用更可靠的 editorType 判断
-          if (article.editorType === 'markdown') {
-            contentHtml = md.render(contentHtml);
-            logger.debug('Markdown content rendered to HTML via editorType', { taskId, articleId: id, lang });
-          } else {
-            // 如果不是markdown，我们假定它已经是HTML，或者是不需要转换的纯文本
-            logger.debug('Content is assumed to be HTML, skipping markdown conversion', { taskId, articleId: id, lang, editorType: article.editorType });
-          }
+          // markdown -> html, 移除条件判断，强制执行渲染，更加稳妥
+          contentHtml = md.render(contentHtml);
+          logger.debug('Markdown content rendered to HTML', { taskId, articleId: id, lang });
 
           // 获取文章特定的meta信息
           const articleMeta = await fetchMeta(id, lang);
