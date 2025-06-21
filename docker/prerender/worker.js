@@ -576,21 +576,25 @@ function generateTaskId() {
 const JAVA_BACKEND_URL = process.env.JAVA_BACKEND_URL || 'http://poetize-java:8081';
 const PYTHON_BACKEND_URL = process.env.PYTHON_BACKEND_URL || 'http://poetize-python:5000';
 
+// 修正 markdown-it 初始化逻辑
 const md = new MarkdownIt({
   html: true,
   linkify: true,
   breaks: true,
-  highlight(str, lang) {
-    if (lang && hljs.getLanguage(lang)) {
-      try {
-        return '<pre class="hljs"><code>' +
-               hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
-               '</code></pre>';
-      } catch (_) {}
-    }
-    return '<pre class="hljs"><code>' + md.utils.escapeHtml(str) + '</code></pre>';
-  }
 });
+
+md.options.highlight = (str, lang) => {
+  if (lang && hljs.getLanguage(lang)) {
+    try {
+      return '<pre class="hljs"><code>' +
+             hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
+             '</code></pre>';
+    } catch (e) {
+      console.error('highlight.js error:', e);
+    }
+  }
+  return '<pre class="hljs"><code>' + md.utils.escapeHtml(str) + '</code></pre>';
+};
 
 // 完整版：先尝试 manifest.json，失败则解析 index.html，结果缓存 10 分钟
 const assetCache = { assets: null, lastFetch: 0 };
