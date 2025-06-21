@@ -133,7 +133,7 @@ public class ArticleController {
                             prerenderClient.renderHomePage();
                             // 重新渲染相关分类页面
                             if (sortId != null) {
-                                prerenderClient.renderSortPage(sortId);
+                                prerenderClient.renderCategoryPage(sortId);
                             }
                         } catch (Exception e) {
                             log.warn("预渲染页面失败: " + e.getMessage());
@@ -170,7 +170,7 @@ public class ArticleController {
                             HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(sitemapData, headers);
                             
                             // 调用专门的sitemap更新接口
-                            String pythonServerUrl = System.getProperty("python.server.url", "http://localhost:5000");
+                            String pythonServerUrl = System.getenv().getOrDefault("PYTHON_SERVICE_URL", "http://localhost:5000");
                             String sitemapApiUrl = pythonServerUrl + "/python/seo/updateArticleSitemap";
                             
                             try {
@@ -194,7 +194,7 @@ public class ArticleController {
                     }).start();
                 }
                 
-                // 如果需要推送至搜索引擎，异步处理
+                // 如果需要推送至搜索引擎且文章可见，异步处理
                 if (Boolean.TRUE.equals(articleVO.getSubmitToSearchEngine()) && Boolean.TRUE.equals(articleVO.getViewStatus())) {
                     log.info("文章ID {} 标记为需要推送至搜索引擎，开始异步处理", articleId);
                     
@@ -264,7 +264,7 @@ public class ArticleController {
                     HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(sitemapData, headers);
                     
                     // 调用专门的sitemap更新接口
-                    String pythonServerUrl = System.getProperty("python.server.url", "http://localhost:5000");
+                    String pythonServerUrl = System.getenv().getOrDefault("PYTHON_SERVICE_URL", "http://localhost:5000");
                     String sitemapApiUrl = pythonServerUrl + "/python/seo/updateArticleSitemap";
                     
                     try {
@@ -319,7 +319,7 @@ public class ArticleController {
                         prerenderClient.renderHomePage();
                         // 重新渲染相关分类页面
                         if (sortId != null) {
-                            prerenderClient.renderSortPage(sortId);
+                            prerenderClient.renderCategoryPage(sortId);
                         }
                     } catch (Exception e) {
                         log.warn("预渲染页面失败: " + e.getMessage());
@@ -332,7 +332,7 @@ public class ArticleController {
                         prerenderClient.deleteArticle(articleId);
                         prerenderClient.renderHomePage();
                         if (sortId != null) {
-                            prerenderClient.renderSortPage(sortId);
+                            prerenderClient.renderCategoryPage(sortId);
                         }
                     } catch (Exception e) {
                         log.warn("删除预渲染文件失败: " + e.getMessage());
@@ -349,50 +349,53 @@ public class ArticleController {
                 }
             }).start();
             
-            // 如果文章可见，异步更新sitemap（不管是否推送搜索引擎）
-            if (Boolean.TRUE.equals(articleVO.getViewStatus())) {
-                log.info("文章ID {} 可见，开始异步更新sitemap", articleId);
+            // 更新文章时不更新sitemap，因为创建时已经更新过了
+            // 只有当文章变为不可见时才从sitemap中删除
+            if (!Boolean.TRUE.equals(articleVO.getViewStatus())) {
+                log.info("文章ID {} 变为不可见，开始异步删除sitemap条目", articleId);
                 
-                                     // 异步更新sitemap
-                     new Thread(() -> {
-                         try {
-                             // 调用Python服务更新sitemap
-                             Map<String, Object> sitemapData = new HashMap<>();
-                             sitemapData.put("articleId", articleId);
-                             sitemapData.put("action", "add_or_update");
-                             
-                             HttpHeaders headers = new HttpHeaders();
-                             headers.setContentType(MediaType.APPLICATION_JSON);
-                             headers.set("X-Internal-Service", "poetize-java");
-                             headers.set("User-Agent", "poetize-java/1.0.0");
-                             HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(sitemapData, headers);
-                             
-                             // 调用专门的sitemap更新接口
-                             String pythonServerUrl = System.getProperty("python.server.url", "http://localhost:5000");
-                             String sitemapApiUrl = pythonServerUrl + "/python/seo/updateArticleSitemap";
-                             
-                             try {
-                                 @SuppressWarnings("unchecked")
-                                 Map<String, Object> response = restTemplate.postForObject(
-                                     sitemapApiUrl, 
-                                     requestEntity, 
-                                     Map.class
-                                 );
-                                 if (response != null && "200".equals(String.valueOf(response.get("code")))) {
-                                     log.info("文章ID {} sitemap更新成功", articleId);
-                                 } else {
-                                     log.warn("文章ID {} sitemap更新响应异常: {}", articleId, response);
-                                 }
-                             } catch (Exception apiException) {
-                                 log.error("调用sitemap更新API失败，文章ID: " + articleId + ", 错误: " + apiException.getMessage(), apiException);
-                             }
-                         } catch (Exception e) {
-                             log.error("更新sitemap失败，但不影响文章更新，文章ID: " + articleId, e);
-                         }
-                     }).start();
+                // 异步删除sitemap条目
+                new Thread(() -> {
+                    try {
+                        // 调用Python服务删除sitemap条目
+                        Map<String, Object> sitemapData = new HashMap<>();
+                        sitemapData.put("articleId", articleId);
+                        sitemapData.put("action", "remove");
+                        
+                        HttpHeaders headers = new HttpHeaders();
+                        headers.setContentType(MediaType.APPLICATION_JSON);
+                        headers.set("X-Internal-Service", "poetize-java");
+                        headers.set("User-Agent", "poetize-java/1.0.0");
+                        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(sitemapData, headers);
+                        
+                        // 调用专门的sitemap更新接口
+                        String pythonServerUrl = System.getenv().getOrDefault("PYTHON_SERVICE_URL", "http://localhost:5000");
+                        String sitemapApiUrl = pythonServerUrl + "/python/seo/updateArticleSitemap";
+                        
+                        try {
+                            @SuppressWarnings("unchecked")
+                            Map<String, Object> response = restTemplate.postForObject(
+                                sitemapApiUrl, 
+                                requestEntity, 
+                                Map.class
+                            );
+                            if (response != null && "200".equals(String.valueOf(response.get("code")))) {
+                                log.info("文章ID {} sitemap删除成功", articleId);
+                            } else {
+                                log.warn("文章ID {} sitemap删除响应异常: {}", articleId, response);
+                            }
+                        } catch (Exception apiException) {
+                            log.error("调用sitemap删除API失败，文章ID: " + articleId + ", 错误: " + apiException.getMessage(), apiException);
+                        }
+                    } catch (Exception e) {
+                        log.error("删除sitemap条目失败，但不影响文章更新，文章ID: " + articleId, e);
+                    }
+                }).start();
+            } else {
+                log.info("文章ID {} 保持可见状态，无需更新sitemap（创建时已更新）", articleId);
             }
             
-            // 如果需要推送至搜索引擎，异步处理
+            // 如果需要推送至搜索引擎且文章可见，异步处理
             if (Boolean.TRUE.equals(articleVO.getSubmitToSearchEngine()) && Boolean.TRUE.equals(articleVO.getViewStatus())) {
                 log.info("更新文章ID {} 标记为需要推送至搜索引擎，开始异步处理", articleId);
                 

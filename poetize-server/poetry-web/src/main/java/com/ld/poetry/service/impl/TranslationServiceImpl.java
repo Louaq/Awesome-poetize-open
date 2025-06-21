@@ -25,7 +25,7 @@ import java.util.Map;
 @Slf4j
 public class TranslationServiceImpl implements TranslationService {
     
-    @Value("${python.service.url:http://localhost:5000}")
+    @Value("${PYTHON_SERVICE_URL:http://localhost:5000}")
     private String pythonServiceUrl;
     
     @Autowired
@@ -62,50 +62,22 @@ public class TranslationServiceImpl implements TranslationService {
                 return;
             }
             
-            // 2. 检查是否已有英文翻译
-            LambdaQueryWrapper<ArticleTranslation> queryWrapper = new LambdaQueryWrapper<>();
-            queryWrapper.eq(ArticleTranslation::getArticleId, articleId)
-                       .eq(ArticleTranslation::getLanguage, "en");
-            
-            ArticleTranslation existingTranslation = articleTranslationMapper.selectOne(queryWrapper);
-            
-            // 3. 翻译标题
+            // 2. 翻译标题
             String translatedTitle = translateText(article.getArticleTitle(), "zh", "en");
             if (translatedTitle == null || translatedTitle.trim().isEmpty()) {
                 log.warn("标题翻译失败，使用原标题，文章ID: {}", articleId);
                 translatedTitle = article.getArticleTitle();
             }
             
-            // 4. 翻译内容（分段处理长文本）
+            // 3. 翻译内容（分段处理长文本）
             String translatedContent = translateLongText(article.getArticleContent(), "zh", "en");
             if (translatedContent == null || translatedContent.trim().isEmpty()) {
                 log.warn("内容翻译失败，使用原内容，文章ID: {}", articleId);
                 translatedContent = article.getArticleContent();
             }
             
-            // 5. 保存或更新翻译结果
-            boolean success = false;
-            if (existingTranslation != null) {
-                // 更新现有翻译
-                existingTranslation.setTitle(translatedTitle);
-                existingTranslation.setContent(translatedContent);
-                existingTranslation.setUpdateTime(LocalDateTime.now());
-                articleTranslationMapper.updateById(existingTranslation);
-                log.info("更新文章翻译成功，文章ID: {}", articleId);
-                success = true;
-            } else {
-                // 创建新翻译
-                ArticleTranslation newTranslation = new ArticleTranslation();
-                newTranslation.setArticleId(articleId);
-                newTranslation.setLanguage("en");
-                newTranslation.setTitle(translatedTitle);
-                newTranslation.setContent(translatedContent);
-                newTranslation.setCreateTime(LocalDateTime.now());
-                newTranslation.setUpdateTime(LocalDateTime.now());
-                articleTranslationMapper.insert(newTranslation);
-                log.info("创建文章翻译成功，文章ID: {}", articleId);
-                success = true;
-            }
+            // 4. 保存或更新翻译结果（使用事务和重试机制处理并发）
+            boolean success = saveOrUpdateTranslation(articleId, translatedTitle, translatedContent);
             
             if (success) {
                 // 触发静态预渲染
@@ -117,6 +89,79 @@ public class TranslationServiceImpl implements TranslationService {
         }
     }
     
+    /**
+     * 保存或更新翻译结果，处理并发重复插入问题
+     */
+    private boolean saveOrUpdateTranslation(Integer articleId, String translatedTitle, String translatedContent) {
+        // 使用重试机制处理并发问题
+        int maxRetries = 3;
+        for (int attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                // 再次检查是否已存在翻译记录（防止并发情况下的重复插入）
+                LambdaQueryWrapper<ArticleTranslation> queryWrapper = new LambdaQueryWrapper<>();
+                queryWrapper.eq(ArticleTranslation::getArticleId, articleId)
+                           .eq(ArticleTranslation::getLanguage, "en");
+                
+                ArticleTranslation existingTranslation = articleTranslationMapper.selectOne(queryWrapper);
+                
+                if (existingTranslation != null) {
+                    // 更新现有翻译
+                    existingTranslation.setTitle(translatedTitle);
+                    existingTranslation.setContent(translatedContent);
+                    existingTranslation.setUpdateTime(LocalDateTime.now());
+                    articleTranslationMapper.updateById(existingTranslation);
+                    log.info("更新文章翻译成功，文章ID: {} (尝试第{}次)", articleId, attempt);
+                    return true;
+                } else {
+                    // 创建新翻译
+                    ArticleTranslation newTranslation = new ArticleTranslation();
+                    newTranslation.setArticleId(articleId);
+                    newTranslation.setLanguage("en");
+                    newTranslation.setTitle(translatedTitle);
+                    newTranslation.setContent(translatedContent);
+                    newTranslation.setCreateTime(LocalDateTime.now());
+                    newTranslation.setUpdateTime(LocalDateTime.now());
+                    
+                    try {
+                        articleTranslationMapper.insert(newTranslation);
+                        log.info("创建文章翻译成功，文章ID: {} (尝试第{}次)", articleId, attempt);
+                        return true;
+                    } catch (org.springframework.dao.DuplicateKeyException e) {
+                        // 如果遇到重复键异常，说明在我们检查后有其他线程插入了记录
+                        log.warn("检测到并发插入，尝试更新现有记录，文章ID: {} (尝试第{}次)", articleId, attempt);
+                        if (attempt < maxRetries) {
+                            Thread.sleep(100 * attempt); // 短暂等待后重试
+                            continue;
+                        } else {
+                            // 最后一次尝试：直接尝试更新
+                            existingTranslation = articleTranslationMapper.selectOne(queryWrapper);
+                            if (existingTranslation != null) {
+                                existingTranslation.setTitle(translatedTitle);
+                                existingTranslation.setContent(translatedContent);
+                                existingTranslation.setUpdateTime(LocalDateTime.now());
+                                articleTranslationMapper.updateById(existingTranslation);
+                                log.info("最终更新文章翻译成功，文章ID: {}", articleId);
+                                return true;
+                            }
+                        }
+                    }
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.error("翻译保存被中断，文章ID: {}", articleId);
+                return false;
+            } catch (Exception e) {
+                log.error("保存翻译失败，文章ID: {}, 尝试第{}次, 错误: {}", articleId, attempt, e.getMessage());
+                if (attempt == maxRetries) {
+                    return false;
+                }
+            }
+        }
+        
+        log.error("保存翻译最终失败，文章ID: {}", articleId);
+        return false;
+    }
+
     /**
      * 删除文章的所有翻译
      */

@@ -892,23 +892,36 @@ function buildHtmlTemplate({ title, meta, content, lang, pageType = 'article' })
   $('html').attr('lang', lang);
   $('head title').text(title);
 
-  // 清理占位符/旧meta，并注入新的
+  // 清理占位符/旧meta，更彻底
   $('head meta[name="description"]').remove();
   $('head meta[name="keywords"]').remove();
   $('head meta[name="author"]').remove();
+  $('head meta[property^="og:"]').remove();
+  $('head meta[property^="twitter:"]').remove();
+  $('head meta[property^="article:"]').remove();
   $('head link[rel="canonical"]').remove();
 
-  const metaTags = Object.keys(meta || {}).filter(k => k !== 'title').map(key => {
-    if (['description', 'keywords', 'author'].includes(key)) {
-      return `<meta name="${key}" content="${meta[key]}">`;
-    } else if (key === 'canonical') {
-      return `<link rel="canonical" href="${meta[key]}">`;
+  // 注入新的meta，一次一个，更安全
+  for (const key in meta) {
+    if (!meta.hasOwnProperty(key)) continue;
+
+    const value = (meta[key] || '').toString().replace(/"/g, '&quot;');
+    
+    if (key === 'title') {
+      // title已在上面处理
+      continue;
     } else if (key.startsWith('hreflang')) {
-      return meta[key];
+      // hreflang 已经是完整的 <link> 标签
+      $('head').append(meta[key]);
+    } else if (key === 'canonical') {
+      $('head').append(`<link rel="canonical" href="${value}">`);
+    } else if (['description', 'keywords', 'author'].includes(key)) {
+      $('head').append(`<meta name="${key}" content="${value}">`);
+    } else {
+      // 处理 og:, twitter:, article: 等属性
+      $('head').append(`<meta property="${key}" content="${value}">`);
     }
-    return `<meta property="${key}" content="${meta[key]}">`;
-  }).join('');
-  $('head').append(metaTags);
+  }
 
   // 添加页面类型标识
   $('body').attr('data-prerender-type', pageType);
@@ -1393,11 +1406,26 @@ async function renderIds(ids = [], options = {}) {
       fetchWebInfo()
     ]);
 
+    // 调试：检查CSS文件是否存在
+    const distPath = '/app/dist';
+    const staticCssPath = path.join(distPath, 'static', 'css');
+    logger.info('Checking CSS files availability', {
+      taskId,
+      distPathExists: fs.existsSync(distPath),
+      staticCssPathExists: fs.existsSync(staticCssPath),
+      distContents: fs.existsSync(distPath) ? fs.readdirSync(distPath) : [],
+      staticCssContents: fs.existsSync(staticCssPath) ? fs.readdirSync(staticCssPath).filter(f => f.endsWith('.css')) : []
+    });
+
     const critters = new Critters({
       path: '/app/dist',
-      logLevel: 'warn',
+      publicPath: '/',
+      logLevel: 'info',  // 增加日志级别以便调试
       preload: 'swap',
-      reduceInlineStyles: false,
+      inlineFonts: false,
+      pruneSource: true,  // 移除已内联的样式规则
+      mergeStylesheets: true,  // 合并样式表
+      // 移除 additionalStylesheets，让 critters 自动发现CSS文件
     });
 
     let successCount = 0;
@@ -1426,11 +1454,13 @@ async function renderIds(ids = [], options = {}) {
             logger.debug('Translation applied', { taskId, articleId: id, lang });
           }
 
-          // markdown -> html
-          const looksLikeHtml = /<\s*(p|img|h1|h2|h3|h4|blockquote|ul|ol|li|section|div)[^>]*>/i.test(contentHtml);
-          if (!looksLikeHtml) {
+          // markdown -> html，使用更可靠的 editorType 判断
+          if (article.editorType === 'markdown') {
             contentHtml = md.render(contentHtml);
-            logger.debug('Markdown converted to HTML', { taskId, articleId: id, lang });
+            logger.debug('Markdown content rendered to HTML via editorType', { taskId, articleId: id, lang });
+          } else {
+            // 如果不是markdown，我们假定它已经是HTML，或者是不需要转换的纯文本
+            logger.debug('Content is assumed to be HTML, skipping markdown conversion', { taskId, articleId: id, lang, editorType: article.editorType });
           }
 
           // 获取文章特定的meta信息
@@ -1456,7 +1486,28 @@ async function renderIds(ids = [], options = {}) {
           };
 
           let html = buildHtml({ title: meta.title || articleTitle || 'Poetize', meta, content: contentHtml, lang });
+          
+          // 调试：检查HTML中的CSS链接
+          const cssLinks = html.match(/<link[^>]*rel="stylesheet"[^>]*>/g) || [];
+          logger.info('CSS links found before critters processing', { 
+            taskId, 
+            articleId: id, 
+            lang, 
+            cssLinksCount: cssLinks.length,
+            cssLinks: cssLinks.slice(0, 3) // 只显示前3个以避免日志过长
+          });
+          
           html = await critters.process(html);
+          
+          // 调试：检查处理后的HTML中是否有内联样式
+          const inlineStyles = html.match(/<style[^>]*>[\s\S]*?<\/style>/g) || [];
+          logger.info('Inline styles after critters processing', { 
+            taskId, 
+            articleId: id, 
+            lang, 
+            inlineStylesCount: inlineStyles.length,
+            hasInlineStyles: inlineStyles.length > 0
+          });
 
           const dir = path.join(OUTPUT_ROOT, id.toString());
           fs.mkdirSync(dir, { recursive: true });
@@ -1522,9 +1573,13 @@ async function renderSingleSortPage(sortId, parentTaskId = null) {
   
   const critters = new Critters({
     path: '/app/dist',
-    logLevel: 'warn',
+    publicPath: '/',
+    logLevel: 'info',  // 增加日志级别以便调试
     preload: 'swap',
-    reduceInlineStyles: false,
+    inlineFonts: false,
+    pruneSource: true,  // 移除已内联的样式规则
+    mergeStylesheets: true,  // 合并样式表
+    // 移除 additionalStylesheets，让 critters 自动发现CSS文件
   });
 
   for (const lang of langs) {
@@ -1561,9 +1616,13 @@ async function renderPages(type, params = {}) {
 
     const critters = new Critters({
       path: '/app/dist',
-      logLevel: 'warn',
+      publicPath: '/',
+      logLevel: 'info',  // 增加日志级别以便调试
       preload: 'swap',
-      reduceInlineStyles: false,
+      inlineFonts: false,
+      pruneSource: true,  // 移除已内联的样式规则
+      mergeStylesheets: true,  // 合并样式表
+      // 移除 additionalStylesheets，让 critters 自动发现CSS文件
     });
 
     let successCount = 0;

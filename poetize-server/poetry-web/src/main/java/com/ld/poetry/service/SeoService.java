@@ -27,7 +27,7 @@ public class SeoService {
     private final RestTemplate restTemplate;
     private final ArticleService articleService;
     
-    @Value("${python.server.url:http://localhost:5000}")
+    @Value("${PYTHON_SERVICE_URL:http://poetize-python:5000}")
     private String pythonServerUrl;
     
     public SeoService(RestTemplate restTemplate, ArticleService articleService) {

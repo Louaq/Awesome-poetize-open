@@ -422,7 +422,7 @@ public class WebInfoController {
     @Deprecated
     public PoetryResult<String> renderDefaultSortPage() {
         try {
-            prerenderClient.renderDefaultSortPage();
+            prerenderClient.renderSortIndexPage();
             return PoetryResult.success("分类索引页面预渲染任务已提交");
         } catch (Exception e) {
             return PoetryResult.fail("提交分类索引页面预渲染任务失败: " + e.getMessage());
@@ -460,7 +460,7 @@ public class WebInfoController {
             if (sortId == null) {
                 return PoetryResult.fail("分类ID不能为空");
             }
-            prerenderClient.renderSortPage(sortId);
+            prerenderClient.renderCategoryPage(sortId);
             return PoetryResult.success("分类详情页面预渲染任务已提交");
         } catch (Exception e) {
             return PoetryResult.fail("提交分类详情页面预渲染任务失败: " + e.getMessage());
@@ -525,8 +525,8 @@ public class WebInfoController {
                     prerenderClient.renderFavoritePage();
                     Thread.sleep(1000);
                     
-                    // 3. 渲染默认分类页面
-                    prerenderClient.renderDefaultSortPage();
+                    // 3. 渲染分类索引页面
+                    prerenderClient.renderSortIndexPage();
                     Thread.sleep(1000);
                     
                     // 4. 获取所有分类并渲染
@@ -535,7 +535,7 @@ public class WebInfoController {
                             .list();
                     
                     for (Sort sort : sorts) {
-                        prerenderClient.renderSortPage(sort.getId());
+                        prerenderClient.renderCategoryPage(sort.getId());
                         Thread.sleep(500); // 避免并发过高
                     }
                     
@@ -577,7 +577,7 @@ public class WebInfoController {
             }
             
             // 删除分类页面的预渲染文件
-            prerenderClient.deleteSortPage(sortId);
+            prerenderClient.deleteCategoryPage(sortId);
             
             return PoetryResult.success("分类缓存已清理");
         } catch (Exception e) {

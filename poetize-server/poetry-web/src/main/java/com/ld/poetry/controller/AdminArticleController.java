@@ -9,8 +9,16 @@ import com.ld.poetry.service.ArticleService;
 import com.ld.poetry.utils.PoetryUtil;
 import com.ld.poetry.vo.ArticleVO;
 import com.ld.poetry.vo.BaseRequestVO;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * <p>
@@ -22,10 +30,14 @@ import org.springframework.web.bind.annotation.*;
  */
 @RestController
 @RequestMapping("/admin")
+@Slf4j
 public class AdminArticleController {
 
     @Autowired
     private ArticleService articleService;
+    
+    @Autowired
+    private RestTemplate restTemplate;
 
     /**
      * 用户查询文章
@@ -67,6 +79,51 @@ public class AdminArticleController {
             updateChainWrapper.set(Article::getRecommendStatus, recommendStatus);
         }
         updateChainWrapper.update();
+        
+        // 如果修改了文章可见性，需要更新sitemap
+        if (viewStatus != null) {
+            final Integer finalArticleId = articleId;
+            final Boolean finalViewStatus = viewStatus;
+            
+            // 异步更新sitemap
+            new Thread(() -> {
+                try {
+                    // 调用Python服务更新sitemap
+                    Map<String, Object> sitemapData = new HashMap<>();
+                    sitemapData.put("articleId", finalArticleId);
+                    sitemapData.put("action", finalViewStatus ? "add_or_update" : "remove");
+                    
+                    HttpHeaders headers = new HttpHeaders();
+                    headers.setContentType(MediaType.APPLICATION_JSON);
+                    headers.set("X-Internal-Service", "poetize-java");
+                    headers.set("User-Agent", "poetize-java/1.0.0");
+                    HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(sitemapData, headers);
+                    
+                    // 调用专门的sitemap更新接口
+                    String pythonServerUrl = System.getenv().getOrDefault("PYTHON_SERVICE_URL", "http://poetize-python:5000");
+                    String sitemapApiUrl = pythonServerUrl + "/python/seo/updateArticleSitemap";
+                    
+                    try {
+                        @SuppressWarnings("unchecked")
+                        Map<String, Object> response = restTemplate.postForObject(
+                            sitemapApiUrl, 
+                            requestEntity, 
+                            Map.class
+                        );
+                        if (response != null && "200".equals(String.valueOf(response.get("code")))) {
+                            log.info("文章ID {} sitemap{}成功", finalArticleId, finalViewStatus ? "更新" : "删除");
+                        } else {
+                            log.warn("文章ID {} sitemap{}响应异常: {}", finalArticleId, finalViewStatus ? "更新" : "删除", response);
+                        }
+                    } catch (Exception apiException) {
+                        log.error("调用sitemap{}API失败，文章ID: {}, 错误: {}", finalViewStatus ? "更新" : "删除", finalArticleId, apiException.getMessage(), apiException);
+                    }
+                } catch (Exception e) {
+                    log.error("{}sitemap失败，但不影响状态修改，文章ID: {}", finalViewStatus ? "更新" : "删除", finalArticleId, e);
+                }
+            }).start();
+        }
+        
         return PoetryResult.success();
     }
 

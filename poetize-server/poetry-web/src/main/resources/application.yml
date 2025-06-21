@@ -102,7 +102,7 @@ translation:
     cache-time-hours: 24
   local:
     enabled: false
-    url: ${python.service.url}/api/translate
+    url: ${PYTHON_SERVICE_URL}/api/translate
 
 # Actuator配置
 management:

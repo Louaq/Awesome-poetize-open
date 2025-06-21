@@ -68,10 +68,10 @@ public class SortLabelController {
         sortMapper.insert(sort);
         PoetryCache.remove(CommonConst.SORT_INFO);
         
-        // 分类新增后，重新渲染首页和默认分类页面
+        // 分类新增后，重新渲染首页和分类索引页面
         try {
             prerenderClient.renderHomePage();
-            prerenderClient.renderDefaultSortPage();
+            prerenderClient.renderSortIndexPage();
         } catch (Exception e) {
             // 预渲染失败不影响主流程
         }
@@ -89,11 +89,11 @@ public class SortLabelController {
         sortMapper.deleteById(id);
         PoetryCache.remove(CommonConst.SORT_INFO);
         
-        // 分类删除后，删除对应分类页面的预渲染文件，并重新渲染首页和默认分类页面
+        // 分类删除后，删除对应分类页面的预渲染文件，并重新渲染首页和分类索引页面
         try {
-            prerenderClient.deleteSortPage(id);
+            prerenderClient.deleteCategoryPage(id);
             prerenderClient.renderHomePage();
-            prerenderClient.renderDefaultSortPage();
+            prerenderClient.renderSortIndexPage();
         } catch (Exception e) {
             // 预渲染失败不影响主流程
         }
@@ -111,13 +111,13 @@ public class SortLabelController {
         sortMapper.updateById(sort);
         PoetryCache.remove(CommonConst.SORT_INFO);
         
-        // 分类更新后，重新渲染对应分类页面、首页和默认分类页面
+        // 分类更新后，重新渲染对应分类页面、首页和分类索引页面
         try {
             if (sort.getId() != null) {
-                prerenderClient.renderSortPage(sort.getId());
+                prerenderClient.renderCategoryPage(sort.getId());
             }
             prerenderClient.renderHomePage();
-            prerenderClient.renderDefaultSortPage();
+            prerenderClient.renderSortIndexPage();
         } catch (Exception e) {
             // 预渲染失败不影响主流程
         }
@@ -149,7 +149,7 @@ public class SortLabelController {
         
         // 标签新增后，重新渲染对应分类页面
         try {
-            prerenderClient.renderSortPage(label.getSortId());
+            prerenderClient.renderCategoryPage(label.getSortId());
         } catch (Exception e) {
             // 预渲染失败不影响主流程
         }
@@ -173,7 +173,7 @@ public class SortLabelController {
         // 标签删除后，重新渲染对应分类页面
         if (label != null && label.getSortId() != null) {
             try {
-                prerenderClient.renderSortPage(label.getSortId());
+                prerenderClient.renderCategoryPage(label.getSortId());
             } catch (Exception e) {
                 // 预渲染失败不影响主流程
             }
@@ -195,7 +195,7 @@ public class SortLabelController {
         // 标签更新后，重新渲染对应分类页面
         try {
             if (label.getSortId() != null) {
-                prerenderClient.renderSortPage(label.getSortId());
+                prerenderClient.renderCategoryPage(label.getSortId());
             }
         } catch (Exception e) {
             // 预渲染失败不影响主流程
