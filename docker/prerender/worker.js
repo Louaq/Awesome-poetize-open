@@ -934,13 +934,6 @@ function buildHtmlTemplate({ title, meta, content, lang, pageType = 'article' })
   $('head meta[property^="article:"]').remove();
   $('head link[rel="canonical"]').remove();
 
-  // 注入关键CSS
-  if (criticalCss) {
-    $('head').prepend(`<style>${criticalCss}</style>`);
-    // 移除原始的 app.css 链接，因为它已经被内联
-    $('head link[href*="app."]').remove();
-  }
-
   // 调试：检查meta对象
   console.log('buildHtmlTemplate meta debug:', {
     metaType: typeof meta,
@@ -981,6 +974,9 @@ function buildHtmlTemplate({ title, meta, content, lang, pageType = 'article' })
 
   // 注入渲染好的内容
   $('#app').html(content);
+
+  // 为所有脚本添加defer属性
+  $('script[src]').attr('defer', 'true');
 
   return $.html();
 }
