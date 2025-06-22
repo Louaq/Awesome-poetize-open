@@ -6,7 +6,6 @@ const axios = require('axios');
 const MarkdownIt = require('markdown-it');
 const hljs = require('highlight.js');
 const cheerio = require('cheerio');
-const Critters = require('critters');
 const { decode: decodeHtmlEntities } = require('html-entities');
 
 const app = express();
@@ -1451,17 +1450,6 @@ async function renderIds(ids = [], options = {}) {
       staticCssPathExists: fs.existsSync(staticCssPath),
       distContents: fs.existsSync(distPath) ? fs.readdirSync(distPath) : [],
       staticCssContents: fs.existsSync(staticCssPath) ? fs.readdirSync(staticCssPath).filter(f => f.endsWith('.css')) : []
-    });
-
-    const critters = new Critters({
-      path: '/app/dist',
-      publicPath: '/',
-      logLevel: 'info',  // 增加日志级别以便调试
-      preload: 'swap',
-      inlineFonts: false,
-      pruneSource: true,  // 移除已内联的样式规则
-      mergeStylesheets: true,  // 合并样式表
-      // 移除 additionalStylesheets，让 critters 自动发现CSS文件
     });
 
     let successCount = 0;

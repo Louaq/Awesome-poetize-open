@@ -3488,6 +3488,7 @@ async def add_or_update_sitemap_url(url: str, lastmod: str = None, changefreq: s
             if lm_elem is not None:
                 lm_elem.text = lastmod
 
+        ET.register_namespace('', 'http://www.sitemaps.org/schemas/sitemap/0.9')
         tree.write(sitemap_path, encoding='utf-8', xml_declaration=True)
         logger.info(f"增量更新 sitemap 成功: {url}")
     except Exception as e:
@@ -3510,6 +3511,7 @@ async def remove_sitemap_url(url: str):
                 break
 
         if removed:
+            ET.register_namespace('', 'http://www.sitemaps.org/schemas/sitemap/0.9')
             tree.write(sitemap_path, encoding='utf-8', xml_declaration=True)
             logger.info(f"已从 sitemap 移除 URL: {url}")
     except Exception as e:
