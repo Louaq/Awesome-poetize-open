@@ -6,40 +6,11 @@ const axios = require('axios');
 const MarkdownIt = require('markdown-it');
 const hljs = require('highlight.js');
 const cheerio = require('cheerio');
+const Beasties = require('beasties');
 const { decode: decodeHtmlEntities } = require('html-entities');
 
 const app = express();
 app.use(bodyParser.json());
-
-// 全局变量，用于缓存关键CSS
-let criticalCss = '';
-
-// 新增：加载并缓存关键CSS的函数
-async function loadCriticalCss() {
-  try {
-    const manifestPath = path.resolve('/app/dist/manifest.json');
-    if (fs.existsSync(manifestPath)) {
-      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-      const cssFile = manifest['app.css'];
-      if (cssFile) {
-        // 使用 path.join 来安全地构建路径，并移除 cssFile 开头的 '/'
-        const cssPath = path.join('/app/dist', cssFile.startsWith('/') ? cssFile.substring(1) : cssFile);
-        if (fs.existsSync(cssPath)) {
-          criticalCss = fs.readFileSync(cssPath, 'utf8');
-          logger.info(`关键CSS已加载并缓存: ${cssFile} (${(criticalCss.length / 1024).toFixed(1)}KB)`);
-        } else {
-          logger.error(`在 manifest 中找到的 CSS 文件不存在: ${cssPath}`);
-        }
-      } else {
-        logger.error('在 manifest.json 中未找到 app.css');
-      }
-    } else {
-      logger.error(`manifest.json 文件未找到: ${manifestPath}`);
-    }
-  } catch (error) {
-    logger.error('加载关键 CSS 失败', { error: error.message, stack: error.stack });
-  }
-}
 
 // ===== 日志系统和监控 =====
 class Logger {
@@ -606,25 +577,21 @@ function generateTaskId() {
 const JAVA_BACKEND_URL = process.env.JAVA_BACKEND_URL || 'http://poetize-java:8081';
 const PYTHON_BACKEND_URL = process.env.PYTHON_BACKEND_URL || 'http://poetize-python:5000';
 
-// 修正 markdown-it 初始化逻辑
 const md = new MarkdownIt({
   html: true,
   linkify: true,
   breaks: true,
-});
-
-md.options.highlight = (str, lang) => {
-  if (lang && hljs.getLanguage(lang)) {
-    try {
-      return '<pre class="hljs"><code>' +
-             hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
-             '</code></pre>';
-    } catch (e) {
-      console.error('highlight.js error:', e);
+  highlight(str, lang) {
+    if (lang && hljs.getLanguage(lang)) {
+      try {
+        return '<pre class="hljs"><code>' +
+               hljs.highlight(str, { language: lang, ignoreIllegals: true }).value +
+               '</code></pre>';
+      } catch (_) {}
     }
+    return '<pre class="hljs"><code>' + md.utils.escapeHtml(str) + '</code></pre>';
   }
-  return '<pre class="hljs"><code>' + md.utils.escapeHtml(str) + '</code></pre>';
-};
+});
 
 // 完整版：先尝试 manifest.json，失败则解析 index.html，结果缓存 10 分钟
 const assetCache = { assets: null, lastFetch: 0 };
@@ -1462,6 +1429,16 @@ async function renderIds(ids = [], options = {}) {
   const OUTPUT_ROOT = options.outputRoot || process.env.PRERENDER_OUTPUT || path.resolve(__dirname, './dist/prerender');
   const langs = ['zh', 'en'];
 
+  // 在任务开始时创建一次 Beasties 实例
+  const beasties = new Beasties({
+    path: '/app/dist', // 设置UI构建输出的根目录
+    publicPath: '/',   // 公共路径
+    logLevel: 'info',
+    preload: 'swap',
+    inlineFonts: true,
+    pruneSource: true,
+  });
+
   try {
     logger.info('Starting article rendering', { taskId, articleCount: ids.length, langs });
 
@@ -1555,27 +1532,8 @@ async function renderIds(ids = [], options = {}) {
 
           let html = buildHtml({ title: meta.title || articleTitle || 'Poetize', meta, content: contentHtml, lang });
           
-          // 调试：检查HTML中的CSS链接
-          const cssLinks = html.match(/<link[^>]*rel="stylesheet"[^>]*>/g) || [];
-          logger.info('CSS links found before critters processing', { 
-            taskId, 
-            articleId: id, 
-            lang, 
-            cssLinksCount: cssLinks.length,
-            cssLinks: cssLinks.slice(0, 3) // 只显示前3个以避免日志过长
-          });
-          
-          // html = await critters.process(html);
-          
-          // 调试：检查处理后的HTML中是否有内联样式
-          const inlineStyles = html.match(/<style[^>]*>[\s\S]*?<\/style>/g) || [];
-          logger.info('Inline styles after critters processing', { 
-            taskId, 
-            articleId: id, 
-            lang, 
-            inlineStylesCount: inlineStyles.length,
-            hasInlineStyles: inlineStyles.length > 0
-          });
+          // 使用 Beasties 处理 HTML
+          html = await beasties.process(html);
 
           const dir = path.join(OUTPUT_ROOT, 'article', id.toString());
           fs.mkdirSync(dir, { recursive: true });
@@ -1639,34 +1597,53 @@ async function renderSingleSortPage(sortId, parentTaskId = null) {
   // 分类页面只生成中文版
   const langs = ['zh'];
   
+  const beasties = new Beasties({
+    path: '/app/dist',
+    publicPath: '/',
+    logLevel: 'info',
+    preload: 'swap',
+    inlineFonts: true,
+    pruneSource: true,
+  });
+  
   for (const lang of langs) {
     const html = await renderSortPage(sortId, null, lang);
+    const processedHtml = await beasties.process(html);
     
     const outputPath = path.join(OUTPUT_ROOT, 'sort', sortId.toString());
     fs.mkdirSync(outputPath, { recursive: true });
     
     const filename = lang === 'zh' ? 'index.html' : `index-${lang}.html`;
     const filePath = path.join(outputPath, filename);
-    fs.writeFileSync(filePath, html, 'utf8');
+    fs.writeFileSync(filePath, processedHtml, 'utf8');
     
     logger.debug('Sort page rendered', { 
       parentTaskId, 
       sortId, 
       lang, 
       filePath: `${outputPath}/${filename}`,
-      size: `${(html.length / 1024).toFixed(1)}KB`
+      size: `${(processedHtml.length / 1024).toFixed(1)}KB`
     });
   }
 }
 
 async function renderPages(type, params = {}) {
   const taskId = generateTaskId();
-  monitor.recordRenderStart(taskId, type, { type, params }); // 使用具体的页面类型而不是通用的'page'
+  monitor.recordRenderStart(taskId, type, { type, params });
 
   const OUTPUT_ROOT = process.env.PRERENDER_OUTPUT || path.resolve(__dirname, './dist/prerender');
   // 只有文章页面需要多语言，其他页面只生成中文版
   const langs = ['zh'];
   
+  const beasties = new Beasties({
+    path: '/app/dist',
+    publicPath: '/',
+    logLevel: 'info',
+    preload: 'swap',
+    inlineFonts: true,
+    pruneSource: true,
+  });
+
   try {
     logger.info('Starting page rendering', { taskId, type, params, langs });
 
@@ -1711,7 +1688,7 @@ async function renderPages(type, params = {}) {
         }
 
         // 优化CSS
-        // html = await critters.process(html);
+        html = await beasties.process(html);
 
         fs.mkdirSync(outputPath, { recursive: true });
         const filename = lang === 'zh' ? 'index.html' : `index-${lang}.html`;
@@ -2406,10 +2383,7 @@ function clearDirectory(dirPath) {
 }
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, async () => {
-  // 服务启动时，首先加载关键CSS
-  await loadCriticalCss();
-  
+app.listen(PORT, () => {
   logger.info('Prerender worker started', {
     port: PORT,
     nodeVersion: process.version,
