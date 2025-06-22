@@ -1433,12 +1433,14 @@ async function renderIds(ids = [], options = {}) {
   const beasties = new Beasties({
     path: '/app/dist', // 设置UI构建输出的根目录
     publicPath: '/',   // 公共路径
-    logLevel: 'info',
-    preload: 'swap',
-    inlineFonts: true,
+    logLevel: 'warn', // 只报告警告和错误
+    // 关键配置：只内联 app 和 chunk 的CSS，忽略其他所有
+    inlineStyleSheets: [
+      /app\..*\.css$/,
+      /chunk-vendors\..*\.css$/,
+      /chunk-elementUI\..*\.css$/
+    ],
     pruneSource: true,
-    // 新增：忽略第三方库，让 beasties 专注于应用本身的关键CSS
-    ignore: [/libs\//, /inline-styles\.css/]
   });
 
   try {
@@ -1602,12 +1604,13 @@ async function renderSingleSortPage(sortId, parentTaskId = null) {
   const beasties = new Beasties({
     path: '/app/dist',
     publicPath: '/',
-    logLevel: 'info',
-    preload: 'swap',
-    inlineFonts: true,
+    logLevel: 'warn',
+    inlineStyleSheets: [
+      /app\..*\.css$/,
+      /chunk-vendors\..*\.css$/,
+      /chunk-elementUI\..*\.css$/
+    ],
     pruneSource: true,
-    // 新增：忽略第三方库，让 beasties 专注于应用本身的关键CSS
-    ignore: [/libs\//, /inline-styles\.css/]
   });
   
   for (const lang of langs) {
@@ -1642,12 +1645,13 @@ async function renderPages(type, params = {}) {
   const beasties = new Beasties({
     path: '/app/dist',
     publicPath: '/',
-    logLevel: 'info',
-    preload: 'swap',
-    inlineFonts: true,
+    logLevel: 'warn',
+    inlineStyleSheets: [
+      /app\..*\.css$/,
+      /chunk-vendors\..*\.css$/,
+      /chunk-elementUI\..*\.css$/
+    ],
     pruneSource: true,
-    // 新增：忽略第三方库，让 beasties 专注于应用本身的关键CSS
-    ignore: [/libs\//, /inline-styles\.css/]
   });
 
   try {
