@@ -180,3 +180,41 @@ if (window.PRERENDER_DATA) {
   app.$mount('#app')
   console.log('客户端正常挂载模式启动')
 }
+
+// Vue应用挂载完成后触发事件，用于防止FOUC
+app.$nextTick(() => {
+  // 标记Vue应用已完成挂载
+  window.dispatchEvent(new CustomEvent('app-mounted', {
+    detail: {
+      timestamp: Date.now(),
+      prerendered: !!window.PRERENDER_DATA,
+      mountType: window.PRERENDER_DATA ? 'hydration' : 'normal'
+    }
+  }));
+  
+  // 添加样式切换类，确保平滑过渡
+  const appElement = document.getElementById('app');
+  if (appElement) {
+    appElement.classList.add('vue-mounted');
+  }
+  
+  // 如果是预渲染页面，额外处理图片加载
+  if (window.PRERENDER_DATA) {
+    // 确保所有图片都正确处理加载状态
+    const images = document.querySelectorAll('img');
+    images.forEach(img => {
+      if (img.complete) {
+        img.classList.add('loaded');
+      } else {
+        img.addEventListener('load', function() {
+          this.classList.add('loaded');
+        });
+        img.addEventListener('error', function() {
+          this.classList.add('loaded');
+        });
+      }
+    });
+    
+    console.log('预渲染页面客户端接管完成，FOUC防护已激活');
+  }
+});

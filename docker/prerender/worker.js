@@ -939,8 +939,225 @@ function buildHtmlTemplate({ title, meta, content, lang, pageType = 'article' })
   $('body').attr('data-prerender-type', pageType);
   $('body').attr('data-prerender-lang', lang);
 
+  // 添加防止FOUC的关键内联样式
+  const criticalCSS = `
+    <style>
+      /* 防止FOUC的关键样式 */
+      html.prerender #app {
+        visibility: visible;
+        opacity: 1;
+      }
+      
+      html:not(.loaded) #app {
+        visibility: hidden;
+      }
+      
+      html.loaded #app {
+        visibility: visible;
+        opacity: 1;
+        transition: opacity 0.3s ease-in-out;
+      }
+      
+      /* 预渲染内容的样式保护 */
+      .article-detail, .home-prerender, .favorite-prerender, .sort-prerender, .sort-list-prerender {
+        min-height: 200px;
+        position: relative;
+        opacity: 1;
+        transform: translateY(0);
+        animation: fadeIn 0.5s ease-in-out;
+      }
+      
+      @keyframes fadeIn {
+        from { 
+          opacity: 0; 
+          transform: translateY(10px); 
+        }
+        to { 
+          opacity: 1; 
+          transform: translateY(0); 
+        }
+      }
+      
+      /* 骨架屏效果 */
+      .article-detail::before, 
+      .home-prerender::before, 
+      .favorite-prerender::before, 
+      .sort-prerender::before,
+      .sort-list-prerender::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(90deg, 
+          rgba(240, 240, 240, 0.1) 25%, 
+          transparent 37%, 
+          rgba(240, 240, 240, 0.1) 63%
+        );
+        animation: shimmer 1.5s ease-in-out infinite;
+        z-index: 1;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        pointer-events: none;
+      }
+      
+      html:not(.loaded) .article-detail::before,
+      html:not(.loaded) .home-prerender::before,
+      html:not(.loaded) .favorite-prerender::before,
+      html:not(.loaded) .sort-prerender::before,
+      html:not(.loaded) .sort-list-prerender::before {
+        opacity: 1;
+      }
+      
+      @keyframes shimmer {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(100%); }
+      }
+      
+      /* 字体渲染优化 */
+      body {
+        font-display: swap;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
+      }
+      
+      /* 图片加载优化 */
+      img {
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+      
+      img.loaded,
+      img[src*="data:"] {
+        opacity: 1;
+      }
+      
+      /* 链接和按钮的基础样式保护 */
+      a, button {
+        transition: all 0.2s ease;
+      }
+      
+      /* 预渲染内容的响应式保护 */
+      @media (max-width: 768px) {
+        .article-detail, .home-prerender, .favorite-prerender, .sort-prerender, .sort-list-prerender {
+          min-height: 150px;
+          padding: 1rem;
+        }
+      }
+      
+      /* 确保代码高亮区域的基础样式 */
+      pre, code {
+        background-color: #f6f8fa;
+        border-radius: 3px;
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+      }
+      
+      pre {
+        padding: 16px;
+        overflow: auto;
+        line-height: 1.45;
+      }
+      
+      code {
+        padding: 0.2em 0.4em;
+        margin: 0;
+        font-size: 85%;
+      }
+      
+      /* 表格的基础样式保护 */
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 1em 0;
+      }
+      
+      th, td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+      }
+      
+      th {
+        background-color: #f2f2f2;
+        font-weight: bold;
+      }
+    </style>
+  `;
+  
+  $('head').append(criticalCSS);
+
+  // 添加资源预加载优化
+  $('head').prepend(`
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
+  `);
+
   // 注入渲染好的内容
   $('#app').html(content);
+
+  // 添加加载状态管理脚本
+  const loadingScript = `
+    <script>
+      // 防止FOUC的立即执行脚本
+      (function() {
+        // 标记页面为预渲染状态
+        document.documentElement.classList.add('prerender');
+        
+        // 图片懒加载优化
+        function handleImageLoad() {
+          const images = document.querySelectorAll('img:not(.loaded)');
+          images.forEach(function(img) {
+            if (img.complete || img.src.startsWith('data:')) {
+              img.classList.add('loaded');
+            } else {
+              img.addEventListener('load', function() {
+                this.classList.add('loaded');
+              });
+              img.addEventListener('error', function() {
+                this.classList.add('loaded'); // 即使加载失败也要显示
+              });
+            }
+          });
+        }
+        
+        // 监听资源加载完成
+        function markAsLoaded() {
+          requestAnimationFrame(function() {
+            document.documentElement.classList.add('loaded');
+            document.documentElement.classList.remove('prerender');
+            handleImageLoad();
+          });
+        }
+        
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', markAsLoaded);
+        } else {
+          markAsLoaded();
+        }
+        
+        // Vue应用挂载完成后的回调
+        window.addEventListener('app-mounted', function() {
+          const app = document.getElementById('app');
+          if (app) {
+            app.classList.add('loaded');
+          }
+          handleImageLoad();
+        });
+        
+        // 字体加载完成后的优化
+        if (document.fonts) {
+          document.fonts.ready.then(function() {
+            document.documentElement.classList.add('fonts-loaded');
+          });
+        }
+      })();
+    </script>
+  `;
+  
+  $('body').append(loadingScript);
 
   // 为脚本添加defer属性，但排除代码高亮相关的脚本
   $('script[src]').each(function() {
