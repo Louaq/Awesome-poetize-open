@@ -3,7 +3,7 @@
   "site_name": "POETIZE",
   "site_description": "一个优雅的博客系统，支持多用户和多种内容格式111111111111111111111111111",
   "site_keywords": "博客,文章,笔记,技术,Java,Spring Boot,Vue.jsfdfddddddddddddddddddddddddddddddddddddd",
-  "site_address": "http://localhost:3000",
+
   "baidu_push_enabled": false,
   "baidu_token": "",
   "google_index_enabled": false,

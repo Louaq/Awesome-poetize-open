@@ -40,8 +40,47 @@
         <div :class="{'disabled-section': !seoConfig.enable}">
         
         <el-form-item label="网站地址">
-          <el-input v-model="seoConfig.site_address" placeholder="请输入完整网站地址，如：https://www.example.com"></el-input>
-          <span class="tip">网站的完整访问地址，用于生成站点地图和其他SEO功能</span>
+          <div style="display: flex; gap: 10px;">
+            <el-input 
+              v-model="seoConfig.site_address" 
+              placeholder="自动检测的网站地址"
+              :readonly="!editingSiteAddress">
+            </el-input>
+            <el-button 
+              v-if="!editingSiteAddress"
+              type="primary" 
+              icon="el-icon-refresh" 
+              @click="detectSiteAddress"
+              :loading="detectingAddress">
+              自动检测
+            </el-button>
+                         <el-button 
+               v-if="!editingSiteAddress"
+               type="info" 
+               icon="el-icon-edit" 
+               @click="startEditSiteAddress">
+               手动编辑
+             </el-button>
+            <el-button 
+              v-if="editingSiteAddress"
+              type="success" 
+              icon="el-icon-check" 
+              @click="editingSiteAddress = false">
+              确认
+            </el-button>
+            <el-button 
+              v-if="editingSiteAddress"
+              type="default" 
+              icon="el-icon-close" 
+              @click="cancelEditSiteAddress">
+              取消
+            </el-button>
+          </div>
+          <span class="tip">
+            <i class="el-icon-info"></i> 
+            网站的完整访问地址，用于生成站点地图和其他SEO功能。
+            <strong>推荐使用自动检测</strong>，系统会根据当前访问地址自动填写。
+          </span>
         </el-form-item>
         
         <el-form-item label="网站标题">
@@ -882,6 +921,9 @@ export default {
   data() {
     return {
       initialLoad: true,
+      editingSiteAddress: false,
+      detectingAddress: false,
+      originalSiteAddress: '',
       seoConfig: {
         enable: false,
         site_address: "",
@@ -963,6 +1005,16 @@ export default {
     }
   },
   
+  mounted() {
+    // 组件挂载后，如果网站地址为空则自动检测
+    this.$nextTick(async () => {
+      if (!this.seoConfig.site_address) {
+        console.log('网站地址为空，自动检测...');
+        await this.detectSiteAddress();
+      }
+    });
+  },
+  
   watch: {
     'seoConfig.enable': {
       handler(newVal, oldVal) {
@@ -974,6 +1026,92 @@ export default {
   },
   
   methods: {
+    // 自动检测网站地址
+    async detectSiteAddress() {
+      this.detectingAddress = true;
+      console.log('开始自动检测网站地址...');
+      
+      try {
+        // 1. 前端检测
+        const currentOrigin = window.location.origin;
+        let frontendDetected = currentOrigin;
+        
+        // 处理标准端口
+        if (currentOrigin.includes(':3000') || currentOrigin.includes(':8080')) {
+          frontendDetected = currentOrigin;
+        } else if (currentOrigin.includes(':80') && currentOrigin.startsWith('http://')) {
+          frontendDetected = currentOrigin.replace(':80', '');
+        } else if (currentOrigin.includes(':443') && currentOrigin.startsWith('https://')) {
+          frontendDetected = currentOrigin.replace(':443', '');
+        }
+        
+        console.log('前端检测结果:', frontendDetected);
+        
+        // 2. 获取后端检测结果
+        let backendDetected = frontendDetected;
+        let detectionConsistent = true;
+        
+        try {
+          const backendResponse = await this.$http.get(this.$constant.pythonBaseURL + '/seo/detectSiteUrl');
+          if (backendResponse && backendResponse.code === 200) {
+            backendDetected = backendResponse.data.detected_url;
+            detectionConsistent = frontendDetected === backendDetected;
+            console.log('后端检测结果:', backendDetected);
+            console.log('前后端检测一致性:', detectionConsistent);
+          }
+        } catch (backendError) {
+          console.warn('获取后端检测结果失败，使用前端检测结果:', backendError.message);
+        }
+        
+        // 3. 使用检测结果
+        const finalUrl = backendDetected || frontendDetected;
+        this.seoConfig.site_address = finalUrl;
+        
+        // 4. 显示结果消息
+        if (detectionConsistent) {
+          this.$message({
+            type: 'success',
+            message: `检测完成：${finalUrl}`,
+            duration: 3000
+          });
+        } else {
+          this.$message({
+            type: 'warning',
+            message: `检测完成：${finalUrl}（前后端检测结果略有差异，已采用后端结果）`,
+            duration: 5000
+          });
+          console.warn('前后端检测结果不一致:', {
+            frontend: frontendDetected,
+            backend: backendDetected,
+            final: finalUrl
+          });
+        }
+        
+        console.log('最终使用的网站地址:', finalUrl);
+        
+      } catch (error) {
+        console.error('自动检测网站地址失败:', error);
+        this.$message({
+          type: 'error',
+          message: '自动检测失败，请手动输入网站地址'
+        });
+      } finally {
+        this.detectingAddress = false;
+      }
+    },
+    
+         // 开始编辑网站地址
+     startEditSiteAddress() {
+       this.originalSiteAddress = this.seoConfig.site_address;
+       this.editingSiteAddress = true;
+     },
+     
+     // 取消编辑网站地址
+     cancelEditSiteAddress() {
+       this.seoConfig.site_address = this.originalSiteAddress;
+       this.editingSiteAddress = false;
+     },
+    
     saveEnableStatus(status) {
       // 确保状态是布尔值
       const enableStatus = status === undefined ? false : !!status;
@@ -2140,5 +2278,57 @@ export default {
   .my-tag {
     background: #fefcbf;
     color: #2d3748;
+  }
+  
+  /* 网站地址自动检测区域样式 */
+  .site-address-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-top: 8px;
+  }
+  
+  .site-address-controls .el-button {
+    min-width: 80px;
+    height: 32px;
+    border-radius: 8px;
+    font-size: 12px;
+    padding: 8px 16px;
+  }
+  
+  .site-address-controls .el-button--primary {
+    background: linear-gradient(135deg, #0071e3, #005bb5);
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 113, 227, 0.3);
+  }
+  
+  .site-address-controls .el-button--info {
+    background: linear-gradient(135deg, #6c757d, #5a6169);
+    border: none;
+    color: white;
+  }
+  
+  .site-address-controls .el-button--success {
+    background: linear-gradient(135deg, #28a745, #1e7e34);
+    border: none;
+  }
+  
+  ::v-deep .el-input.is-disabled .el-input__inner,
+  ::v-deep .el-input__inner[readonly] {
+    background-color: rgba(248, 249, 250, 0.8);
+    color: #495057;
+    cursor: default;
+    border-color: rgba(0, 0, 0, 0.08);
+  }
+  
+  /* 网站地址提示样式增强 */
+  .tip i.el-icon-info {
+    color: #0071e3;
+    margin-right: 4px;
+  }
+  
+  .tip strong {
+    color: #0071e3;
+    font-weight: 600;
   }
 </style>

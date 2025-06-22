@@ -108,11 +108,11 @@
           <div style="margin-bottom: 5px">标题：</div>
           <el-input maxlength="60" v-model="resourcePath.title"></el-input>
           <div style="margin-top: 10px;margin-bottom: 5px">分类：</div>
-          <el-input :disabled="!['friendUrl', 'lovePhoto', 'funny', 'favorites'].includes(resourcePath.type)"
-                    maxlength="30" v-model="resourcePath.classify"></el-input>
+          <el-input :disabled="!['friendUrl', 'lovePhoto', 'funny', 'favorites', 'siteInfo'].includes(resourcePath.type)"
+                    maxlength="30" v-model="resourcePath.classify" :placeholder="resourcePath.type === 'siteInfo' ? '暂未使用' : ''"></el-input>
           <div style="margin-top: 10px;margin-bottom: 5px">简介：</div>
-          <el-input :disabled="!['friendUrl', 'favorites'].includes(resourcePath.type)"
-                    maxlength="1000" v-model="resourcePath.introduction"></el-input>
+          <el-input :disabled="!['friendUrl', 'favorites', 'siteInfo'].includes(resourcePath.type)"
+                    maxlength="1000" v-model="resourcePath.introduction" :placeholder="resourcePath.type === 'siteInfo' ? '网站描述' : ''"></el-input>
           <div style="margin-top: 10px;margin-bottom: 5px">封面：</div>
           <div style="display: flex">
             <el-input v-model="resourcePath.cover"></el-input>
@@ -126,8 +126,8 @@
           </div>
           <div style="margin-top: 10px;margin-bottom: 5px">链接：</div>
           <div style="display: flex">
-            <el-input :disabled="!['friendUrl', 'funny', 'favorites'].includes(resourcePath.type)"
-                      v-model="resourcePath.url"></el-input>
+            <el-input :disabled="!['friendUrl', 'funny', 'favorites', 'siteInfo'].includes(resourcePath.type)"
+                      v-model="resourcePath.url" :placeholder="resourcePath.type === 'siteInfo' ? '网站地址（留空则自动获取）' : ''"></el-input>
             <div style="width: 66px;margin: 3.5px 0 0 10px">
               <proButton :info="'上传文件'"
                          @click.native="addResourcePathUrl()"
@@ -138,8 +138,9 @@
           </div>
           <div style="margin-top: 10px;margin-bottom: 5px">资源类型：</div>
           <div style="margin-top: 10px;margin-bottom: 5px">备注：</div>
-          <el-input :disabled="![].includes(resourcePath.type)"
-                    maxlength="1000" v-model="resourcePath.remark" type="textarea"></el-input>
+          <el-input :disabled="!['siteInfo'].includes(resourcePath.type)"
+                    maxlength="1000" v-model="resourcePath.remark" type="textarea" 
+                    :placeholder="resourcePath.type === 'siteInfo' ? '网站封面图片URL' : ''"></el-input>
         </div>
         <div style="display: flex;margin-top: 30px" class="myCenter">
           <proButton :info="'提交'"
@@ -169,7 +170,8 @@
           {label: "友链", value: "friendUrl"},
           {label: "图片", value: "lovePhoto"},
           {label: "音乐", value: "funny"},
-          {label: "收藏夹", value: "favorites"}
+          {label: "收藏夹", value: "favorites"},
+          {label: "本站信息", value: "siteInfo"}
         ],
         pagination: {
           current: 1,

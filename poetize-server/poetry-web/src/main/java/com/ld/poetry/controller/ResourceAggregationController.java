@@ -51,6 +51,16 @@ public class ResourceAggregationController {
         if (!StringUtils.hasText(resourcePathVO.getTitle()) || !StringUtils.hasText(resourcePathVO.getType())) {
             return PoetryResult.fail("标题和资源类型不能为空！");
         }
+        
+        // 本站信息类型的特殊验证：只能有一条记录
+        if (CommonConst.RESOURCE_PATH_TYPE_SITE_INFO.equals(resourcePathVO.getType())) {
+            LambdaQueryChainWrapper<ResourcePath> wrapper = new LambdaQueryChainWrapper<>(resourcePathMapper);
+            long count = wrapper.eq(ResourcePath::getType, CommonConst.RESOURCE_PATH_TYPE_SITE_INFO).count();
+            if (count > 0) {
+                return PoetryResult.fail("本站信息只能有一条记录，请编辑现有记录！");
+            }
+        }
+        
         if (CommonConst.RESOURCE_PATH_TYPE_LOVE_PHOTO.equals(resourcePathVO.getType())) {
             resourcePathVO.setRemark(PoetryUtil.getAdminUser().getId().toString());
         }
@@ -58,8 +68,9 @@ public class ResourceAggregationController {
         BeanUtils.copyProperties(resourcePathVO, resourcePath);
         resourcePathMapper.insert(resourcePath);
         
-        // 如果是收藏夹类型的资源，重新渲染百宝箱页面
-        if (CommonConst.RESOURCE_PATH_TYPE_FAVORITES.equals(resourcePathVO.getType())) {
+        // 如果是收藏夹类型或本站信息类型的资源，重新渲染百宝箱页面
+        if (CommonConst.RESOURCE_PATH_TYPE_FAVORITES.equals(resourcePathVO.getType()) ||
+            CommonConst.RESOURCE_PATH_TYPE_SITE_INFO.equals(resourcePathVO.getType())) {
             try {
                 prerenderClient.renderFavoritePage();
             } catch (Exception e) {
@@ -81,8 +92,9 @@ public class ResourceAggregationController {
         
         resourcePathMapper.deleteById(id);
         
-        // 如果是收藏夹类型的资源，重新渲染百宝箱页面
-        if (resourcePath != null && CommonConst.RESOURCE_PATH_TYPE_FAVORITES.equals(resourcePath.getType())) {
+        // 如果是收藏夹类型或本站信息类型的资源，重新渲染百宝箱页面
+        if (resourcePath != null && (CommonConst.RESOURCE_PATH_TYPE_FAVORITES.equals(resourcePath.getType()) ||
+            CommonConst.RESOURCE_PATH_TYPE_SITE_INFO.equals(resourcePath.getType()))) {
             try {
                 prerenderClient.renderFavoritePage();
             } catch (Exception e) {
@@ -112,8 +124,9 @@ public class ResourceAggregationController {
         BeanUtils.copyProperties(resourcePathVO, resourcePath);
         resourcePathMapper.updateById(resourcePath);
         
-        // 如果是收藏夹类型的资源，重新渲染百宝箱页面
-        if (CommonConst.RESOURCE_PATH_TYPE_FAVORITES.equals(resourcePathVO.getType())) {
+        // 如果是收藏夹类型或本站信息类型的资源，重新渲染百宝箱页面
+        if (CommonConst.RESOURCE_PATH_TYPE_FAVORITES.equals(resourcePathVO.getType()) ||
+            CommonConst.RESOURCE_PATH_TYPE_SITE_INFO.equals(resourcePathVO.getType())) {
             try {
                 prerenderClient.renderFavoritePage();
             } catch (Exception e) {
@@ -124,6 +137,32 @@ public class ResourceAggregationController {
         return PoetryResult.success();
     }
 
+    /**
+     * 获取本站信息
+     */
+    @GetMapping("/getSiteInfo")
+    public PoetryResult<ResourcePathVO> getSiteInfo() {
+        LambdaQueryChainWrapper<ResourcePath> wrapper = new LambdaQueryChainWrapper<>(resourcePathMapper);
+        ResourcePath resourcePath = wrapper.eq(ResourcePath::getType, CommonConst.RESOURCE_PATH_TYPE_SITE_INFO)
+                .eq(ResourcePath::getStatus, Boolean.TRUE)
+                .one();
+        
+        if (resourcePath != null) {
+            ResourcePathVO resourcePathVO = new ResourcePathVO();
+            BeanUtils.copyProperties(resourcePath, resourcePathVO);
+            return PoetryResult.success(resourcePathVO);
+        }
+        
+        // 如果没有配置本站信息，返回默认值
+        ResourcePathVO defaultSiteInfo = new ResourcePathVO();
+        defaultSiteInfo.setTitle("POETIZE");
+        defaultSiteInfo.setUrl(""); // URL留空表示自动获取，也可以手动配置
+        defaultSiteInfo.setCover("https://s1.ax1x.com/2022/11/10/z9E7X4.jpg");
+        defaultSiteInfo.setIntroduction("这是一个 Vue2 Vue3 与 SpringBoot 结合的产物～");
+        defaultSiteInfo.setRemark("https://s1.ax1x.com/2022/11/10/z9VlHs.png"); // 使用remark字段存储网站封面
+        
+        return PoetryResult.success(defaultSiteInfo);
+    }
 
     /**
      * 查询资源

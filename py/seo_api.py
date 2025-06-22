@@ -26,7 +26,7 @@ from openai import AsyncOpenAI
 from anthropic import AsyncAnthropic
 import logging
 from urllib.parse import urlparse
-from config import JAVA_BACKEND_URL, FRONTEND_URL
+from config import JAVA_BACKEND_URL, FRONTEND_URL, detect_frontend_url_from_request
 from cryptography.fernet import Fernet
 import threading
 from datetime import datetime
@@ -435,8 +435,8 @@ async def generate_sitemap():
             logger.info("网站地图生成功能已禁用")
             return None
         
-        # 确保使用正确的前端URL
-        site_url = seo_config.get('site_address', FRONTEND_URL)
+        # 确保使用正确的前端URL，优先使用SEO配置，如果没有则自动检测
+        site_url = seo_config.get('site_address') or FRONTEND_URL
         logger.info(f"使用网站地址生成站点地图: {site_url}")
             
         # 创建sitemap基本结构
@@ -757,8 +757,8 @@ async def generate_robots_txt():
         
         robots_content = seo_config.get('robots_txt', '')
         
-        # 替换占位符
-        site_address = seo_config.get('site_address', FRONTEND_URL)
+        # 替换占位符，优先使用SEO配置，如果没有则自动检测
+        site_address = seo_config.get('site_address') or FRONTEND_URL
         robots_content = robots_content.replace('{site_address}', site_address)
         
         # 保存到文件
@@ -1021,6 +1021,40 @@ def register_seo_api(app: FastAPI):
     asyncio.create_task(generate_sitemap())
     asyncio.create_task(generate_robots_txt())
     
+    # 网站URL检测API
+    @app.get('/seo/detectSiteUrl')
+    async def detect_site_url_api(request: Request):
+        """
+        检测当前网站URL的API
+        用于前端获取后端检测到的网站地址
+        """
+        try:
+            # 从请求头中检测URL
+            detected_url = detect_frontend_url_from_request(request)
+            
+            logger.info(f"检测到的网站URL: {detected_url}")
+            
+            return JSONResponse({
+                "code": 200, 
+                "data": {
+                    "detected_url": detected_url,
+                    "fallback_url": FRONTEND_URL,
+                    "detection_source": "request_headers" if detected_url != FRONTEND_URL else "config"
+                },
+                "message": "网站URL检测成功"
+            })
+        except Exception as e:
+            logger.error(f"检测网站URL出错: {str(e)}")
+            return JSONResponse({
+                "code": 500, 
+                "message": f"检测网站URL出错: {str(e)}",
+                "data": {
+                    "detected_url": FRONTEND_URL,
+                    "fallback_url": FRONTEND_URL,
+                    "detection_source": "fallback"
+                }
+            })
+    
     # SEO配置API
     @app.get('/seo/getSeoConfig')
     @app.options('/seo/getSeoConfig')
@@ -1038,6 +1072,15 @@ def register_seo_api(app: FastAPI):
         
         try:
             config = await get_seo_config()
+            
+            # 如果SEO配置中没有site_address，自动检测并填充
+            if not config.get('site_address'):
+                detected_url = detect_frontend_url_from_request(request)
+                config['site_address'] = detected_url
+                # 保存更新后的配置
+                save_seo_config(config)
+                logger.info(f"SEO配置中没有网站地址，自动检测并设置为: {detected_url}")
+            
             logger.info(f"成功获取SEO配置，返回配置项数量: {len(config) if config else 0}, 开关状态: {config.get('enable', False)}")
             return JSONResponse({
                 "code": 200,

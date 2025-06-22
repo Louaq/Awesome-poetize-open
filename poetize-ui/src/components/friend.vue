@@ -56,11 +56,11 @@
         <div style="font-size: 20px;font-weight: bold;margin-top: 40px">🌸本站信息</div>
         <div>
           <blockquote>
-            <div>网站名称: {{$constant.friendWebName}}</div>
-            <div>网址: {{$constant.friendUrl}}</div>
-            <div>头像: {{$constant.friendAvatar}}</div>
-            <div>描述: {{$constant.friendIntroduction}}</div>
-            <div>网站封面: {{$constant.friendCover}}</div>
+            <div>网站名称: {{siteInfo.title || $constant.friendWebName}}</div>
+            <div>网址: {{siteInfo.url || $constant.friendUrl}}</div>
+            <div>头像: {{siteInfo.cover || $constant.friendAvatar}}</div>
+            <div>描述: {{siteInfo.introduction || $constant.friendIntroduction}}</div>
+            <div>网站封面: {{siteInfo.remark || $constant.friendCover}}</div>
           </blockquote>
         </div>
         <div style="font-size: 20px;font-weight: bold">🌸申请方式</div>
@@ -99,6 +99,7 @@
     data() {
       return {
         friendList: {},
+        siteInfo: {},
         friend: {
           title: "",
           introduction: "",
@@ -114,6 +115,7 @@
 
     created() {
       this.getFriends();
+      this.getSiteInfo();
     },
 
     mounted() {
@@ -192,6 +194,20 @@
           .then((res) => {
             if (!this.$common.isEmpty(res.data)) {
               this.friendList = res.data;
+            }
+          })
+          .catch((error) => {
+            this.$message({
+              message: error.message,
+              type: "error"
+            });
+          });
+      },
+      getSiteInfo() {
+        this.$http.get(this.$constant.baseURL + "/webInfo/getSiteInfo")
+          .then((res) => {
+            if (!this.$common.isEmpty(res.data)) {
+              this.siteInfo = res.data;
             }
           })
           .catch((error) => {

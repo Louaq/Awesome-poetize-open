@@ -74,7 +74,7 @@ JAVA_CONFIG_URL = os.environ.get('JAVA_CONFIG_URL', f"{BASE_BACKEND_URL}")
 # Java验证API
 JAVA_AUTH_URL = os.environ.get('JAVA_AUTH_URL', f"{BASE_BACKEND_URL}/user/checkAdminAuth")
 
-# 自动推断前端URL
+# 智能推断前端URL
 def detect_frontend_url():    
     # 1. 优先使用环境变量
     if 'FRONTEND_HOST' in os.environ:
@@ -115,6 +115,61 @@ def detect_frontend_url():
     default_url = "http://localhost"  # 不指定端口，依赖站点的默认配置
     print(f"无法检测到前端URL，使用默认值: {default_url}")
     return default_url
+
+# 从HTTP请求中检测前端URL
+def detect_frontend_url_from_request(request=None):
+    """
+    从HTTP请求头中智能检测前端URL
+    这个函数在处理API请求时调用，能获取到实际访问的域名
+    """
+    if request is None:
+        # 如果没有请求对象，使用静态检测
+        return FRONTEND_URL
+    
+    try:
+        # 获取请求头信息
+        host = None
+        scheme = 'http'  # 默认协议
+        
+        # 尝试多种方式获取主机名
+        if hasattr(request, 'headers'):
+            # FastAPI/Starlette请求对象
+            headers = request.headers
+            host = headers.get('host') or headers.get('x-forwarded-host') or headers.get('x-original-host')
+            
+            # 检测协议
+            if headers.get('x-forwarded-proto') == 'https' or headers.get('x-forwarded-ssl') == 'on':
+                scheme = 'https'
+            elif hasattr(request, 'url') and request.url.scheme:
+                scheme = request.url.scheme
+        elif hasattr(request, 'environ'):
+            # WSGI请求对象
+            environ = request.environ
+            host = environ.get('HTTP_HOST') or environ.get('HTTP_X_FORWARDED_HOST')
+            if environ.get('HTTP_X_FORWARDED_PROTO') == 'https' or environ.get('HTTPS') == 'on':
+                scheme = 'https'
+        
+        if host:
+            # 处理端口号
+            if ':' in host:
+                hostname, port = host.split(':', 1)
+                port = int(port)
+                # 如果是标准端口，不需要包含在URL中
+                if (scheme == 'http' and port == 80) or (scheme == 'https' and port == 443):
+                    detected_url = f"{scheme}://{hostname}"
+                else:
+                    detected_url = f"{scheme}://{host}"
+            else:
+                detected_url = f"{scheme}://{host}"
+            
+            print(f"从请求头检测到前端URL: {detected_url}")
+            return detected_url
+            
+    except Exception as e:
+        print(f"从请求头检测前端URL失败: {str(e)}")
+    
+    # 如果检测失败，返回默认值
+    return FRONTEND_URL
 
 # 前端URL
 FRONTEND_URL = os.environ.get('FRONTEND_URL', detect_frontend_url())

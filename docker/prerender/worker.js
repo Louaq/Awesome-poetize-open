@@ -722,10 +722,28 @@ async function fetchWebInfo() {
       headers: INTERNAL_SERVICE_HEADERS
     });
     const webInfo = (res.data && res.data.data) || {};
-    logger.debug('Web info fetched', { keys: Object.keys(webInfo) });
+    
+    // 详细记录获取到的webInfo数据
+    logger.info('Web info fetched successfully', { 
+      status: res.status,
+      dataExists: !!res.data,
+      webInfoExists: !!res.data?.data,
+      keys: Object.keys(webInfo),
+      webName: webInfo.webName,
+      webTitle: webInfo.webTitle,
+      avatar: webInfo.avatar,
+      backgroundImage: webInfo.backgroundImage,
+      footer: webInfo.footer
+    });
+    
     return webInfo;
   } catch (error) {
-    logger.warn('Failed to fetch web info, using defaults', { error: error.message });
+    logger.error('Failed to fetch web info', { 
+      error: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      url: `${JAVA_BACKEND_URL}/webInfo/getWebInfo`
+    });
     return {};
   }
 }
@@ -738,13 +756,26 @@ async function fetchSeoConfig() {
       headers: INTERNAL_SERVICE_HEADERS
     });
     const seoConfig = (res.data && res.data.code === 200) ? (res.data.data || {}) : {};
-    logger.debug('SEO config fetched', { keys: Object.keys(seoConfig) });
+    
+    // 详细记录获取到的SEO配置数据
+    logger.info('SEO config fetched successfully', { 
+      status: res.status,
+      responseCode: res.data?.code,
+      dataExists: !!res.data?.data,
+      keys: Object.keys(seoConfig),
+      site_title: seoConfig.site_title,
+      site_address: seoConfig.site_address,
+      og_image: seoConfig.og_image,
+      default_author: seoConfig.default_author
+    });
+    
     return seoConfig;
   } catch (error) {
     logger.warn('Failed to fetch SEO config, using defaults', { 
       error: error.message, 
       status: error.response?.status,
-      statusText: error.response?.statusText 
+      statusText: error.response?.statusText,
+      url: `${PYTHON_BACKEND_URL}/seo/getSeoConfig`
     });
     return {};
   }
@@ -816,6 +847,37 @@ async function fetchFriends() {
     return friends;
   } catch (error) {
     logger.warn('Failed to fetch friends, using empty object', { error: error.message });
+    return {};
+  }
+}
+
+async function fetchSiteInfo() {
+  try {
+    logger.debug('Fetching site info from resource aggregation');
+    const res = await axios.get(`${JAVA_BACKEND_URL}/webInfo/getSiteInfo`, { 
+      timeout: 5000,
+      headers: INTERNAL_SERVICE_HEADERS
+    });
+    const siteInfo = (res.data && res.data.data) || {};
+    
+    logger.info('Site info fetched successfully', { 
+      status: res.status,
+      dataExists: !!res.data?.data,
+      title: siteInfo.title,
+      url: siteInfo.url,
+      cover: siteInfo.cover,
+      introduction: siteInfo.introduction,
+      remark: siteInfo.remark
+    });
+    
+    return siteInfo;
+  } catch (error) {
+    logger.warn('Failed to fetch site info from resource aggregation, using defaults', { 
+      error: error.message,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      url: `${JAVA_BACKEND_URL}/webInfo/getSiteInfo`
+    });
     return {};
   }
 }
@@ -1243,19 +1305,38 @@ async function renderHomePage(lang = 'zh') {
 // ===== 百宝箱页面渲染函数 =====
 async function renderFavoritePage(lang = 'zh') {
   try {
-    const [webInfo, seoConfig, collects, friends] = await Promise.all([
+    const [webInfo, seoConfig, collects, friends, siteInfo] = await Promise.all([
       fetchWebInfo(),
       fetchSeoConfig(),
       fetchCollects(),
-      fetchFriends()
+      fetchFriends(),
+      fetchSiteInfo()
     ]);
 
-    const siteName = seoConfig.site_title || webInfo.webName || 'Poetize';
+    // 调试：记录获取到的数据
+    logger.info('Favorite page data fetched', {
+      webInfoKeys: Object.keys(webInfo),
+      webName: webInfo.webName,
+      webTitle: webInfo.webTitle,
+      avatar: webInfo.avatar,
+      seoConfigKeys: Object.keys(seoConfig),
+      collectsKeys: Object.keys(collects),
+      friendsKeys: Object.keys(friends),
+      siteInfoKeys: Object.keys(siteInfo),
+      siteInfoTitle: siteInfo.title,
+      siteInfoUrl: siteInfo.url,
+      siteInfoCover: siteInfo.cover
+    });
+
+    // 优先使用webInfo的实际数据，SEO配置仅作为fallback
+    const siteName = webInfo.webName || seoConfig.site_title || 'Poetize';
     const title = `百宝箱 - ${siteName}`;
-    const description = '收藏夹、友人帐、音乐欣赏 - 发现更多精彩内容';
-    const author = seoConfig.default_author || webInfo.webName || 'Admin';
-    const ogImage = seoConfig.og_image || webInfo.avatar || '';
-    const baseUrl = seoConfig.site_address || process.env.SITE_URL || 'https://poetize.cn';
+    const description = webInfo.webTitle || '收藏夹、友人帐、音乐欣赏 - 发现更多精彩内容';
+    const author = webInfo.webName || seoConfig.default_author || 'Admin';
+    const ogImage = webInfo.avatar || seoConfig.og_image || '';
+    
+    // 网站地址：优先使用SEO配置，fallback到环境变量或webInfo
+    const baseUrl = seoConfig.site_address || process.env.SITE_URL || 'http://154.89.203.185';
     
     // 在基础关键词基础上添加页面特定关键词
     const baseKeywords = seoConfig.site_keywords || '博客,个人网站,技术分享';
@@ -1312,15 +1393,14 @@ async function renderFavoritePage(lang = 'zh') {
             
             <!-- 本站信息 -->
             <div class="site-info">
-              <h3>本站信息</h3>
-              <div class="site-card">
-                <img src="${webInfo.avatar || ''}" alt="${webInfo.webName || 'Poetize'}" width="64" height="64" loading="lazy">
-                <div class="site-details">
-                  <h4>${webInfo.webName || 'Poetize'}</h4>
-                  <p>${webInfo.webTitle || description}</p>
-                  <a href="${baseUrl}" target="_blank" rel="noopener">${baseUrl}</a>
-                </div>
-              </div>
+              <h3>🌸本站信息</h3>
+              <blockquote>
+                <div>网站名称: ${siteInfo.title || webInfo.webName || 'POETIZE'}</div>
+                <div>网址: ${siteInfo.url || baseUrl}</div>
+                <div>头像: ${siteInfo.cover || webInfo.avatar || 'https://s1.ax1x.com/2022/11/10/z9E7X4.jpg'}</div>
+                <div>描述: ${siteInfo.introduction || webInfo.webTitle || '这是一个 Vue2 Vue3 与 SpringBoot 结合的产物～'}</div>
+                <div>网站封面: ${siteInfo.remark || webInfo.backgroundImage || 'https://s1.ax1x.com/2022/11/10/z9VlHs.png'}</div>
+              </blockquote>
             </div>
             
             <!-- 友链列表 -->
@@ -1614,6 +1694,15 @@ async function renderIds(ids = [], options = {}) {
       fetchSeoConfig(),
       fetchWebInfo()
     ]);
+    
+    // 调试：记录获取到的webInfo数据
+    logger.debug('WebInfo data for articles', { 
+      taskId, 
+      webInfoKeys: Object.keys(webInfo),
+      webName: webInfo.webName,
+      webTitle: webInfo.webTitle,
+      avatar: webInfo.avatar
+    });
 
     // 调试：检查CSS文件是否存在
     const distPath = '/app/dist';
