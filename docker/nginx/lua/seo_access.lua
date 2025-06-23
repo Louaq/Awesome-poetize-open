@@ -1,6 +1,30 @@
 local cjson = require "cjson"
 local http = require "resty.http"
 
+-- 快速检查：如果是静态资源，直接跳过SEO处理
+local uri = ngx.var.uri
+if uri and (
+    string.match(uri, "%.css$") or 
+    string.match(uri, "%.js$") or
+    string.match(uri, "%.png$") or
+    string.match(uri, "%.jpg$") or
+    string.match(uri, "%.jpeg$") or
+    string.match(uri, "%.gif$") or
+    string.match(uri, "%.ico$") or
+    string.match(uri, "%.svg$") or
+    string.match(uri, "%.woff$") or
+    string.match(uri, "%.woff2$") or
+    string.match(uri, "%.ttf$") or
+    string.match(uri, "%.eot$") or
+    string.match(uri, "%.map$") or
+    string.match(uri, "^/api/") or
+    string.match(uri, "^/python/") or
+    string.match(uri, "^/socket")
+) then
+    -- 直接返回，不执行SEO处理
+    return
+end
+
 -- 使用ngx.ctx来存储数据，避免ngx.var的限制
 ngx.ctx.seo_data = ""
 ngx.ctx.title = ""
@@ -162,9 +186,9 @@ local function fetch_api(api_path, query_params)
         result = tostring(data.data)
     end
     
-    -- 缓存结果 (保存12小时)
+    -- 缓存结果 (保存24小时，减少重复请求)
     if result and type(result) == "string" then
-        local success, err = seo_cache:set(cache_key, result, 43200)
+        local success, err = seo_cache:set(cache_key, result, 86400)
         if not success then
             ngx.log(ngx.ERR, "缓存SEO数据失败: " .. (err or "未知错误"))
         else
@@ -266,22 +290,41 @@ if not ngx.ctx.seo_data or ngx.ctx.seo_data == "" then
     end
 end
 
--- 获取SEO配置用于生成图标
--- ngx.log(ngx.INFO, "获取SEO配置用于图标生成")
-local seo_config_data = fetch_api("/python/seo/getSeoConfig", {})
-if seo_config_data then
-    -- 尝试解析SEO配置JSON
-    local ok, seo_config = pcall(cjson.decode, seo_config_data)
-    if ok and seo_config and type(seo_config) == "table" then
-        -- 生成图标meta标签
-        ngx.ctx.icon_data = generate_icon_meta_tags(seo_config)
-        -- ngx.log(ngx.INFO, "成功生成图标meta标签")
+-- 获取SEO配置用于生成图标（增加条件判断，减少不必要的请求）
+-- 只有在需要HTML响应时才获取图标配置
+local content_type = ngx.var.content_type or ""
+local accept = ngx.var.http_accept or ""
+
+-- 判断是否需要图标配置（只有HTML页面需要）
+local need_icons = (
+    string.match(uri, "/$") or  -- 首页
+    string.match(uri, "/article/") or  -- 文章页
+    string.match(uri, "/category/") or  -- 分类页
+    string.match(uri, "/sort") or  -- 排序页
+    string.match(uri, "%.html$") or  -- HTML文件
+    string.match(accept, "text/html")  -- 接受HTML的请求
+)
+
+if need_icons then
+    -- ngx.log(ngx.INFO, "获取SEO配置用于图标生成")
+    local seo_config_data = fetch_api("/python/seo/getSeoConfig", {})
+    if seo_config_data then
+        -- 尝试解析SEO配置JSON
+        local ok, seo_config = pcall(cjson.decode, seo_config_data)
+        if ok and seo_config and type(seo_config) == "table" then
+            -- 生成图标meta标签
+            ngx.ctx.icon_data = generate_icon_meta_tags(seo_config)
+            -- ngx.log(ngx.INFO, "成功生成图标meta标签")
+        else
+            ngx.log(ngx.WARN, "SEO配置数据解析失败")
+            ngx.ctx.icon_data = ""
+        end
     else
-        ngx.log(ngx.WARN, "SEO配置数据解析失败")
+        ngx.log(ngx.WARN, "获取SEO配置失败，使用默认图标")
         ngx.ctx.icon_data = ""
     end
 else
-    ngx.log(ngx.WARN, "获取SEO配置失败，使用默认图标")
+    -- 非HTML页面，不需要图标
     ngx.ctx.icon_data = ""
 end
 

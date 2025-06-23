@@ -1106,7 +1106,9 @@ def register_seo_api(app: FastAPI):
             origin = request.headers.get('Origin', 'Unknown')
             user_agent = request.headers.get('User-Agent', 'Unknown')
             remote_ip = request.client.host if request.client else 'Unknown'
-            logger.info(f"收到Nginx获取SEO配置请求: IP={remote_ip}, Origin={origin}, UA={user_agent}")
+            # 减少日志输出，只在非nginx客户端时记录详细日志
+            if 'nginx-lua-seo-client' not in user_agent:
+                logger.info(f"收到SEO配置请求: IP={remote_ip}, Origin={origin}, UA={user_agent}")
             
             # 直接返回配置数据，不做权限检查（内部服务调用）
             seo_config = await get_seo_config()
@@ -1126,7 +1128,9 @@ def register_seo_api(app: FastAPI):
                 'site_address': seo_config.get('site_address', ''),
             }
             
-            logger.info(f"返回Nginx用SEO配置数据，图标配置状态: site_icon={bool(config_for_nginx['site_icon'])}, apple_touch_icon={bool(config_for_nginx['apple_touch_icon'])}")
+            # 减少日志输出
+            if 'nginx-lua-seo-client' not in user_agent:
+                logger.info(f"返回SEO配置数据，图标状态: site_icon={bool(config_for_nginx['site_icon'])}, apple_touch_icon={bool(config_for_nginx['apple_touch_icon'])}")
             return JSONResponse(config_for_nginx)
         except Exception as e:
             logger.error(f"获取Nginx用SEO配置失败: {str(e)}")
@@ -1348,24 +1352,30 @@ def register_seo_api(app: FastAPI):
     async def batch_process_icons_api(request: Request, _: bool = Depends(admin_required)):
         """批量图标处理API"""
         try:
+            remote_ip = request.client.host if request.client else 'Unknown'
+            logger.info(f"收到批量图标处理请求，来源IP: {remote_ip}")
+            
             # 获取请求数据
             form_data = await request.form()
+            logger.info(f"表单数据字段: {list(form_data.keys())}")
             
             # 检查是否有文件上传
             image_file = form_data.get('image')
             if not image_file:
+                logger.warning("批量图标处理请求缺少图片文件")
                 return JSONResponse({
                     "code": 400,
-                    "message": "请上传图片文件",
+                    "message": "请在表单中上传图片文件(字段名：image)",
                     "data": None
                 }, status_code=400)
             
             # 读取图片数据
             image_data = await image_file.read()
             if not image_data:
+                logger.warning(f"上传的图片文件为空，文件名: {getattr(image_file, 'filename', '未知')}")
                 return JSONResponse({
                     "code": 400,
-                    "message": "图片文件为空",
+                    "message": "上传的图片文件内容为空",
                     "data": None
                 }, status_code=400)
             

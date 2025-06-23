@@ -226,12 +226,13 @@ async def admin_required(
     
     # 没有token则拒绝访问
     if not token:
-        logger.warning(f"未提供有效token, IP: {client_ip}, API: {endpoint}")
+        logger.warning(f"管理员API缺少认证token, IP: {client_ip}, API: {endpoint}")
+        logger.warning(f"请求头: Authorization={credentials}, Cookie检查: Admin-Token={request.cookies.get('Admin-Token', '无')}, User-Token={request.cookies.get('User-Token', '无')}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail={
                 'code': 401,
-                'message': '未登录或token无效',
+                'message': '访问管理员功能需要登录，请确保已登录管理员账户',
                 'data': None
             }
         )

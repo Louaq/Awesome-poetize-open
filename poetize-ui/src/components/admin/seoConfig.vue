@@ -1897,12 +1897,12 @@ export default {
         this.generationProgress = 20;
         this.generationStatus = '正在上传图片...';
 
-        // 发送请求 - 使用原生fetch以确保FormData正确处理
-        const response = await fetch(this.$constant.pythonBaseURL + '/python/seo/batchProcessIcons', {
-          method: 'POST',
-          body: formData,
-          credentials: 'include'
-        }).then(res => res.json());
+        // 发送请求 - 使用专门的文件上传方法
+        const response = await this.$http.upload(
+          this.$constant.pythonBaseURL + '/python/seo/batchProcessIcons', 
+          formData, 
+          true  // isAdmin = true
+        );
 
         this.generationProgress = 80;
         this.generationStatus = '处理完成，准备显示结果...';
@@ -2930,18 +2930,16 @@ export default {
   /* 图标上传容器样式 */
   .icon-upload-container {
     display: flex;
-    align-items: flex-start;
+    flex-direction: column;
     gap: 12px;
-    flex-wrap: wrap;
   }
   
   .icon-upload-container .el-input {
-    flex: 1;
-    min-width: 300px;
+    width: 100%;
   }
   
   .icon-upload-container .upload-btn {
-    flex-shrink: 0;
+    align-self: flex-start;
   }
   
   /* 图标预览样式 */
@@ -3338,12 +3336,7 @@ export default {
     
     /* 图标上传移动端适配 */
     .icon-upload-container {
-      flex-direction: column;
       gap: 8px;
-    }
-    
-    .icon-upload-container .el-input {
-      min-width: auto;
     }
     
     .icon-preview {
