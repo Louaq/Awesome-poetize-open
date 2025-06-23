@@ -9,6 +9,7 @@ services:
     volumes:
       - poetize_ui_dist:/usr/share/nginx/html/poetize
       - poetize_im_dist:/usr/share/nginx/html/im
+      - poetize_uploads:/usr/share/nginx/html/uploads
       - ./docker/nginx/default.http.conf:/usr/local/openresty/nginx/conf/conf.d/default.http.conf.template
       - ./docker/nginx/default.https.conf:/usr/local/openresty/nginx/conf/conf.d/default.https.conf.template
       - ./docker/nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
@@ -201,7 +202,7 @@ services:
       dockerfile: docker/java/Dockerfile
     container_name: poetize-java
     volumes:
-      - poetize_ui_dist:/app/static
+      - poetize_uploads:/app/static
     environment:
       - JAVA_OPTS=-Xmx256m -Xms128m -XX:MaxMetaspaceSize=96m -XX:CompressedClassSpaceSize=48m -Xss512k -XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:InitiatingHeapOccupancyPercent=35 -XX:+DisableExplicitGC
       - SPRING_DATASOURCE_URL=jdbc:mariadb://mysql:3306/poetize?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
@@ -321,4 +322,5 @@ volumes:
   im_node_modules:
   poetize_ui_dist:
   poetize_im_dist:
+  poetize_uploads:
   ollama_data:
