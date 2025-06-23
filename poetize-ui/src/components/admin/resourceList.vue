@@ -50,9 +50,9 @@
                   {{scope.row.path}}
                 </span>
               </el-tooltip>
-              <template v-if="!$common.isEmpty(scope.row.mimeType) && scope.row.mimeType.includes('image')">
+              <template v-if="!$common.isEmpty(scope.row.mimeType) && (scope.row.mimeType.includes('image') || scope.row.mimeType.includes('video') || isFont(scope.row.mimeType))">
                 <el-button type="text" icon="el-icon-view" size="mini" style="margin-left: 5px;"
-                           @click="previewImage(scope.row.path)">
+                           @click="previewMedia(scope.row.path, scope.row.mimeType, scope.row.originalName)">
                 </el-button>
               </template>
             </div>
@@ -112,20 +112,72 @@
       </div>
     </el-dialog>
 
-    <!-- 图片预览对话框 -->
-    <el-dialog title="图片预览"
+    <!-- 媒体预览对话框 -->
+    <el-dialog :title="getPreviewTitle()"
                :visible.sync="previewVisible"
-               width="50%"
+               :width="isFont(previewMediaType) ? '80%' : '60%'"
                :append-to-body="true"
                :close-on-click-modal="true"
                destroy-on-close
+               :before-close="handlePreviewClose"
                center>
       <div style="text-align: center;">
-        <el-image v-if="previewImageList.length > 0" 
-                  :src="previewImageList[0]" 
+        <!-- 图片预览（支持放大） -->
+        <el-image v-if="previewMediaType.includes('image')" 
+                  :src="previewMediaUrl" 
+                  :preview-src-list="[previewMediaUrl]"
                   fit="contain"
-                  style="max-width: 100%; max-height: 60vh;">
+                  style="max-width: 100%; max-height: 60vh; cursor: pointer;">
         </el-image>
+        
+        <!-- 视频预览 -->
+        <video v-else-if="previewMediaType.includes('video')" 
+               :src="previewMediaUrl" 
+               controls 
+               style="max-width: 100%; max-height: 60vh;">
+          您的浏览器不支持视频播放
+        </video>
+        
+        <!-- 字体预览 -->
+        <div v-else-if="isFont(previewMediaType)" style="text-align: left;">
+          <div class="font-info" style="margin-bottom: 20px; padding: 15px; background: #f5f7fa; border-radius: 4px;">
+            <h3 style="margin: 0 0 10px 0; color: #409EFF;">{{ previewFileName }}</h3>
+            <p style="margin: 0; color: #666;">点击文字可以查看字体效果</p>
+          </div>
+          
+          <div v-if="fontLoaded" class="font-preview-content">
+            <div v-for="textGroup in fontPreviewTexts" :key="textGroup.label" style="margin-bottom: 25px;">
+              <h4 style="color: #606266; margin: 0 0 10px 0; font-size: 14px;">{{ textGroup.label }}</h4>
+              <div v-for="size in fontSizes" :key="size" 
+                   :style="{ 
+                     fontFamily: loadedFontName + ', Arial, sans-serif', 
+                     fontSize: size + 'px',
+                     lineHeight: 1.4,
+                     margin: '8px 0',
+                     padding: '5px',
+                     border: '1px solid #eee',
+                     borderRadius: '3px',
+                     background: '#fff'
+                   }"
+                   class="font-sample">
+                <span style="font-size: 12px; color: #999; margin-right: 10px;">{{ size }}px:</span>
+                {{ textGroup.content }}
+              </div>
+            </div>
+          </div>
+          
+          <div v-else style="padding: 40px; text-align: center;">
+            <i class="el-icon-loading" style="font-size: 24px; margin-bottom: 10px;"></i>
+            <p>正在加载字体文件...</p>
+          </div>
+        </div>
+        
+        <!-- 其他文件类型提示 -->
+        <div v-else style="padding: 20px; color: #666;">
+          <i class="el-icon-document" style="font-size: 48px; margin-bottom: 10px;"></i>
+          <p>暂不支持预览此文件类型</p>
+          <p>文件路径：{{ previewMediaUrl }}</p>
+        </div>
       </div>
     </el-dialog>
   </div>
@@ -154,8 +206,21 @@
           {label: "七牛云", value: "qiniu"}
         ],
         storeType: localStorage.getItem("defaultStoreType"),
-        previewImageList: [],
-        previewVisible: false
+        previewMediaUrl: "",
+        previewMediaType: "",
+        previewFileName: "",
+        previewVisible: false,
+        fontLoaded: false,
+        loadedFontName: "",
+        fontPreviewTexts: [
+          { label: '英文大写', content: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' },
+          { label: '英文小写', content: 'abcdefghijklmnopqrstuvwxyz' },
+          { label: '数字', content: '0123456789' },
+          { label: '中文示例', content: '床前明月光，疑是地上霜。举头望明月，低头思故乡。' },
+          { label: '符号', content: '!@#$%^&*()_+-=[]{}|;:,.<>?' },
+          { label: '英文句子', content: 'The quick brown fox jumps over the lazy dog.' }
+        ],
+        fontSizes: [14, 18, 24, 32, 48]
       }
     },
 
@@ -168,6 +233,11 @@
     },
 
     mounted() {
+    },
+
+    beforeDestroy() {
+      // 组件销毁前清理字体
+      this.cleanupFont();
     },
 
     methods: {
@@ -256,9 +326,92 @@
         this.pagination.current = val;
         this.getResources();
       },
-      previewImage(imagePath) {
-        this.previewImageList = [imagePath];
+      previewMedia(mediaPath, mimeType, fileName) {
+        this.previewMediaUrl = mediaPath;
+        this.previewMediaType = mimeType;
+        this.previewFileName = fileName || "";
+        
+        // 如果是字体文件，需要加载字体
+        if (this.isFont(mimeType)) {
+          this.loadFont(mediaPath, fileName);
+        } else {
+          this.fontLoaded = false;
+        }
+        
         this.previewVisible = true;
+      },
+      
+      isFont(mimeType) {
+        const fontMimeTypes = [
+          'font/woff', 'font/woff2', 'font/ttf', 'font/otf',
+          'application/font-woff', 'application/font-woff2', 
+          'application/x-font-ttf', 'application/x-font-otf',
+          'application/font-sfnt', 'font/opentype'
+        ];
+        return fontMimeTypes.some(type => mimeType.includes(type)) || 
+               /\.(woff|woff2|ttf|otf|eot)$/i.test(this.previewFileName);
+      },
+      
+      loadFont(fontUrl, fileName) {
+        // 清理之前的字体
+        this.cleanupFont();
+        
+        // 生成唯一的字体名称
+        this.loadedFontName = 'preview-font-' + Date.now();
+        
+        // 创建字体样式
+        const style = document.createElement('style');
+        style.id = 'font-preview-style';
+        style.innerHTML = `
+          @font-face {
+            font-family: '${this.loadedFontName}';
+            src: url('${fontUrl}');
+          }
+        `;
+        
+        document.head.appendChild(style);
+        
+        // 预加载字体
+        const testDiv = document.createElement('div');
+        testDiv.style.fontFamily = this.loadedFontName;
+        testDiv.style.position = 'absolute';
+        testDiv.style.left = '-9999px';
+        testDiv.innerHTML = 'Test';
+        document.body.appendChild(testDiv);
+        
+        // 延迟显示，确保字体加载完成
+        setTimeout(() => {
+          this.fontLoaded = true;
+          document.body.removeChild(testDiv);
+        }, 100);
+      },
+      
+      cleanupFont() {
+        // 清理之前加载的字体样式
+        const existingStyle = document.getElementById('font-preview-style');
+        if (existingStyle) {
+          existingStyle.remove();
+        }
+        this.fontLoaded = false;
+        this.loadedFontName = "";
+      },
+      
+      getPreviewTitle() {
+        if (this.previewMediaType.includes('image')) {
+          return '图片预览（点击图片可放大）';
+        } else if (this.previewMediaType.includes('video')) {
+          return '视频预览';
+        } else if (this.isFont(this.previewMediaType)) {
+          return '字体预览';
+        } else {
+          return '文件预览';
+        }
+      },
+      
+      handlePreviewClose(done) {
+        // 对话框关闭时清理字体
+        this.cleanupFont();
+        done();
       }
     }
   }
@@ -298,5 +451,30 @@
 
   .el-switch {
     margin: 5px;
+  }
+
+  .font-sample {
+    transition: all 0.2s;
+  }
+
+  .font-sample:hover {
+    border-color: #409EFF !important;
+    box-shadow: 0 0 5px rgba(64, 158, 255, 0.3);
+  }
+
+  .font-preview-content {
+    max-height: 70vh;
+    overflow-y: auto;
+  }
+
+  .font-info h3 {
+    display: flex;
+    align-items: center;
+  }
+
+  .font-info h3::before {
+    content: "🔤";
+    margin-right: 8px;
+    font-size: 18px;
   }
 </style>

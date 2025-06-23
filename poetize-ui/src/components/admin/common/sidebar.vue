@@ -121,11 +121,6 @@
             console.log('SEO配置点击，通过click属性');
             this.goToSeoConfig();
           }
-        }, {
-          icon: "el-icon-chat-line-round",
-          index: "/aiChatConfig",
-          title: "AI聊天配置",
-          isBoss: true
         }]
       }
     },

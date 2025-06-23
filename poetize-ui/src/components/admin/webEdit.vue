@@ -48,6 +48,48 @@
           </div>
         </el-form-item>
 
+        <!-- AI聊天配置区域 - 仅在看板娘开启时显示 -->
+        <div v-if="webInfo.enableWaifu" style="margin-left: 20px; border-left: 3px solid #409EFF; padding-left: 20px; margin-top: 20px; margin-bottom: 20px;">
+          <el-divider content-position="left">
+            <span style="color: #409EFF; font-weight: 500;">
+              <i class="el-icon-chat-line-round"></i> AI聊天配置
+            </span>
+          </el-divider>
+          
+          <!-- 折叠面板形式展示配置 -->
+          <el-collapse v-model="activeAiConfigPanels" accordion>
+            <!-- AI模型配置面板 -->
+            <el-collapse-item title="AI模型配置" name="model">
+              <AiModelConfig v-model="aiConfigs.modelConfig" />
+            </el-collapse-item>
+            
+            <!-- 聊天设置面板 -->
+            <el-collapse-item title="聊天设置" name="chat">
+              <AiChatSettings v-model="aiConfigs.chatConfig" />
+            </el-collapse-item>
+            
+            <!-- 外观设置面板 -->
+            <el-collapse-item title="外观设置" name="appearance">
+              <AiAppearanceConfig v-model="aiConfigs.appearanceConfig" />
+            </el-collapse-item>
+            
+            <!-- 高级设置面板 -->
+            <el-collapse-item title="高级设置" name="advanced">
+              <AiAdvancedConfig 
+                v-model="aiConfigs.advancedConfig"
+                @export-config="exportAiConfig"
+                @import-config="importAiConfig" />
+            </el-collapse-item>
+          </el-collapse>
+
+          <!-- AI配置保存按钮 -->
+          <div style="text-align: center; margin-top: 20px;">
+            <el-button type="primary" @click="saveAiConfigs" :loading="savingAiConfigs">
+              保存AI聊天配置
+            </el-button>
+          </div>
+        </div>
+
         <!-- 自动夜间开关 -->
         <el-form-item label="自动夜间" prop="enableAutoNight">
           <el-switch v-model="webInfo.enableAutoNight"></el-switch>
@@ -1719,11 +1761,19 @@ X-API-KEY: {{apiConfig.apiKey}}
 <script>
   const uploadPicture = () => import( "../common/uploadPicture");
   const ApiTestTool = () => import( "./ApiTestTool");
+  const AiModelConfig = () => import( "./aiChat/AiModelConfig");
+  const AiChatSettings = () => import( "./aiChat/AiChatSettings");
+  const AiAppearanceConfig = () => import( "./aiChat/AiAppearanceConfig");
+  const AiAdvancedConfig = () => import( "./aiChat/AiAdvancedConfig");
 
   export default {
     components: {
       uploadPicture,
-      ApiTestTool
+      ApiTestTool,
+      AiModelConfig,
+      AiChatSettings,
+      AiAppearanceConfig,
+      AiAdvancedConfig
     },
     data() {
       return {
@@ -1909,6 +1959,48 @@ X-API-KEY: {{apiConfig.apiKey}}
           opacity: 100,
           textShadow: false,
           maskColor: 'rgba(0, 0, 0, 0.5)'
+        },
+        // AI聊天配置相关数据
+        activeAiConfigPanels: [],
+        savingAiConfigs: false,
+        aiConfigs: {
+          modelConfig: {
+            provider: 'openai',
+            apiKey: '',
+            model: 'gpt-3.5-turbo',
+            baseUrl: '',
+            temperature: 0.7,
+            maxTokens: 1000,
+            enabled: false,
+            enableStreaming: false
+          },
+          chatConfig: {
+            systemPrompt: "你是一个友善的AI助手，请用中文回答问题。",
+            welcomeMessage: "你好！有什么可以帮助你的吗？",
+            historyCount: 10,
+            rateLimit: 20,
+            requireLogin: false,
+            saveHistory: true,
+            contentFilter: true,
+            maxMessageLength: 500
+          },
+          appearanceConfig: {
+            botAvatar: '',
+            botName: 'AI助手',
+            themeColor: '#409EFF',
+            position: 'bottom-right',
+            bubbleStyle: 'modern',
+            typingAnimation: true,
+            showTimestamp: true
+          },
+          advancedConfig: {
+            proxy: '',
+            timeout: 30,
+            retryCount: 3,
+            customHeaders: [],
+            debugMode: false,
+            enableThinking: false
+          }
         }
       }
     },
@@ -2003,7 +2095,8 @@ X-API-KEY: {{apiConfig.apiKey}}
             this.getThirdLoginConfig(),
             this.getCaptchaConfig(),
             this.getEmailConfigs(),
-            this.getApiConfig()
+            this.getApiConfig(),
+            this.loadAiConfigs()
           ];
           
           // 等待所有请求完成
@@ -3597,6 +3690,144 @@ X-API-KEY: {{apiConfig.apiKey}}
       },
       addFooterBackgroundImage(res) {
         this.webInfo.footerBackgroundImage = res;
+      },
+
+      // AI聊天配置相关方法
+      async loadAiConfigs() {
+        try {
+          const response = await this.$http.get(this.$constant.pythonBaseURL + "/python/ai/chat/getConfig", {}, true);
+          if (response.flag && response.data) {
+            const config = response.data;
+            
+            // 映射AI模型配置
+            this.aiConfigs.modelConfig = {
+              provider: config.provider || 'openai',
+              apiKey: config.api_key || '',
+              model: config.model || 'gpt-3.5-turbo',
+              baseUrl: config.api_base || '',
+              temperature: config.temperature || 0.7,
+              maxTokens: config.max_tokens || 1000,
+              enabled: config.enabled || false,
+              enableStreaming: config.enable_streaming || false
+            };
+            
+            // 映射聊天配置
+            this.aiConfigs.chatConfig = {
+              systemPrompt: config.custom_instructions || "你是一个友善的AI助手，请用中文回答问题。",
+              welcomeMessage: config.welcome_message || "你好！有什么可以帮助你的吗？",
+              historyCount: config.max_conversation_length || 10,
+              rateLimit: config.rate_limit || 20,
+              requireLogin: config.require_login || false,
+              saveHistory: config.enable_chat_history !== false,
+              contentFilter: config.enable_content_filter !== false,
+              maxMessageLength: config.max_message_length || 500
+            };
+            
+            // 映射外观配置
+            this.aiConfigs.appearanceConfig = {
+              botAvatar: config.chat_avatar || '',
+              botName: config.chat_name || 'AI助手',
+              themeColor: config.theme_color || '#409EFF',
+              position: 'bottom-right',
+              bubbleStyle: 'modern',
+              typingAnimation: config.enable_typing_indicator !== false,
+              showTimestamp: true
+            };
+            
+            // 映射高级配置
+            this.aiConfigs.advancedConfig = {
+              proxy: '',
+              timeout: 30,
+              retryCount: 3,
+              customHeaders: [],
+              debugMode: false,
+              enableThinking: config.enable_thinking || false
+            };
+          }
+        } catch (error) {
+          console.error('加载AI配置失败:', error);
+          // 不显示错误消息，允许使用默认配置
+        }
+      },
+      
+      async saveAiConfigs() {
+        this.savingAiConfigs = true;
+        try {
+          const saveData = {
+            provider: this.aiConfigs.modelConfig.provider,
+            api_base: this.aiConfigs.modelConfig.baseUrl,
+            model: this.aiConfigs.modelConfig.model,
+            temperature: this.aiConfigs.modelConfig.temperature,
+            max_tokens: this.aiConfigs.modelConfig.maxTokens,
+            enabled: this.aiConfigs.modelConfig.enabled,
+            enable_streaming: this.aiConfigs.modelConfig.enableStreaming,
+            // 聊天配置
+            custom_instructions: this.aiConfigs.chatConfig.systemPrompt,
+            welcome_message: this.aiConfigs.chatConfig.welcomeMessage,
+            max_conversation_length: this.aiConfigs.chatConfig.historyCount,
+            rate_limit: this.aiConfigs.chatConfig.rateLimit,
+            require_login: this.aiConfigs.chatConfig.requireLogin,
+            enable_chat_history: this.aiConfigs.chatConfig.saveHistory,
+            enable_content_filter: this.aiConfigs.chatConfig.contentFilter,
+            max_message_length: this.aiConfigs.chatConfig.maxMessageLength,
+            // 外观配置
+            chat_avatar: this.aiConfigs.appearanceConfig.botAvatar,
+            chat_name: this.aiConfigs.appearanceConfig.botName,
+            theme_color: this.aiConfigs.appearanceConfig.themeColor,
+            enable_typing_indicator: this.aiConfigs.appearanceConfig.typingAnimation,
+            // 高级配置
+            enable_thinking: this.aiConfigs.advancedConfig.enableThinking
+          };
+
+          // 只有当API密钥不是隐藏格式时才发送
+          if (this.aiConfigs.modelConfig.apiKey && !this.aiConfigs.modelConfig.apiKey.includes('*')) {
+            saveData.api_key = this.aiConfigs.modelConfig.apiKey;
+          }
+
+          const response = await this.$http.post(this.$constant.pythonBaseURL + '/python/ai/chat/saveConfig', saveData, true);
+          
+          if (response.flag) {
+            this.$message.success('AI聊天配置保存成功');
+            // 重新加载配置，获取最新的隐藏密钥格式
+            await this.loadAiConfigs();
+          } else {
+            this.$message.error(response.message || 'AI聊天配置保存失败');
+          }
+        } catch (error) {
+          console.error('保存AI配置失败:', error);
+          this.$message.error('保存失败，请检查网络连接');
+        } finally {
+          this.savingAiConfigs = false;
+        }
+      },
+      
+      exportAiConfig() {
+        const config = {
+          model: this.aiConfigs.modelConfig,
+          chat: this.aiConfigs.chatConfig,
+          appearance: this.aiConfigs.appearanceConfig,
+          advanced: this.aiConfigs.advancedConfig
+        };
+        
+        const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'ai-chat-config.json';
+        link.click();
+        URL.revokeObjectURL(url);
+      },
+      
+      importAiConfig(config) {
+        try {
+          if (config.model) Object.assign(this.aiConfigs.modelConfig, config.model);
+          if (config.chat) Object.assign(this.aiConfigs.chatConfig, config.chat);
+          if (config.appearance) Object.assign(this.aiConfigs.appearanceConfig, config.appearance);
+          if (config.advanced) Object.assign(this.aiConfigs.advancedConfig, config.advanced);
+          this.$message.success('配置导入成功');
+        } catch (error) {
+          this.$message.error('配置导入失败：' + error.message);
+        }
       }
     }
   }

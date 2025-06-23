@@ -404,9 +404,9 @@ INSERT INTO `poetize`.`resource` (`user_id`, `type`, `path`, `size`, `original_n
 -- 字体文件
 INSERT INTO `poetize`.`resource` (`user_id`, `type`, `path`, `size`, `original_name`, `mime_type`, `status`, `store_type`, `create_time`) VALUES 
 (1, 'assets', '/static/assets/font_chunks/font.base.woff2', 8956, 'font.base.woff2', 'font/woff2', 1, 'local', NOW()),
-(1, 'assets', '/static/assets/font_chunks/font.bold.woff2', 830860, 'font.level1.woff2', 'font/woff2', 1, 'local', NOW()),
-(1, 'assets', '/static/assets/font_chunks/font.extrabold.woff2', 756328, 'font.level2.woff2', 'font/woff2', 1, 'local', NOW()),
-(1, 'assets', '/static/assets/font_chunks/font.extralight.woff2', 198920, 'font.other.woff2', 'font/woff2', 1, 'local', NOW());
+(1, 'assets', '/static/assets/font_chunks/font.level1.woff2', 830860, 'font.level1.woff2', 'font/woff2', 1, 'local', NOW()),
+(1, 'assets', '/static/assets/font_chunks/font.level2.woff2', 756328, 'font.level2.woff2', 'font/woff2', 1, 'local', NOW()),
+(1, 'assets', '/static/assets/font_chunks/font.other.woff2', 198920, 'font.other.woff2', 'font/woff2', 1, 'local', NOW());
 
 -- 优化 `article` 表
 -- 为用户ID添加索引，加速查询某个用户的所有文章
