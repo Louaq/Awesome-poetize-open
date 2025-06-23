@@ -66,7 +66,11 @@
         </el-table-column>
         <el-table-column prop="mimeType" label="类型" align="center"></el-table-column>
         <el-table-column prop="storeType" label="存储平台" align="center"></el-table-column>
-        <el-table-column prop="createTime" label="创建时间" align="center"></el-table-column>
+        <el-table-column label="创建时间" align="center">
+          <template slot-scope="scope">
+            {{ formatDateTime(scope.row.createTime) }}
+          </template>
+        </el-table-column>
         <el-table-column label="操作" width="180" align="center">
           <template slot-scope="scope">
             <el-button type="text" icon="el-icon-delete" style="color: var(--orangeRed)"
@@ -412,6 +416,18 @@
         // 对话框关闭时清理字体
         this.cleanupFont();
         done();
+      },
+      
+      formatDateTime(dateTime) {
+        if (!dateTime) return '-';
+        const date = new Date(dateTime);
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        const seconds = String(date.getSeconds()).padStart(2, '0');
+        return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
       }
     }
   }

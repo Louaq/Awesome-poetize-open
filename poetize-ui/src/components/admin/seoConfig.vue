@@ -1053,11 +1053,7 @@ export default {
         
         // 4. 显示结果消息
         if (detectionConsistent) {
-          this.$message({
-            type: 'success',
-            message: `检测完成：${finalUrl}`,
-            duration: 3000
-          });
+          console.log('检测完成：', finalUrl);
         } else {
           this.$message({
             type: 'warning',

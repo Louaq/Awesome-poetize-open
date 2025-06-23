@@ -49,10 +49,10 @@
         </el-form-item>
 
         <!-- AI聊天配置区域 - 仅在看板娘开启时显示 -->
-        <div v-if="webInfo.enableWaifu" style="margin-left: 20px; border-left: 3px solid #409EFF; padding-left: 20px; margin-top: 20px; margin-bottom: 20px;">
+        <div v-if="webInfo.enableWaifu" style="margin-left: 20px; padding-left: 20px; margin-top: 20px; margin-bottom: 20px;">
           <el-divider content-position="left">
             <span style="color: #409EFF; font-weight: 500;">
-              <i class="el-icon-chat-line-round"></i> AI聊天配置
+              看板娘AI聊天配置
             </span>
           </el-divider>
           
@@ -511,40 +511,7 @@
       </el-tag>
       
       <!-- 邮箱配置部分 -->
-      <el-card class="box-card" shadow="never" style="margin-top: 5px; border: none;">
-        
-        
-        <!-- 邮箱配置帮助面板 -->
-        <div style="margin-bottom: 20px; padding: 12px; background: #f8f9ff; border-left: 4px solid #409EFF; border-radius: 4px;">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div style="flex: 1;">
-              <div style="color: #409EFF; font-weight: 500; margin-bottom: 5px;">
-                <i class="el-icon-info" style="margin-right: 5px;"></i>
-                邮箱配置说明
-              </div>
-              <div style="color: #606266; font-size: 13px; line-height: 1.5;">
-                您可以配置多个邮箱，系统将随机选择一个进行邮件发送，提高邮件送达率。
-              </div>
-            </div>
-            <el-popover
-              placement="left"
-              width="400"
-              trigger="hover">
-              <div slot="content">
-                <div style="font-weight: 500; margin-bottom: 10px;">🔐 端口加密说明</div>
-                <div style="line-height: 1.6; color: #606266;">
-                  • <strong>端口 465</strong>：必须使用 SSL 加密<br>
-                  • <strong>端口 587</strong>：推荐使用 STARTTLS 加密<br>  
-                  • <strong>端口 25</strong>：通常不加密，可能被 ISP 阻止
-                </div>
-              </div>
-              <el-button slot="reference" type="text" size="small" style="color: #909399;">
-                <i class="el-icon-question"></i>
-              </el-button>
-            </el-popover>
-          </div>
-        </div>
-        
+      <el-card class="box-card" shadow="never" style="margin-top: 5px; border: none;">        
         <!-- 响应式表格 -->
         <div class="responsive-table-container">
           <el-table
@@ -708,7 +675,7 @@
         
         <!-- 移动设备提示面板 -->
         <div v-if="isMobileDevice" class="mobile-view-notice">
-          <div style="margin: 10px 0; padding: 8px 12px; background: #f0f9ff; border-left: 3px solid #409EFF; border-radius: 3px; font-size: 13px;">
+          <div style="margin: 10px 0; padding: 8px 12px; background: #f0f9ff; border-radius: 3px; font-size: 13px;">
             <i class="el-icon-mobile" style="color: #409EFF; margin-right: 6px;"></i>
             <span style="color: #606266;">在移动设备上点击表格行可查看完整信息</span>
           </div>
@@ -751,37 +718,6 @@
       
       <!-- 第三方登录配置 -->
       <el-card class="box-card third-login-config" shadow="never" style="margin-top: 20px; border: none;">
-        <!-- 第三方登录配置帮助面板 -->
-        <div style="margin-bottom: 20px; padding: 12px; background: #f8f9ff; border-left: 4px solid #409EFF; border-radius: 4px;">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div style="flex: 1;">
-              <div style="color: #409EFF; font-weight: 500; margin-bottom: 5px;">
-                <i class="el-icon-user" style="margin-right: 5px;"></i>
-                第三方登录配置说明
-              </div>
-              <div style="color: #606266; font-size: 13px; line-height: 1.5;">
-                您需要在各平台开发者中心创建应用并获取Client ID和Secret。填写后用户可通过相应平台进行第三方登录。
-              </div>
-            </div>
-            <el-popover
-              placement="left"
-              width="450"
-              trigger="hover">
-              <div slot="content">
-                <div style="font-weight: 500; margin-bottom: 10px;">🔗 快速配置指南</div>
-                <div style="line-height: 1.6; color: #606266;">
-                  • <strong>GitHub</strong>：Settings → Developer settings → OAuth Apps<br>
-                  • <strong>Google</strong>：Google Cloud Console → APIs & Services → Credentials<br>  
-                  • <strong>Twitter</strong>：Developer Portal → Projects & Apps<br>
-                  • <strong>回调地址</strong>：通常为 http://域名/callback/{平台}
-                </div>
-              </div>
-              <el-button slot="reference" type="text" size="small" style="color: #909399;">
-                <i class="el-icon-question"></i>
-              </el-button>
-            </el-popover>
-          </div>
-        </div>
         
         <el-row style="margin-bottom: 20px;">
           <el-col :span="24">
@@ -1127,37 +1063,6 @@
         智能验证码配置
       </el-tag>
       <el-card class="box-card" shadow="never" style="margin-top: 5px; border: none;">
-        <!-- 智能验证码配置帮助面板 -->
-        <div style="margin-bottom: 20px; padding: 12px; background: #fff7e6; border-left: 4px solid #E6A23C; border-radius: 4px;">
-          <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-            <div style="flex: 1;">
-              <div style="color: #E6A23C; font-weight: 500; margin-bottom: 5px;">
-                <i class="el-icon-warning" style="margin-right: 5px;"></i>
-                智能验证码说明
-              </div>
-              <div style="color: #606266; font-size: 13px; line-height: 1.5;">
-                智能验证码可以有效防止机器人自动化操作，提高网站安全性。根据设备类型自动选择勾选验证码或滑动验证码。
-              </div>
-            </div>
-            <el-popover
-              placement="left"
-              width="450"
-              trigger="hover">
-              <div slot="content">
-                <div style="font-weight: 500; margin-bottom: 10px;">🔒 验证码工作原理</div>
-                <div style="line-height: 1.6; color: #606266;">
-                  • <strong>PC端</strong>：使用简单复选框验证，分析鼠标轨迹<br>
-                  • <strong>移动端</strong>：使用滑动验证码，更适合触摸操作<br>  
-                  • <strong>智能判断</strong>：根据屏幕尺寸和设备类型自动选择<br>
-                  • <strong>安全性</strong>：多维度分析用户行为，有效防范机器人
-                </div>
-              </div>
-              <el-button slot="reference" type="text" size="small" style="color: #909399;">
-                <i class="el-icon-question"></i>
-              </el-button>
-            </el-popover>
-          </div>
-        </div>
         <el-row style="margin-bottom: 20px;">
           <el-col :span="24">
             <el-form label-width="150px">
@@ -1388,37 +1293,6 @@
       
       <!-- API 配置部分 -->
       <el-card class="box-card" shadow="never" style="margin-top: 5px; border: none;">
-                 <!-- API配置帮助面板 -->
-         <div style="margin-bottom: 20px; padding: 12px; background: #f8f9ff; border-left: 4px solid #409EFF; border-radius: 4px;">
-           <div style="display: flex; justify-content: space-between; align-items: flex-start;">
-             <div style="flex: 1;">
-               <div style="color: #409EFF; font-weight: 500; margin-bottom: 5px;">
-                 <i class="el-icon-s-promotion" style="margin-right: 5px;"></i>
-                 API配置说明
-               </div>
-               <div style="color: #606266; font-size: 13px; line-height: 1.5;">
-                 启用API后，您可以通过API接口来创建和发布文章，无需打开网站。请妥善保管您的API密钥，不要泄露给他人。
-               </div>
-             </div>
-             <el-popover
-               placement="left"
-               width="450"
-               trigger="hover">
-               <div slot="content">
-                 <div style="font-weight: 500; margin-bottom: 10px;">🔑 API使用提示</div>
-                 <div style="line-height: 1.6; color: #606266;">
-                   • <strong>安全性</strong>：API密钥具有完整的文章管理权限，请勿在公开场合分享<br>
-                   • <strong>重新生成</strong>：如果密钥泄露，请立即重新生成新的密钥<br>  
-                   • <strong>请求头</strong>：所有API请求都需要在Header中添加 <code>X-API-KEY</code><br>
-                   • <strong>常用场景</strong>：自动化发布、第三方集成、批量操作等
-                 </div>
-               </div>
-               <el-button slot="reference" type="text" size="small" style="color: #909399;">
-                 <i class="el-icon-question"></i>
-               </el-button>
-             </el-popover>
-           </div>
-         </div>
         <!-- API开关 -->
         <div style="margin-bottom: 20px;">
           <el-form :model="apiConfig" label-width="120px">
