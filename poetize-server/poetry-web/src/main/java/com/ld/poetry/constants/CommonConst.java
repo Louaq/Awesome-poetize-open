@@ -37,7 +37,7 @@ public class CommonConst {
     public static final String SAVE_COUNT_IP = "save_count_ip_";
     public static final String SAVE_COUNT_USER_ID = "save_count_user_id_";
     public static final long SAVE_EXPIRE = 86400;
-    public static final int SAVE_MAX_COUNT = 15;
+    public static final int SAVE_MAX_COUNT = 100;
 
     /**
      * IP历史记录缓存

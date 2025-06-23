@@ -215,6 +215,7 @@
                  <div class="generator-upload">
                    <el-upload
                      ref="iconUpload"
+                     action="#"
                      :auto-upload="false"
                      :show-file-list="false"
                      :accept="'image/*'"
@@ -1378,7 +1379,9 @@ export default {
   watch: {
     'seoConfig.enable': {
       handler(newVal, oldVal) {
-        if (!this.initialLoad) {
+        // 只有在非初始加载且值确实发生变化时才保存
+        if (!this.initialLoad && oldVal !== undefined && newVal !== oldVal) {
+          console.log('SEO开关状态发生变化:', oldVal, '->', newVal);
           this.saveEnableStatus(newVal);
         }
       }
@@ -1495,27 +1498,45 @@ export default {
     getSeoConfig() {
       console.log('开始获取SEO配置...');
       try {
-        // 使用封装好的HTTP请求工具，设置isAdmin=true
-        this.$http.get(this.$constant.pythonBaseURL + '/seo/getSeoConfig', {}, true)
+        this.$http.get(this.$constant.pythonBaseURL + '/seo/getSeoConfig', {}, false)
           .then((res) => {
             console.log('获取SEO配置响应数据:', res);
+            
+            // 检查是否是标准的{code, data}格式
             if (res && res.code === 200 && res.data) {
-              console.log('获取SEO配置成功, 配置项数量:', Object.keys(res.data).length);
-              // 确保enable字段存在，如果不存在设置为false
               const config = res.data;
+              console.log('获取SEO配置成功, 配置项数量:', Object.keys(config).length);
+              
+              // 确保enable字段存在，如果不存在设置为false
               if (config.enable === undefined) {
                 console.log('SEO开关状态不存在，设置默认值为false');
                 config.enable = false;
               }
               console.log('SEO开关当前状态:', config.enable);
               
-              this.seoConfig = config;
+              // 使用Object.assign保持响应式，而不是直接替换对象
+              Object.assign(this.seoConfig, config);
+              this.$nextTick(() => {
+                this.initialLoad = false;
+              });
+            } else if (res && typeof res === 'object' && !res.hasOwnProperty('code')) {
+              // 直接返回配置对象的情况（兼容性处理）
+              const config = res;
+              console.log('获取SEO配置成功(直接格式), 配置项数量:', Object.keys(config).length);
+              
+              if (config.enable === undefined) {
+                console.log('SEO开关状态不存在，设置默认值为false');
+                config.enable = false;
+              }
+              console.log('SEO开关当前状态:', config.enable);
+              
+              Object.assign(this.seoConfig, config);
               this.$nextTick(() => {
                 this.initialLoad = false;
               });
             } else {
               console.error('获取SEO配置失败，响应数据异常:', res);
-              this.$message.error('获取SEO配置失败: ' + (res ? res.message || '未知错误' : '响应数据为空'));
+              this.$message.error(res?.message || '获取SEO配置失败');
               // 使用默认配置
               this.initialLoad = false;
             }
@@ -1819,44 +1840,44 @@ export default {
     },
 
     // 图片上传处理方法
-    addOgImage(picture) {
-      this.seoConfig.og_image = picture.url;
+    addOgImage(pictureUrl) {
+      this.seoConfig.og_image = pictureUrl;
       this.$message.success('默认分享图片上传成功');
     },
 
-    addSiteLogo(picture) {
-      this.seoConfig.site_logo = picture.url;
+    addSiteLogo(pictureUrl) {
+      this.seoConfig.site_logo = pictureUrl;
       this.$message.success('网站Logo上传成功');
     },
 
-    addSiteIcon(picture) {
-      this.seoConfig.site_icon = picture.url;
+    addSiteIcon(pictureUrl) {
+      this.seoConfig.site_icon = pictureUrl;
       this.$message.success('网站标签页图标上传成功');
     },
 
-    addAppleTouchIcon(picture) {
-      this.seoConfig.apple_touch_icon = picture.url;
+    addAppleTouchIcon(pictureUrl) {
+      this.seoConfig.apple_touch_icon = pictureUrl;
       this.$message.success('Apple Touch图标上传成功');
     },
 
-    addSiteIcon192(picture) {
-      this.seoConfig.site_icon_192 = picture.url;
+    addSiteIcon192(pictureUrl) {
+      this.seoConfig.site_icon_192 = pictureUrl;
       this.$message.success('PWA图标(192x192)上传成功');
     },
 
-    addSiteIcon512(picture) {
-      this.seoConfig.site_icon_512 = picture.url;
+    addSiteIcon512(pictureUrl) {
+      this.seoConfig.site_icon_512 = pictureUrl;
       this.$message.success('PWA图标(512x512)上传成功');
     },
 
     // PWA相关上传处理方法
-    addPwaDesktopScreenshot(picture) {
-      this.seoConfig.pwa_screenshot_desktop = picture.url;
+    addPwaDesktopScreenshot(pictureUrl) {
+      this.seoConfig.pwa_screenshot_desktop = pictureUrl;
       this.$message.success('PWA桌面端截图上传成功');
     },
 
-    addPwaMobileScreenshot(picture) {
-      this.seoConfig.pwa_screenshot_mobile = picture.url;
+    addPwaMobileScreenshot(pictureUrl) {
+      this.seoConfig.pwa_screenshot_mobile = pictureUrl;
       this.$message.success('PWA移动端截图上传成功');
     },
 

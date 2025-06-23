@@ -67,7 +67,7 @@
       },
       storeType: {
         type: String,
-        default: localStorage.getItem("defaultStoreType")
+        default: localStorage.getItem("defaultStoreType") || "local"
       },
       accept: {
         type: String,

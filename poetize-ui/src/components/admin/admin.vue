@@ -49,7 +49,33 @@
 
     methods: {
       getWebsitConfig() {
-        this.$store.dispatch("getWebsitConfig");
+        // 获取网站配置信息
+        this.getWebInfo();
+        this.getSysConfig();
+      },
+      
+      getWebInfo() {
+        this.$http.get(this.$constant.baseURL + "/webInfo/getWebInfo")
+          .then((res) => {
+            if (!this.$common.isEmpty(res.data)) {
+              this.$store.commit("loadWebInfo", res.data);
+            }
+          })
+          .catch((error) => {
+            console.error("获取网站信息失败:", error);
+          });
+      },
+      
+      getSysConfig() {
+        this.$http.get(this.$constant.baseURL + "/sysConfig/listSysConfig")
+          .then((res) => {
+            if (!this.$common.isEmpty(res.data)) {
+              this.$store.commit("loadSysConfig", res.data);
+            }
+          })
+          .catch((error) => {
+            console.error("获取系统配置失败:", error);
+          });
       },
       loadFont() {
         

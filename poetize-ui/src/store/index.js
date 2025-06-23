@@ -205,7 +205,19 @@ export default new Vuex.Store({
       state.captcha.onSuccess = null;
     }
   },
-  actions: {},
+  actions: {
+    getWebsitConfig({ commit }) {
+      // 获取网站配置信息的action
+      // 由于在Vuex action中无法直接使用Vue实例的$http，
+      // 这里只是提供一个占位符实现来避免"unknown action type"错误
+      // 实际的HTTP请求应该在组件中处理
+      console.log('getWebsitConfig action called');
+      
+      // 如果需要实际的实现，应该在调用此action的组件中
+      // 直接调用getWebInfo()方法来获取网站配置信息
+      return Promise.resolve();
+    }
+  },
   modules: {},
   plugins: []
 })
