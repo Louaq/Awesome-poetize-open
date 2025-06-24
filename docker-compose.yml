@@ -6,6 +6,10 @@ services:
       dockerfile: Dockerfile
     container_name: poetize-nginx
     user: root
+    logging:
+      options:
+        max-size: "50m"
+        max-file: "3"
     volumes:
       - poetize_ui_dist:/usr/share/nginx/html/poetize
       - poetize_im_dist:/usr/share/nginx/html/im
@@ -137,6 +141,10 @@ services:
       context: .
       dockerfile: docker/python/Dockerfile
     container_name: poetize-python
+    logging:
+      options:
+        max-size: "50m"
+        max-file: "3"
     environment:
       - PORT=5000
       - FLASK_ENV=production
@@ -201,6 +209,10 @@ services:
       context: .
       dockerfile: docker/java/Dockerfile
     container_name: poetize-java
+    logging:
+      options:
+        max-size: "50m"
+        max-file: "3"
     volumes:
       - poetize_uploads:/app/static
     environment:
@@ -238,6 +250,10 @@ services:
       context: .
       dockerfile: docker/mysql/Dockerfile
     container_name: poetize-mariadb
+    logging:
+      options:
+        max-size: "50m"
+        max-file: "3"
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/conf/my.cnf:/etc/mysql/conf.d/my.cnf:ro
@@ -284,6 +300,10 @@ services:
       context: ./docker/prerender
       dockerfile: Dockerfile
     container_name: poetize-prerender
+    logging:
+      options:
+        max-size: "50m"
+        max-file: "3"
     environment:
       - PORT=4000
       - LOG_LEVEL=info

@@ -1658,15 +1658,26 @@ def register_seo_api(app: FastAPI):
                 robots_result = await generate_robots_txt()
                 logger.info(f"网站地图生成结果: {'成功' if sitemap_result else '失败'}")
                 logger.info(f"robots.txt生成结果: {'成功' if robots_result else '失败'}")
+                
+                # 清理Nginx SEO缓存
                 nginx_url = os.environ.get('NGINX_URL', 'http://localhost/flush_seo_cache')
                 try:
-                    # 发送清理请求
                     logger.info("正在清理Nginx SEO缓存...")
                     async with httpx.AsyncClient(verify=False) as client:
                         response = await client.post(nginx_url, timeout=5)
                     logger.info(f"Nginx SEO缓存清理结果: {'成功' if response.status_code == 200 else f'失败,非200状态码: {response.status_code}, 响应: {response.text}'}")
                 except Exception as e:
                     logger.error(f"清理Nginx SEO缓存失败: {str(e)}")
+                
+                # 清理预渲染服务的SEO配置缓存
+                prerender_url = os.environ.get('PRERENDER_URL', 'http://poetize-prerender:4000')
+                try:
+                    logger.info("正在清理预渲染服务SEO配置缓存...")
+                    async with httpx.AsyncClient(verify=False) as client:
+                        cache_response = await client.post(f"{prerender_url}/cache/seo/clear", timeout=5)
+                    logger.info(f"预渲染服务SEO配置缓存清理结果: {'成功' if cache_response.status_code == 200 else f'失败,非200状态码: {cache_response.status_code}, 响应: {cache_response.text}'}")
+                except Exception as e:
+                    logger.error(f"清理预渲染服务SEO配置缓存失败: {str(e)}")
 
                 return JSONResponse({"code": 200, "message": "更新SEO配置成功", "data": current_config})
             else:
@@ -1718,6 +1729,16 @@ def register_seo_api(app: FastAPI):
                     logger.info(f"Nginx SEO缓存清理结果: {'成功' if response.status_code == 200 else f'失败,非200状态码: {response.status_code}, 响应: {response.text}'}")
                 except Exception as e:
                     logger.error(f"清理Nginx SEO缓存失败: {str(e)}")
+                
+                # 清理预渲染服务的SEO配置缓存
+                prerender_url = os.environ.get('PRERENDER_URL', 'http://poetize-prerender:4000')
+                try:
+                    logger.info("正在清理预渲染服务SEO配置缓存...")
+                    async with httpx.AsyncClient(verify=False) as client:
+                        cache_response = await client.post(f"{prerender_url}/cache/seo/clear", timeout=5)
+                    logger.info(f"预渲染服务SEO配置缓存清理结果: {'成功' if cache_response.status_code == 200 else f'失败,非200状态码: {cache_response.status_code}, 响应: {cache_response.text}'}")
+                except Exception as e:
+                    logger.error(f"清理预渲染服务SEO配置缓存失败: {str(e)}")
                 
                 return JSONResponse({"code": 200, "message": "SEO开关状态更新成功", "data": {"enable": enable_status}})
             else:

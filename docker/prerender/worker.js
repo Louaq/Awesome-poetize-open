@@ -738,17 +738,37 @@ async function fetchWebInfo() {
   }
 }
 
+// SEO配置缓存
+const seoConfigCache = { 
+  data: null, 
+  lastFetch: 0, 
+  cacheDuration: 30 * 60 * 1000 // 30分钟缓存，与SEO配置变化频率匹配
+};
+
 async function fetchSeoConfig() {
+  // 检查缓存是否有效
+  const now = Date.now();
+  if (seoConfigCache.data && (now - seoConfigCache.lastFetch) < seoConfigCache.cacheDuration) {
+    logger.debug('Using cached SEO config', { 
+      cacheAge: Math.round((now - seoConfigCache.lastFetch) / 1000) + 's'
+    });
+    return seoConfigCache.data;
+  }
+
   try {
-    logger.debug('Fetching SEO config');
+    logger.debug('Fetching SEO config from server');
     const res = await axios.get(`${PYTHON_BACKEND_URL}/seo/getSeoConfig`, { 
       timeout: 5000,
       headers: INTERNAL_SERVICE_HEADERS
     });
     const seoConfig = (res.data && res.data.code === 200) ? (res.data.data || {}) : {};
     
+    // 更新缓存
+    seoConfigCache.data = seoConfig;
+    seoConfigCache.lastFetch = now;
+    
     // 详细记录获取到的SEO配置数据
-    logger.info('SEO config fetched successfully', { 
+    logger.info('SEO config fetched and cached successfully', { 
       status: res.status,
       responseCode: res.data?.code,
       dataExists: !!res.data?.data,
@@ -756,7 +776,8 @@ async function fetchSeoConfig() {
       site_title: seoConfig.site_title,
       site_address: seoConfig.site_address,
       og_image: seoConfig.og_image,
-      default_author: seoConfig.default_author
+      default_author: seoConfig.default_author,
+      cacheDuration: seoConfigCache.cacheDuration / 1000 + 's'
     });
     
     return seoConfig;
@@ -767,6 +788,13 @@ async function fetchSeoConfig() {
       statusText: error.response?.statusText,
       url: `${PYTHON_BACKEND_URL}/seo/getSeoConfig`
     });
+    
+    // 如果有缓存数据，即使过期也先用着
+    if (seoConfigCache.data) {
+      logger.info('Using expired cached SEO config as fallback');
+      return seoConfigCache.data;
+    }
+    
     return {};
   }
 }
@@ -2486,6 +2514,37 @@ app.post('/logs/cleanup', (req, res) => {
     });
   } catch (error) {
     logger.error('Manual log cleanup failed', { requestId, error: error.message });
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      requestId,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// 新增：清理SEO配置缓存API
+app.post('/cache/seo/clear', (req, res) => {
+  const requestId = req.requestId;
+  
+  logger.info('SEO config cache clear request', { requestId });
+  
+  try {
+    // 清理SEO配置缓存
+    seoConfigCache.data = null;
+    seoConfigCache.lastFetch = 0;
+    
+    logger.info('SEO config cache cleared successfully', { requestId });
+    
+    res.json({
+      success: true,
+      message: 'SEO config cache cleared successfully',
+      requestId,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    logger.error('Failed to clear SEO config cache', { requestId, error: error.message });
     res.status(500).json({
       success: false,
       error: error.message,

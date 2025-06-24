@@ -2009,7 +2009,7 @@ export default {
         // 创建FormData
         const formData = new FormData();
         formData.append('image', this.uploadedImage);
-        formData.append('icon_types', 'favicon,apple_touch,pwa_192,pwa_512,logo');
+        formData.append('icon_types', 'favicon,apple_touch,pwa_192,pwa_512,logo,social');
 
         // 打印调试信息
         console.log('准备上传的文件:', this.uploadedImage);
@@ -2104,7 +2104,7 @@ export default {
         'pwa_192': 'site_icon_192',
         'pwa_512': 'site_icon_512',
         'logo': 'site_logo',
-        'default_cover': 'og_image'
+        'social': 'og_image'
       };
 
       console.log('开始自动填入图标，生成结果:', this.generationResults);
@@ -2166,7 +2166,7 @@ export default {
             'pwa_192': 'PWA图标(192x192)',
             'pwa_512': 'PWA图标(512x512)',
             'logo': '网站Logo',
-            'default_cover': '默认封面图'
+            'social': '默认封面图'
           };
           const successNames = successDetails.map(type => iconTypeMap[type] || type).join('、');
           

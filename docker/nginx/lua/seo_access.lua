@@ -192,7 +192,7 @@ local function fetch_api(api_path, query_params)
         if not success then
             ngx.log(ngx.ERR, "缓存SEO数据失败: " .. (err or "未知错误"))
         else
-            -- ngx.log(ngx.INFO, "成功缓存SEO数据: " .. cache_key)
+            ngx.log(ngx.INFO, "成功缓存SEO数据: " .. cache_key .. " (将缓存24小时)")
         end
     end
     
@@ -295,32 +295,85 @@ end
 local content_type = ngx.var.content_type or ""
 local accept = ngx.var.http_accept or ""
 
--- 判断是否需要图标配置（只有HTML页面需要）
-local need_icons = (
-    string.match(uri, "/$") or  -- 首页
-    string.match(uri, "/article/") or  -- 文章页
-    string.match(uri, "/category/") or  -- 分类页
-    string.match(uri, "/sort") or  -- 排序页
-    string.match(uri, "%.html$") or  -- HTML文件
-    string.match(accept, "text/html")  -- 接受HTML的请求
-)
+-- 判断是否需要图标配置
+-- 优化逻辑：排除明确不需要图标的请求，其他都需要图标（针对SPA应用）
+local need_icons = true
+
+-- 排除不需要图标的请求类型（只排除真正的API和非HTML请求）
+if uri and (
+    string.match(uri, "^/api/") or          -- API请求
+    string.match(uri, "^/python/") or       -- Python后端API
+    string.match(uri, "^/socket") or        -- WebSocket连接
+    string.match(uri, "/flush_seo_cache") or -- 缓存清理接口
+    (accept and not string.match(accept, "text/html")) -- 非HTML请求
+) then
+    need_icons = false
+end
 
 if need_icons then
-    -- ngx.log(ngx.INFO, "获取SEO配置用于图标生成")
-    local seo_config_data = fetch_api("/python/seo/getSeoConfig", {})
+    -- 优化SEO配置缓存：使用专门的缓存键和更长的缓存时间
+    local seo_cache = ngx.shared.seo_cache
+    local seo_config_cache_key = "seo_config_global"
+    
+    -- 先尝试从缓存获取SEO配置
+    local cached_seo_config = seo_cache:get(seo_config_cache_key)
+    local seo_config_data
+    
+    if cached_seo_config then
+        seo_config_data = cached_seo_config
+        ngx.log(ngx.INFO, "使用缓存的SEO配置数据 (避免HTTP请求)")
+    else
+        ngx.log(ngx.INFO, "SEO配置缓存未命中，发起HTTP请求")
+        -- 发起HTTP请求获取SEO配置
+        local httpc = http.new()
+        httpc:set_timeout(3000) -- 3秒超时，比默认更短
+        
+        local res, err = httpc:request_uri("http://poetize-python:5000/python/seo/getSeoConfig", {
+            method = "GET",
+            headers = {
+                ["Host"] = ngx.var.host,
+                ["X-Real-IP"] = ngx.var.remote_addr,
+                ["X-Forwarded-For"] = ngx.var.proxy_add_x_forwarded_for or ngx.var.remote_addr,
+                ["X-Forwarded-Proto"] = ngx.var.scheme,
+                ["X-Internal-Service"] = "poetize-nginx-seo",
+                ["User-Agent"] = "nginx-lua-seo-client/1.0.0"
+            }
+        })
+        
+        if res and res.status == 200 and res.body then
+            -- 解析响应
+            local ok, parsed_response = pcall(cjson.decode, res.body)
+            if ok and parsed_response and parsed_response.code == 200 and parsed_response.data then
+                seo_config_data = cjson.encode(parsed_response.data)
+                -- 缓存SEO配置24小时（SEO配置很少变化）
+                local cache_success = seo_cache:set(seo_config_cache_key, seo_config_data, 86400)
+                if cache_success then
+                    ngx.log(ngx.INFO, "SEO配置已缓存24小时 - 大幅减少重复请求")
+                else
+                    ngx.log(ngx.ERR, "SEO配置缓存失败")
+                end
+            else
+                ngx.log(ngx.ERR, "SEO配置响应解析失败")
+                seo_config_data = nil
+            end
+        else
+            ngx.log(ngx.ERR, "获取SEO配置HTTP请求失败: " .. (err or "网络错误"))
+            seo_config_data = nil
+        end
+    end
+    
+    -- 处理SEO配置数据
     if seo_config_data then
-        -- 尝试解析SEO配置JSON
         local ok, seo_config = pcall(cjson.decode, seo_config_data)
         if ok and seo_config and type(seo_config) == "table" then
-            -- 生成图标meta标签
             ngx.ctx.icon_data = generate_icon_meta_tags(seo_config)
-            -- ngx.log(ngx.INFO, "成功生成图标meta标签")
+            ngx.log(ngx.DEBUG, "成功生成图标meta标签")
         else
-            ngx.log(ngx.WARN, "SEO配置数据解析失败")
+            ngx.log(ngx.WARN, "SEO配置JSON解析失败")
             ngx.ctx.icon_data = ""
         end
     else
-        ngx.log(ngx.WARN, "获取SEO配置失败，使用默认图标")
+        ngx.log(ngx.WARN, "无SEO配置数据，使用空图标")
         ngx.ctx.icon_data = ""
     end
 else
