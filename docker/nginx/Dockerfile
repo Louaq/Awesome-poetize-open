@@ -177,13 +177,25 @@ RUN cp /usr/local/openresty/nginx/conf/conf.d/default.http.conf.template \
 
 # 设置nginx相关目录的权限
 RUN chown -R nginx:nginx /usr/local/openresty/nginx/ && \
-    chown -R nginx:nginx /usr/share/nginx/ && \
     chmod -R 755 /usr/local/openresty/nginx/conf/ && \
-    # 给nginx用户配置目录的写权限（用于HTTPS切换）
+    # 给nginx用户配置目录的写权限
     chmod 775 /usr/local/openresty/nginx/conf/conf.d/ && \
-    # 确保nginx用户可以读写必要的目录
+    # 创建并设置nginx目录权限
     mkdir -p /usr/share/nginx/html && \
-    chown -R nginx:nginx /usr/share/nginx/html
+    chown -R nginx:nginx /usr/share/nginx && \
+    chmod -R 755 /usr/share/nginx && \
+    # 创建并设置SSL证书目录权限（nginx需要读取证书文件）
+    mkdir -p /etc/letsencrypt /var/lib/letsencrypt && \
+    chown -R nginx:nginx /etc/letsencrypt /var/lib/letsencrypt && \
+    chmod -R 755 /etc/letsencrypt /var/lib/letsencrypt && \
+    # 创建并设置数据目录权限（nginx需要读取sitemap.xml和robots.txt）
+    mkdir -p /app/data && \
+    chown nginx:nginx /app/data && \
+    chmod 755 /app/data && \
+    # 创建并设置lua脚本目录权限（nginx需要读取lua脚本文件）
+    mkdir -p /etc/nginx/lua && \
+    chown nginx:nginx /etc/nginx/lua && \
+    chmod 755 /etc/nginx/lua
 
 # 暴露端口
 EXPOSE 80 443/tcp 443/udp
