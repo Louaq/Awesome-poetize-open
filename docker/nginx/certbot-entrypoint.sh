@@ -7,6 +7,13 @@ WEBROOT_PATH="/usr/share/nginx/html"
 # 权限修复函数
 fix_cert_permissions() {
   echo "设置证书文件权限，让nginx用户(UID 101)能够读取..."
+  
+  # 修复.well-known目录权限，确保certbot可以写入ACME验证文件
+  echo "修复.well-known目录权限..."
+  mkdir -p "$WEBROOT_PATH/.well-known/acme-challenge"
+  chmod -R 777 "$WEBROOT_PATH/.well-known"
+  echo "ACME验证目录权限设置为777，确保certbot和nginx都可以访问"
+  
   if [ -d "/etc/letsencrypt/live" ]; then
     # 设置目录权限为755，让nginx用户可以进入目录
     find /etc/letsencrypt/live -type d -exec chmod 755 {} \;
@@ -29,6 +36,12 @@ fix_cert_permissions() {
 # 打印信息
 echo "==== Certbot 证书管理服务启动 ===="
 echo "Web根目录: $WEBROOT_PATH"
+
+# 预先修复权限，确保ACME验证可以正常进行
+echo "预先修复.well-known目录权限..."
+mkdir -p "$WEBROOT_PATH/.well-known/acme-challenge"
+chmod -R 777 "$WEBROOT_PATH/.well-known"
+echo "ACME验证目录权限预处理完成"
 
 # 首次申请证书
 echo "开始申请证书..."

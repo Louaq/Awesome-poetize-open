@@ -184,6 +184,10 @@ RUN chown -R nginx:nginx /usr/local/openresty/nginx/ && \
     mkdir -p /usr/share/nginx/html && \
     chown -R nginx:nginx /usr/share/nginx && \
     chmod -R 755 /usr/share/nginx && \
+    # 创建并设置Let's Encrypt验证目录权限
+    mkdir -p /usr/share/nginx/html/.well-known/acme-challenge && \
+    chown -R nginx:nginx /usr/share/nginx/html/.well-known && \
+    chmod -R 777 /usr/share/nginx/html/.well-known && \
     # 创建并设置SSL证书目录权限（nginx需要读取证书文件）
     mkdir -p /etc/letsencrypt /var/lib/letsencrypt && \
     chown -R nginx:nginx /etc/letsencrypt /var/lib/letsencrypt && \
