@@ -150,7 +150,7 @@
             <el-skeleton :rows="10" animated />
           </div>
           <!-- 正文显示 -->
-          <div v-else v-html="articleContentHtml" class="entry-content" :lang="currentLang"></div>
+          <div v-else v-html="articleContentHtml" class="entry-content" :lang="currentLang" :key="articleContentKey"></div>
           <!-- 最后更新时间 -->
           <div class="article-update-time">
             <span>文章最后更新于 {{ article.updateTime }}</span>
@@ -318,6 +318,7 @@
         subscribe: false,
         article: {},
         articleContentHtml: "",
+        articleContentKey: Date.now(), // 强制重新渲染的key
         treeHoleList: [],
         weiYanDialogVisible: false,
         copyrightDialogVisible: false,
@@ -371,6 +372,10 @@
 
     created() {
       if (!this.$common.isEmpty(this.id)) {
+        // 首次加载时强制清空预渲染内容，确保Vue重新渲染
+        this.articleContentHtml = "";
+        this.articleContentKey = Date.now();
+        
         this.getArticle(localStorage.getItem("article_password_" + this.id));
 
         if ("0" !== localStorage.getItem("showSubscribe")) {
@@ -848,8 +853,10 @@
             this.translatedTitle = '';
             this.translatedContent = '';
             
+            // 始终重新渲染markdown内容，确保样式正确应用
             const md = new MarkdownIt({breaks: true}).use(require('markdown-it-multimd-table'));
             this.articleContentHtml = md.render(this.article.articleContent);
+            this.articleContentKey = Date.now(); // 强制Vue重新渲染
             
             this.$nextTick(() => {
               this.$common.imgShow(".entry-content img");
@@ -863,6 +870,16 @@
                 this.articleContentHtml = '';
                 this.fetchTranslation();
               }
+              
+              // 确保样式正确应用的保险措施
+              setTimeout(() => {
+                // 检查是否有代码块没有正确处理
+                const unprocessedBlocks = $(".entry-content pre:not(.highlight-wrap)");
+                if (unprocessedBlocks.length > 0) {
+                  console.log('Found unprocessed code blocks, retrying highlight...');
+                  this.highlight();
+                }
+              }, 1000);
             });
 
             if (!this.$common.isEmpty(password)) {
@@ -951,6 +968,15 @@
         });
       },
       highlight() {
+        // 检查hljs是否可用
+        if (typeof window.hljs === 'undefined') {
+          console.warn('hljs not available, retrying in 500ms...');
+          setTimeout(() => {
+            this.highlight();
+          }, 500);
+          return;
+        }
+
         let attributes = {
           autocomplete: "off",
           autocorrect: "off",
@@ -959,9 +985,18 @@
           contenteditable: "false"
         };
 
-        $("pre").each(function (i, item) {
+        $(".entry-content pre").each(function (i, item) {
+          // 避免重复处理已经处理过的代码块
+          if ($(item).hasClass("highlight-wrap")) {
+            return;
+          }
+
           let preCode = $(item).children("code");
-          let classNameStr = preCode[0].className;
+          if (preCode.length === 0) {
+            return; // 没有code子元素，跳过
+          }
+
+          let classNameStr = preCode[0].className || "";
           let classNameArr = classNameStr.split(" ");
 
           let lang = "";
@@ -972,27 +1007,52 @@
             }
           });
 
-          let language = hljs.getLanguage(lang.toLowerCase());
-          if (language === undefined) {
-            let autoLanguage = hljs.highlightAuto(preCode.text());
-            preCode.removeClass("language-" + lang);
-            lang = autoLanguage.language;
-            if (lang === undefined) {
-              lang = "java";
+          try {
+            let language = hljs.getLanguage(lang.toLowerCase());
+            if (language === undefined) {
+              let autoLanguage = hljs.highlightAuto(preCode.text());
+              preCode.removeClass("language-" + lang);
+              lang = autoLanguage.language;
+              if (lang === undefined) {
+                lang = "java";
+              }
+              preCode.addClass("language-" + lang);
+            } else {
+              lang = language.name;
             }
-            preCode.addClass("language-" + lang);
-          } else {
-            lang = language.name;
-          }
 
-          $(item).addClass("highlight-wrap");
-          $(item).attr(attributes);
-          preCode.attr("data-rel", lang.toUpperCase()).addClass(lang.toLowerCase());
-          hljs.highlightBlock(preCode[0]);
-          hljs.lineNumbersBlock(preCode[0]);
+            $(item).addClass("highlight-wrap");
+            $(item).attr(attributes);
+            preCode.attr("data-rel", lang.toUpperCase()).addClass(lang.toLowerCase());
+            
+            // 使用推荐的highlightElement方法替代废弃的highlightBlock
+            if (typeof hljs.highlightElement === 'function') {
+              hljs.highlightElement(preCode[0]);
+            } else if (typeof hljs.highlightBlock === 'function') {
+              hljs.highlightBlock(preCode[0]);
+            }
+            
+            // 添加行号，检查方法是否存在
+            if (typeof hljs.lineNumbersBlock === 'function') {
+              hljs.lineNumbersBlock(preCode[0]);
+            } else {
+              console.warn('hljs.lineNumbersBlock not available');
+            }
+          } catch (error) {
+            console.error('Error highlighting code block:', error);
+            // 即使高亮失败，也要保证基本样式
+            $(item).addClass("highlight-wrap");
+            $(item).attr(attributes);
+            preCode.attr("data-rel", lang.toUpperCase()).addClass(lang.toLowerCase());
+          }
         });
 
-        $("pre code").each(function (i, block) {
+        // 处理复制按钮，避免重复添加
+        $(".entry-content pre code").each(function (i, block) {
+          if ($(block).next('.copy-code').length > 0) {
+            return; // 已经有复制按钮了
+          }
+
           $(block).attr({
             id: "hljs-" + i,
           });
@@ -1002,12 +1062,18 @@
             i +
             '"><i class="fa fa-clipboard" aria-hidden="true"></i></a>'
           );
-          new ClipboardJS(".copy-code");
         });
+        
+        // 初始化剪贴板功能
+        if (typeof ClipboardJS !== 'undefined') {
+          new ClipboardJS(".copy-code");
+        }
 
+        // 处理表格样式
         if ($(".entry-content").children("table").length > 0) {
           $(".entry-content")
             .children("table")
+            .not(".table-wrapper > table") // 避免重复包装
             .wrap("<div class='table-wrapper'></div>");
         }
       },
@@ -1031,6 +1097,7 @@
             // 强制更新显示翻译内容
             const md = new MarkdownIt({breaks: true}).use(require('markdown-it-multimd-table'));
             this.articleContentHtml = md.render(this.translatedContent);
+            this.articleContentKey = Date.now(); // 强制Vue重新渲染
             
             // 重新应用文章内容处理
             this.$nextTick(() => {
@@ -1049,6 +1116,7 @@
           // 切换到中文，确保显示原始内容
           const md = new MarkdownIt({breaks: true}).use(require('markdown-it-multimd-table'));
           this.articleContentHtml = md.render(this.article.articleContent);
+          this.articleContentKey = Date.now(); // 强制Vue重新渲染
           
           // 重新应用文章内容处理
           this.$nextTick(() => {
@@ -1086,6 +1154,7 @@
               // 使用与原文相同的渲染方法
               const md = new MarkdownIt({breaks: true}).use(require('markdown-it-multimd-table'));
               this.articleContentHtml = md.render(this.translatedContent);
+              this.articleContentKey = Date.now(); // 强制Vue重新渲染
               
               // 重新应用文章内容处理
               this.$nextTick(() => {

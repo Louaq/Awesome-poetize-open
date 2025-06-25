@@ -121,7 +121,7 @@
         </el-table-column>
       </el-table>
       
-      <div class="form-tip" style="margin-top: 10px;">* 回调地址通常为 http://你的域名/callback/{平台标识}</div>
+      <div class="form-tip" style="margin-top: 10px;">* 回调地址通常为 {{currentDomain}}/callback/{平台标识}</div>
     </el-card>
   </div>
 </template>
@@ -137,31 +137,31 @@ export default {
         github: {
           client_id: '',
           client_secret: '',
-          redirect_uri: 'http://localhost:5000/callback/github',
+          redirect_uri: this.$constant.webURL + '/callback/github',
           enabled: true
         },
         google: {
           client_id: '',
           client_secret: '',
-          redirect_uri: 'http://localhost:5000/callback/google',
+          redirect_uri: this.$constant.webURL + '/callback/google',
           enabled: true
         },
         twitter: {
           client_key: '',
           client_secret: '',
-          redirect_uri: 'http://localhost:5000/callback/x',
+          redirect_uri: this.$constant.webURL + '/callback/x',
           enabled: true
         },
         yandex: {
           client_id: '',
           client_secret: '',
-          redirect_uri: 'http://localhost:5000/callback/yandex',
+          redirect_uri: this.$constant.webURL + '/callback/yandex',
           enabled: true
         },
         gitee: {
           client_id: '',
           client_secret: '',
-          redirect_uri: 'http://localhost:5000/callback/gitee',
+          redirect_uri: this.$constant.webURL + '/callback/gitee',
           enabled: true
         }
       },
@@ -174,6 +174,9 @@ export default {
     }
   },
   computed: {
+    currentDomain() {
+      return this.$constant.webURL;
+    },
     tableData() {
       return [
         {

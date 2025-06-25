@@ -1718,31 +1718,31 @@ X-API-KEY: {{apiConfig.apiKey}}
           github: {
             client_id: '',
             client_secret: '',
-            redirect_uri: 'http://localhost:5000/callback/github',
+            redirect_uri: this.$constant.webURL + '/callback/github',
             enabled: true
           },
           google: {
             client_id: '',
             client_secret: '',
-            redirect_uri: 'http://localhost:5000/callback/google',
+            redirect_uri: this.$constant.webURL + '/callback/google',
             enabled: true
           },
           twitter: {
             client_key: '',
             client_secret: '',
-            redirect_uri: 'http://localhost:5000/callback/x',
+            redirect_uri: this.$constant.webURL + '/callback/x',
             enabled: true
           },
           yandex: {
             client_id: '',
             client_secret: '',
-            redirect_uri: 'http://localhost:5000/callback/yandex',
+            redirect_uri: this.$constant.webURL + '/callback/yandex',
             enabled: true
           },
           gitee: {
             client_id: '',
             client_secret: '',
-            redirect_uri: 'http://localhost:5000/callback/gitee',
+            redirect_uri: this.$constant.webURL + '/callback/gitee',
             enabled: true
           }
         },
@@ -2752,31 +2752,31 @@ X-API-KEY: {{apiConfig.apiKey}}
             github: {
               client_id: '',
               client_secret: '',
-              redirect_uri: 'http://localhost:5000/callback/github',
+              redirect_uri: this.$constant.webURL + '/callback/github',
               enabled: false
             },
             google: {
               client_id: '',
               client_secret: '',
-              redirect_uri: 'http://localhost:5000/callback/google',
+              redirect_uri: this.$constant.webURL + '/callback/google',
               enabled: false
             },
             twitter: {
               client_key: '',
               client_secret: '',
-              redirect_uri: 'http://localhost:5000/callback/x',
+              redirect_uri: this.$constant.webURL + '/callback/x',
               enabled: false
             },
             yandex: {
               client_id: '',
               client_secret: '',
-              redirect_uri: 'http://localhost:5000/callback/yandex',
+              redirect_uri: this.$constant.webURL + '/callback/yandex',
               enabled: false
             },
             gitee: {
               client_id: '',
               client_secret: '',
-              redirect_uri: 'http://localhost:5000/callback/gitee',
+              redirect_uri: this.$constant.webURL + '/callback/gitee',
               enabled: false
             }
           };
@@ -2822,31 +2822,31 @@ X-API-KEY: {{apiConfig.apiKey}}
             github: {
               client_id: '',
               client_secret: '',
-              redirect_uri: 'http://localhost:5000/callback/github',
+              redirect_uri: this.$constant.webURL + '/callback/github',
               enabled: false
             },
             google: {
               client_id: '',
               client_secret: '',
-              redirect_uri: 'http://localhost:5000/callback/google',
+              redirect_uri: this.$constant.webURL + '/callback/google',
               enabled: false
             },
             twitter: {
               client_key: '',
               client_secret: '',
-              redirect_uri: 'http://localhost:5000/callback/x',
+              redirect_uri: this.$constant.webURL + '/callback/x',
               enabled: false
             },
             yandex: {
               client_id: '',
               client_secret: '',
-              redirect_uri: 'http://localhost:5000/callback/yandex',
+              redirect_uri: this.$constant.webURL + '/callback/yandex',
               enabled: false
             },
             gitee: {
               client_id: '',
               client_secret: '',
-              redirect_uri: 'http://localhost:5000/callback/gitee',
+              redirect_uri: this.$constant.webURL + '/callback/gitee',
               enabled: false
             }
           };

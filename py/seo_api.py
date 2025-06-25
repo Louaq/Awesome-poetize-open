@@ -236,8 +236,9 @@ async def generate_article_meta_tags(article_id, lang=None):
                 'X-Internal-Service': 'poetize-python',
                 'User-Agent': 'poetize-python/1.0.0'
             })
+            # 使用getArticleByIdNoCount避免增加浏览量，因为前端已经调用了getArticleById
             response = await client.get(
-                f"{JAVA_BACKEND_URL}/article/getArticleById?id={article_id}",
+                f"{JAVA_BACKEND_URL}/article/getArticleByIdNoCount?id={article_id}",
                 headers=headers,
                 timeout=DEFAULT_TIMEOUT
             )
@@ -2217,14 +2218,20 @@ def register_seo_api(app: FastAPI):
                     'Content-Type': 'application/json'
                 }
                 
-                api_url = f"{JAVA_BACKEND_URL}/article/getArticleById?id={article_id}"
+                api_url = f"{JAVA_BACKEND_URL}/article/getArticleByIdNoCount?id={article_id}"
                 logger.info(f"请求文章API: {api_url}")
                 
                 async with httpx.AsyncClient() as client:
+                    headers = get_auth_headers()
+                    headers.update({
+                        'X-Internal-Service': 'poetize-python',
+                        'User-Agent': 'poetize-python/1.0.0'
+                    })
+                    # 使用getArticleByIdNoCount避免增加浏览量，因为前端已经调用了getArticleById
                     response = await client.get(
                         api_url, 
                         headers=headers,
-                        timeout=5
+                        timeout=DEFAULT_TIMEOUT
                     )
                 
                 logger.info(f"文章API响应状态码: {response.status_code}")
@@ -3541,6 +3548,7 @@ def get_recent_articles(limit=5):
             'X-Internal-Service': 'poetize-python',
             'User-Agent': 'poetize-python/1.0.0'
         }
+        # 使用listArticle获取文章列表，不会影响浏览量
         response = httpx.get(f"{JAVA_BACKEND_URL}/article/listArticle?current=1&size={limit}&status=1", headers=headers)
         if response.status_code != 200:
             logger.error(f"获取文章数据失败: HTTP状态码 {response.status_code}")

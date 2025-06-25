@@ -931,7 +931,7 @@
           
           // Python服务配置
           const pythonServiceConfig = {
-            baseUrl: process.env.VUE_APP_PYTHON_SERVICE_URL || 'http://localhost:5000',
+            baseUrl: this.$constant.pythonBaseURL,
             providers: {
               github: {
                 icon: 'el-icon-s-platform',
