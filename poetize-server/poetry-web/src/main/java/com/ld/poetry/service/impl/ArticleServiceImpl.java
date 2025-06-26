@@ -46,6 +46,7 @@ import com.ld.poetry.utils.SmartSummaryGenerator;
 import com.ld.poetry.utils.TextRankSummaryGenerator;
 import com.ld.poetry.service.SummaryService;
 import java.util.concurrent.ConcurrentHashMap;
+import com.ld.poetry.service.SeoService;
 
 /**
  * <p>
@@ -90,6 +91,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     @Autowired
     private RestTemplate restTemplate;
 
+    @Autowired
+    private SeoService seoService;
+
     @Value("${user.subscribe.format}")
     private String subscribeFormat;
 
@@ -115,6 +119,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         article.setViewStatus(articleVO.getViewStatus());
         article.setCommentStatus(articleVO.getCommentStatus());
         article.setRecommendStatus(articleVO.getRecommendStatus());
+        article.setSubmitToSearchEngine(articleVO.getSubmitToSearchEngine());
         article.setArticleTitle(articleVO.getArticleTitle());
         article.setArticleContent(articleVO.getArticleContent());
         
@@ -262,6 +267,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 article.setViewStatus(articleVO.getViewStatus());
                 article.setCommentStatus(articleVO.getCommentStatus());
                 article.setRecommendStatus(articleVO.getRecommendStatus());
+                article.setSubmitToSearchEngine(articleVO.getSubmitToSearchEngine());
                 article.setArticleTitle(articleVO.getArticleTitle());
                 article.setArticleContent(articleVO.getArticleContent());
                 article.setSortId(articleVO.getSortId());
@@ -331,6 +337,70 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                     log.info("【异步保存】文章翻译完成（包含预渲染），任务ID: {}", taskId);
                 } catch (Exception e) {
                     log.error("【异步保存】文章翻译失败，任务ID: {}", taskId, e);
+                }
+                // 更新状态：翻译完成，正在处理sitemap更新和SEO推送
+                updateSaveStatus(taskId, "processing", "文章已保存，正在处理sitemap更新和SEO推送...");
+
+                // 如果文章可见，异步更新sitemap（不管是否推送搜索引擎）
+                if (Boolean.TRUE.equals(articleVO.getViewStatus())) {
+                    log.info("【异步保存】文章ID {} 可见，开始异步更新sitemap，任务ID: {}", article.getId(), taskId);
+                    
+                    // 异步更新sitemap
+                    new Thread(() -> {
+                        try {
+                            // 调用Python服务更新sitemap
+                            Map<String, Object> sitemapData = new HashMap<>();
+                            sitemapData.put("articleId", article.getId());
+                            sitemapData.put("action", "add_or_update");
+                            
+                            HttpHeaders headers = new HttpHeaders();
+                            headers.setContentType(MediaType.APPLICATION_JSON);
+                            headers.set("X-Internal-Service", "poetize-java");
+                            headers.set("User-Agent", "poetize-java/1.0.0");
+                            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(sitemapData, headers);
+                            
+                            // 调用专门的sitemap更新接口
+                            String pythonServerUrl = System.getenv().getOrDefault("PYTHON_SERVICE_URL", "http://localhost:5000");
+                            String sitemapApiUrl = pythonServerUrl + "/python/seo/updateArticleSitemap";
+                            
+                            try {
+                                @SuppressWarnings("unchecked")
+                                Map<String, Object> response = restTemplate.postForObject(
+                                    sitemapApiUrl, 
+                                    requestEntity, 
+                                    Map.class
+                                );
+                                if (response != null && "200".equals(String.valueOf(response.get("code")))) {
+                                    log.info("【异步保存】文章ID {} sitemap更新成功，任务ID: {}", article.getId(), taskId);
+                                } else {
+                                    log.warn("【异步保存】文章ID {} sitemap更新响应异常: {}，任务ID: {}", article.getId(), response, taskId);
+                                }
+                            } catch (Exception apiException) {
+                                log.error("【异步保存】调用sitemap更新API失败，文章ID: " + article.getId() + ", 任务ID: " + taskId + ", 错误: " + apiException.getMessage(), apiException);
+                            }
+                        } catch (Exception e) {
+                            log.error("【异步保存】更新sitemap失败，但不影响文章保存，文章ID: " + article.getId() + ", 任务ID: " + taskId, e);
+                        }
+                    }).start();
+                    
+                    // 如果需要推送至搜索引擎且文章可见，异步处理
+                    if (Boolean.TRUE.equals(articleVO.getSubmitToSearchEngine())) {
+                        log.info("【异步保存】文章ID {} 标记为需要推送至搜索引擎，开始异步处理，任务ID: {}", article.getId(), taskId);
+                        
+                        // 异步执行SEO推送，避免阻塞用户操作
+                        new Thread(() -> {
+                            try {
+                                boolean seoResult = seoService.submitToSearchEngines(article.getId());
+                                log.info("【异步保存】文章ID {} 搜索引擎推送完成，结果: {}，任务ID: {}", article.getId(), seoResult ? "成功" : "失败", taskId);
+                            } catch (Exception e) {
+                                log.error("【异步保存】搜索引擎推送失败，但不影响文章保存，文章ID: " + article.getId() + ", 任务ID: " + taskId, e);
+                            }
+                        }).start();
+                    } else {
+                        log.info("【异步保存】文章ID {} 未标记为需要推送至搜索引擎或文章不可见，任务ID: {}", article.getId(), taskId);
+                    }
+                } else {
+                    log.info("【异步保存】文章ID {} 不可见，跳过sitemap更新和SEO推送，任务ID: {}", article.getId(), taskId);
                 }
                 
                 // 最终成功状态
@@ -530,6 +600,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         if (articleVO.getViewStatus() != null) {
             updateChainWrapper.set(Article::getViewStatus, articleVO.getViewStatus());
         }
+        if (articleVO.getSubmitToSearchEngine() != null) {
+            updateChainWrapper.set(Article::getSubmitToSearchEngine, articleVO.getSubmitToSearchEngine());
+        }
         // 同步更新摘要（如果内容有变化）
         if (StringUtils.hasText(articleVO.getArticleContent())) {
             try {
@@ -567,7 +640,9 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         lambdaQuery.in(!CollectionUtils.isEmpty(ids), Article::getId, ids);
         lambdaQuery.like(StringUtils.hasText(baseRequestVO.getSearchKey()), Article::getArticleTitle, baseRequestVO.getSearchKey());
         lambdaQuery.eq(baseRequestVO.getRecommendStatus() != null && baseRequestVO.getRecommendStatus(), Article::getRecommendStatus, PoetryEnum.STATUS_ENABLE.getCode());
-
+        
+        // 添加对可见文章的过滤，确保预渲染和前端只获取可见的文章
+        lambdaQuery.eq(Article::getViewStatus, true);
 
         if (baseRequestVO.getLabelId() != null) {
             lambdaQuery.eq(Article::getLabelId, baseRequestVO.getLabelId());
@@ -768,6 +843,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 for (Sort sort : sorts) {
                     LambdaQueryChainWrapper<Article> lambdaQuery = lambdaQuery()
                             .eq(Article::getSortId, sort.getId())
+                            .eq(Article::getViewStatus, true)  // 添加对可见文章的过滤
                             .orderByDesc(Article::getCreateTime)
                             .last("limit 6");
                     List<Article> articleList = lambdaQuery.list();
@@ -1098,5 +1174,201 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         }
         
         return finalScore;
+    }
+
+    /**
+     * 异步更新文章（快速响应版本）
+     */
+    @Override
+    public PoetryResult<String> updateArticleAsync(ArticleVO articleVO) {
+        // 生成任务ID
+        String taskId = "article_update_" + System.currentTimeMillis() + "_" + (int)(Math.random() * 1000);
+        
+        // 基础验证
+        if (articleVO.getId() == null) {
+            return PoetryResult.fail("文章ID不能为空！");
+        }
+        if (articleVO.getViewStatus() != null && !articleVO.getViewStatus() && !StringUtils.hasText(articleVO.getPassword())) {
+            return PoetryResult.fail("请设置文章密码！");
+        }
+        
+        Integer userId = PoetryUtil.getUserId();
+        if (userId == null) {
+            return PoetryResult.fail("无法确定文章作者，请重新登录后再试");
+        }
+        
+        // 在主线程中获取用户信息，避免异步线程中无法访问RequestContext
+        String currentUsername = null;
+        try {
+            currentUsername = PoetryUtil.getUsername();
+        } catch (Exception e) {
+            log.warn("【异步更新】无法获取当前用户名，使用默认值: {}", e.getMessage());
+            currentUsername = "System";
+        }
+        final String finalUsername = currentUsername;
+        
+        // 初始化更新状态
+        ArticleSaveStatus initialStatus = new ArticleSaveStatus(taskId, "processing", "正在更新文章...", articleVO.getId());
+        ARTICLE_SAVE_STATUS.put(taskId, initialStatus);
+        log.info("【异步更新】初始化更新状态，任务ID: {}, 文章ID: {}, 当前任务总数: {}", taskId, articleVO.getId(), ARTICLE_SAVE_STATUS.size());
+        
+        // 异步执行更新
+        new Thread(() -> {
+            try {
+                log.info("【异步更新】开始异步更新文章，任务ID: {}, 文章ID: {}", taskId, articleVO.getId());
+                
+                // 更新状态：正在生成摘要
+                updateSaveStatus(taskId, "processing", "正在生成AI摘要...");
+                
+                // 构建更新条件
+                LambdaUpdateChainWrapper<Article> updateChainWrapper = lambdaUpdate()
+                        .eq(Article::getId, articleVO.getId())
+                        .eq(Article::getUserId, userId)
+                        .set(Article::getLabelId, articleVO.getLabelId())
+                        .set(Article::getSortId, articleVO.getSortId())
+                        .set(Article::getArticleTitle, articleVO.getArticleTitle())
+                        .set(Article::getUpdateBy, finalUsername)
+                        .set(Article::getUpdateTime, LocalDateTime.now())
+                        .set(Article::getVideoUrl, StringUtils.hasText(articleVO.getVideoUrl()) ? articleVO.getVideoUrl() : null)
+                        .set(Article::getArticleContent, articleVO.getArticleContent());
+
+                if (StringUtils.hasText(articleVO.getArticleCover())) {
+                    updateChainWrapper.set(Article::getArticleCover, articleVO.getArticleCover());
+                }
+                if (articleVO.getCommentStatus() != null) {
+                    updateChainWrapper.set(Article::getCommentStatus, articleVO.getCommentStatus());
+                }
+                if (articleVO.getRecommendStatus() != null) {
+                    updateChainWrapper.set(Article::getRecommendStatus, articleVO.getRecommendStatus());
+                }
+                if (articleVO.getViewStatus() != null && !articleVO.getViewStatus() && StringUtils.hasText(articleVO.getPassword())) {
+                    updateChainWrapper.set(Article::getPassword, articleVO.getPassword());
+                    updateChainWrapper.set(StringUtils.hasText(articleVO.getTips()), Article::getTips, articleVO.getTips());
+                }
+                if (articleVO.getViewStatus() != null) {
+                    updateChainWrapper.set(Article::getViewStatus, articleVO.getViewStatus());
+                }
+                if (articleVO.getSubmitToSearchEngine() != null) {
+                    updateChainWrapper.set(Article::getSubmitToSearchEngine, articleVO.getSubmitToSearchEngine());
+                }
+                
+                // 生成AI摘要（如果内容有变化）
+                if (StringUtils.hasText(articleVO.getArticleContent())) {
+                    try {
+                        log.info("【异步更新】开始生成AI摘要，任务ID: {}, 文章内容长度: {}", taskId, articleVO.getArticleContent().length());
+                        String aiSummary = summaryService.generateSummarySync(articleVO.getArticleContent());
+                        updateChainWrapper.set(Article::getSummary, StringUtils.hasText(aiSummary) ? aiSummary : "");
+                        log.info("【异步更新】AI摘要生成成功，任务ID: {}, 摘要长度: {}", taskId, aiSummary != null ? aiSummary.length() : 0);
+                    } catch (Exception e) {
+                        log.error("【异步更新】AI摘要生成失败，任务ID: {}, 错误: {}", taskId, e.getMessage(), e);
+                        log.warn("【异步更新】文章更新：AI摘要生成失败，保持原摘要，任务ID: {}", taskId);
+                    }
+                }
+                
+                // 更新状态：正在更新数据库
+                updateSaveStatus(taskId, "processing", "正在更新数据库...");
+                
+                // 执行数据库更新
+                log.info("【异步更新】开始更新数据库，任务ID: {}, 文章ID: {}", taskId, articleVO.getId());
+                boolean updated = updateChainWrapper.update();
+                if (!updated) {
+                    log.error("【异步更新】数据库更新失败，任务ID: {}, 文章ID: {}", taskId, articleVO.getId());
+                    updateSaveStatus(taskId, "failed", "数据库更新失败");
+                    return;
+                }
+                log.info("【异步更新】数据库更新成功，任务ID: {}, 文章ID: {}", taskId, articleVO.getId());
+                
+                // 清理缓存
+                PoetryCache.remove(CommonConst.SORT_INFO);
+                
+                // 更新状态：后台处理中
+                updateSaveStatus(taskId, "processing", "文章已更新，正在处理翻译...");
+                
+                // 异步翻译（翻译完成后内部会触发预渲染）
+                try {
+                    log.info("【异步更新】开始文章翻译，任务ID: {}, 文章ID: {}", taskId, articleVO.getId());
+                    translationService.translateAndSaveArticle(articleVO.getId());
+                    log.info("【异步更新】文章翻译完成（包含预渲染），任务ID: {}, 文章ID: {}", taskId, articleVO.getId());
+                } catch (Exception e) {
+                    log.error("【异步更新】文章翻译失败，任务ID: {}, 文章ID: {}, 错误: {}", taskId, articleVO.getId(), e.getMessage(), e);
+                }
+                
+                // 更新状态：翻译完成，正在处理sitemap更新和SEO推送
+                updateSaveStatus(taskId, "processing", "文章已更新，正在处理sitemap更新和SEO推送...");
+                
+                // 更新文章时不更新sitemap，因为创建时已经更新过了
+                // 只有当文章变为不可见时才从sitemap中删除
+                if (!Boolean.TRUE.equals(articleVO.getViewStatus())) {
+                    log.info("【异步更新】文章ID {} 变为不可见，开始异步删除sitemap条目，任务ID: {}", articleVO.getId(), taskId);
+                    
+                    // 异步删除sitemap条目
+                    new Thread(() -> {
+                        try {
+                            // 调用Python服务删除sitemap条目
+                            Map<String, Object> sitemapData = new HashMap<>();
+                            sitemapData.put("articleId", articleVO.getId());
+                            sitemapData.put("action", "remove");
+                            
+                            HttpHeaders headers = new HttpHeaders();
+                            headers.setContentType(MediaType.APPLICATION_JSON);
+                            headers.set("X-Internal-Service", "poetize-java");
+                            headers.set("User-Agent", "poetize-java/1.0.0");
+                            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(sitemapData, headers);
+                            
+                            // 调用专门的sitemap更新接口
+                            String pythonServerUrl = System.getenv().getOrDefault("PYTHON_SERVICE_URL", "http://localhost:5000");
+                            String sitemapApiUrl = pythonServerUrl + "/python/seo/updateArticleSitemap";
+                            
+                            try {
+                                @SuppressWarnings("unchecked")
+                                Map<String, Object> response = restTemplate.postForObject(
+                                    sitemapApiUrl, 
+                                    requestEntity, 
+                                    Map.class
+                                );
+                                if (response != null && "200".equals(String.valueOf(response.get("code")))) {
+                                    log.info("【异步更新】文章ID {} sitemap删除成功，任务ID: {}", articleVO.getId(), taskId);
+                                } else {
+                                    log.warn("【异步更新】文章ID {} sitemap删除响应异常: {}，任务ID: {}", articleVO.getId(), response, taskId);
+                                }
+                            } catch (Exception apiException) {
+                                log.error("【异步更新】调用sitemap删除API失败，文章ID: " + articleVO.getId() + ", 任务ID: " + taskId + ", 错误: " + apiException.getMessage(), apiException);
+                            }
+                        } catch (Exception e) {
+                            log.error("【异步更新】删除sitemap条目失败，但不影响文章更新，文章ID: " + articleVO.getId() + ", 任务ID: " + taskId, e);
+                        }
+                    }).start();
+                } else {
+                    log.info("【异步更新】文章ID {} 保持可见状态，无需更新sitemap（创建时已更新），任务ID: {}", articleVO.getId(), taskId);
+                }
+                
+                // 如果需要推送至搜索引擎且文章可见，异步处理
+                if (Boolean.TRUE.equals(articleVO.getSubmitToSearchEngine()) && Boolean.TRUE.equals(articleVO.getViewStatus())) {
+                    log.info("【异步更新】更新文章ID {} 标记为需要推送至搜索引擎，开始异步处理，任务ID: {}", articleVO.getId(), taskId);
+                    
+                    // 异步执行SEO推送，避免阻塞用户操作
+                    new Thread(() -> {
+                        try {
+                            boolean seoResult = seoService.submitToSearchEngines(articleVO.getId());
+                            log.info("【异步更新】更新文章ID {} 搜索引擎推送完成，结果: {}，任务ID: {}", articleVO.getId(), seoResult ? "成功" : "失败", taskId);
+                        } catch (Exception e) {
+                            log.error("【异步更新】搜索引擎推送失败，但不影响文章更新，文章ID: " + articleVO.getId() + ", 任务ID: " + taskId, e);
+                        }
+                    }).start();
+                } else {
+                    log.info("【异步更新】更新文章ID {} 未标记为需要推送至搜索引擎或文章不可见，任务ID: {}", articleVO.getId(), taskId);
+                }
+                
+                // 最终成功状态
+                updateSaveStatus(taskId, "success", "文章更新成功！AI摘要已生成", articleVO.getId());
+                log.info("【异步更新】文章更新完成，任务ID: {}, 文章ID: {}", taskId, articleVO.getId());
+                
+            } catch (Exception e) {
+                log.error("【异步更新】文章更新失败，任务ID: {}, 文章ID: {}, 错误: {}", taskId, articleVO.getId(), e.getMessage(), e);
+                updateSaveStatus(taskId, "failed", "更新失败：" + e.getMessage());
+            }
+        }).start();
+        
+        return PoetryResult.success(taskId);
     }
 }

@@ -50,6 +50,7 @@ CREATE TABLE `poetize`.`article` (
   `tips` varchar(128) DEFAULT NULL COMMENT '提示',
   `recommend_status` tinyint(1) NOT NULL DEFAULT 0 COMMENT '是否推荐[0:否，1:是]',
   `comment_status` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否启用评论[0:否，1:是]',
+  `submit_to_search_engine` tinyint(1) NOT NULL DEFAULT 1 COMMENT '是否推送至搜索引擎[0:否，1:是]',
 
   `create_time` datetime DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `update_time` datetime  DEFAULT CURRENT_TIMESTAMP COMMENT '最终修改时间',

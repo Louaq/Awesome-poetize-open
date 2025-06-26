@@ -60,11 +60,17 @@ public interface ArticleService extends IService<Article> {
     PoetryResult<String> saveArticleAsync(ArticleVO articleVO);
 
     /**
+     * 异步更新文章（快速响应版本）
+     * @param articleVO 文章信息
+     * @return 任务ID
+     */
+    PoetryResult<String> updateArticleAsync(ArticleVO articleVO);
+
+    /**
      * 查询文章保存状态
      * @param taskId 任务ID
      * @return 保存状态
      */
     PoetryResult<ArticleSaveStatus> getArticleSaveStatus(String taskId);
-
 
 }

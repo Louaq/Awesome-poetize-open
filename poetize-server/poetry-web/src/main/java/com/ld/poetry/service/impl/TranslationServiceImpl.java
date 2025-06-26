@@ -82,6 +82,13 @@ public class TranslationServiceImpl implements TranslationService {
             if (success) {
                 // 触发静态预渲染
                 prerenderClient.renderArticle(articleId);
+                // 重新渲染首页（显示最新文章）
+                prerenderClient.renderHomePage();
+                // 重新渲染相关分类页面
+                if (article.getSortId() != null) {
+                    prerenderClient.renderCategoryPage(article.getSortId());
+                }
+                log.info("文章翻译及预渲染完成，文章ID: {}", articleId);
             }
             
         } catch (Exception e) {

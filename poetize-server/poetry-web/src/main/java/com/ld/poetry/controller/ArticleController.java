@@ -32,6 +32,8 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.web.client.RestTemplate;
+import com.ld.poetry.event.ArticleSavedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 
 /**
  * <p>
@@ -66,6 +68,9 @@ public class ArticleController {
 
     @Autowired
     private RestTemplate restTemplate;
+
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
 
     /**
      * 保存文章（同步版本）
@@ -123,25 +128,7 @@ public class ArticleController {
                 final Integer articleId = articleVO.getId();
                 final Integer sortId = articleVO.getSortId();
                 
-                // 如果文章可见，触发预渲染
-                if (Boolean.TRUE.equals(articleVO.getViewStatus())) {
-                    new Thread(() -> {
-                        try {
-                            // 渲染文章页面
-                            prerenderClient.renderArticle(articleId);
-                            // 重新渲染首页（显示最新文章）
-                            prerenderClient.renderHomePage();
-                            // 重新渲染相关分类页面
-                            if (sortId != null) {
-                                prerenderClient.renderCategoryPage(sortId);
-                            }
-                        } catch (Exception e) {
-                            log.warn("预渲染页面失败: " + e.getMessage());
-                        }
-                    }).start();
-                }
-                
-                // 异步执行翻译，避免阻塞用户操作
+                // 异步执行翻译，避免阻塞用户操作（翻译完成后内部会触发预渲染）
                 new Thread(() -> {
                     try {
                         translationService.translateAndSaveArticle(articleId);
@@ -314,14 +301,8 @@ public class ArticleController {
         PoetryResult result = articleService.deleteArticle(id);
 
         if (result.getCode() == 200) {
-            // 调用 prerender-worker 删除静态文件，并重新渲染相关页面
-            try {
-                prerenderClient.deleteArticle(id);
-                // 文章删除后重新渲染首页
-                prerenderClient.renderHomePage();
-            } catch (Exception e) {
-                log.warn("删除 prerender 静态文件调用失败", e);
-            }
+            // 发布文章删除事件，触发预渲染清理（在事务提交后执行）
+            eventPublisher.publishEvent(new ArticleSavedEvent(id, null, false, "DELETE"));
             
             // 异步删除sitemap条目
             final Integer articleId = id;
@@ -384,38 +365,7 @@ public class ArticleController {
             final Integer articleId = articleVO.getId();
             final Integer sortId = articleVO.getSortId();
             
-            // 如果文章可见，触发预渲染
-            if (Boolean.TRUE.equals(articleVO.getViewStatus())) {
-                new Thread(() -> {
-                    try {
-                        // 渲染文章页面
-                        prerenderClient.renderArticle(articleId);
-                        // 重新渲染首页（文章可能排序改变）
-                        prerenderClient.renderHomePage();
-                        // 重新渲染相关分类页面
-                        if (sortId != null) {
-                            prerenderClient.renderCategoryPage(sortId);
-                        }
-                    } catch (Exception e) {
-                        log.warn("预渲染页面失败: " + e.getMessage());
-                    }
-                }).start();
-            } else {
-                // 如果文章变为不可见，删除预渲染文件并更新其他页面
-                new Thread(() -> {
-                    try {
-                        prerenderClient.deleteArticle(articleId);
-                        prerenderClient.renderHomePage();
-                        if (sortId != null) {
-                            prerenderClient.renderCategoryPage(sortId);
-                        }
-                    } catch (Exception e) {
-                        log.warn("删除预渲染文件失败: " + e.getMessage());
-                    }
-                }).start();
-            }
-            
-            // 异步执行翻译，避免阻塞用户操作
+            // 异步执行翻译，避免阻塞用户操作（翻译完成后内部会触发预渲染）
             new Thread(() -> {
                 try {
                     translationService.translateAndSaveArticle(articleId);
@@ -763,6 +713,38 @@ public class ArticleController {
         } catch (Exception e) {
             log.error("摘要生成API调用失败", e);
             return PoetryResult.fail("摘要生成失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 异步更新文章（快速响应版本）
+     */
+    @LoginCheck(1)
+    @PostMapping("/updateArticleAsync")
+    public PoetryResult<String> updateArticleAsync(@Validated @RequestBody ArticleVO articleVO) {
+        // 防止空指针异常，验证输入
+        if (articleVO == null) {
+            return PoetryResult.fail("文章内容不能为空");
+        }
+        
+        if (articleVO.getId() == null) {
+            return PoetryResult.fail("文章ID不能为空");
+        }
+        
+        try {
+            // 调用异步更新服务
+            PoetryResult<String> result = articleService.updateArticleAsync(articleVO);
+            
+            // 清理缓存
+            if (articleVO.getUserId() != null) {
+                PoetryCache.remove(CommonConst.USER_ARTICLE_LIST + articleVO.getUserId().toString());
+            }
+            PoetryCache.remove(CommonConst.ARTICLE_LIST);
+            PoetryCache.remove(CommonConst.SORT_ARTICLE_LIST);
+            
+            return result;
+        } catch (Exception e) {
+            return PoetryResult.fail("启动异步更新失败: " + e.getMessage());
         }
     }
 }

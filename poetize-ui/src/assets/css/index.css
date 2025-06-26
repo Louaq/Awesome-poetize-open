@@ -1,4 +1,13 @@
 /* 通用css */
+
+/* 隐藏预渲染内容 - 解决首页底部显示预渲染文本的问题 */
+.home-prerender,
+.favorite-prerender, 
+.sort-prerender,
+.sort-list-prerender {
+  display: none !important;
+}
+
 * {
     box-sizing: border-box;
 }

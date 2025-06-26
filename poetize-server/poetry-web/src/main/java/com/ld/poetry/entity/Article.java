@@ -119,6 +119,12 @@ public class Article implements Serializable {
     private Boolean recommendStatus;
 
     /**
+     * 是否推送至搜索引擎[0:否，1:是]
+     */
+    @TableField("submit_to_search_engine")
+    private Boolean submitToSearchEngine;
+
+    /**
      * 创建时间
      */
     @TableField("create_time")
