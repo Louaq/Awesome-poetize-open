@@ -4,7 +4,6 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const MarkdownIt = require('markdown-it');
-const hljs = require('highlight.js');
 const cheerio = require('cheerio');
 const { decode: decodeHtmlEntities } = require('html-entities');
 

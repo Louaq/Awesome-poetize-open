@@ -16,7 +16,6 @@ python-dateutil
 sqlalchemy>=2.0.0
 itsdangerous>=2.1.0
 python-multipart>=0.0.6
-crawl4ai
 openai
 anthropic
 fastmcp
