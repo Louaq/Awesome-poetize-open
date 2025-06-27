@@ -2,7 +2,7 @@
 ## 作者: LeapYa
 ## 修改时间: 2025-06-27
 ## 描述: 部署 Poetize 博客系统安装脚本
-## 版本: 1.0.16
+## 版本: 1.0.17
 
 # 定义颜色
 RED='\033[0;31m'
@@ -5010,9 +5010,11 @@ main() {
     fi
   else
     info "Docker已安装，无需执行安装程序"
-    
-    choose_docker_registry_mirror
-    configure_docker_registry
+
+    if is_china_environment; then
+      choose_docker_registry_mirror
+      configure_docker_registry
+    fi
   fi
   
   # 检查Docker Compose可用性
