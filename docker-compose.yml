@@ -110,8 +110,7 @@ services:
                            echo '=== 安装Brotli压缩工具 ===' && \
                            npm install -g brotli --no-fund --no-audit 2>/dev/null || echo '警告: brotli安装失败，将跳过.br文件生成' && \
                            echo '=== 运行构建 ===' && \
-                           echo 'set命令在Linux中无效，直接运行vue-cli-service build' && \
-                           npx vue-cli-service build && \
+                           npm run build && \
                            echo '=== 构建完成，复制dist目录内容到挂载点 ===' && \
                            cp -rf dist/* /app/dist/ && \
                            echo '聊天室构建完成'"]
