@@ -2,7 +2,7 @@
 ## 作者: LeapYa
 ## 修改时间: 2025-06-27
 ## 描述: 部署 Poetize 博客系统安装脚本
-## 版本: 1.0.14
+## 版本: 1.0.15
 
 # 定义颜色
 RED='\033[0;31m'
@@ -4726,10 +4726,12 @@ update_base_source() {
     "openeuler")
         update_openeuler_base_source
         ;;
+    "rocky")
+        update_rocky_base_source
+        ;;
     *)
-    error "不支持的操作系统类型: $os_type，请提交issue，https://github.com/LeapYa/Awesome-poetize-open/issues"
-    exit 1
-    ;;
+        warning "不支持的操作系统类型: $os_type，请提交issue，https://github.com/LeapYa/Awesome-poetize-open/issues，将跳过换源，时间可能过长，建议手动换源或耐心等待..."
+        ;;
   esac
 }
 
@@ -5196,6 +5198,28 @@ main() {
   print_summary
   
   echo ""
+}
+
+update_rocky_base_source() {
+    info "开始为 Rocky Linux 更换源..."
+    local repo_dir="/etc/yum.repos.d"
+    if [ ! -d "$repo_dir" ]; then
+        warning "YUM 配置目录不存在: $repo_dir，跳过换源"
+        return
+    fi
+
+    # 备份
+    sudo cp -a $repo_dir/Rocky-*.repo $repo_dir/Rocky-*.repo.backup
+
+    # 下载新的 repo 文件
+    sudo sed -e 's!^#baseurl=http://dl.rockylinux.org/$contentdir!baseurl=https://mirrors.aliyun.com/rockylinux!g' \
+        -e 's!^mirrorlist=!#mirrorlist=!g' \
+        -i $repo_dir/Rocky-*.repo
+
+    # 清理和重建缓存
+    sudo dnf clean all
+    sudo dnf makecache
+    info "Rocky Linux 源已成功更换为阿里云镜像。"
 }
 
 # 执行主函数
