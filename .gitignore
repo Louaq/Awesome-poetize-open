@@ -3,8 +3,7 @@ target/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
-# 允许提交构建好的jar包
-!poetize-server/poetry-web/target/*.jar
+
 package-lock.json
 
 ### STS ###
