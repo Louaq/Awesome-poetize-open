@@ -2,7 +2,7 @@
 ## 作者: LeapYa
 ## 修改时间: 2025-06-27
 ## 描述: 部署 Poetize 博客系统安装脚本
-## 版本: 1.0.15
+## 版本: 1.0.16
 
 # 定义颜色
 RED='\033[0;31m'
@@ -5010,6 +5010,9 @@ main() {
     fi
   else
     info "Docker已安装，无需执行安装程序"
+    
+    choose_docker_registry_mirror
+    configure_docker_registry
   fi
   
   # 检查Docker Compose可用性
@@ -5208,13 +5211,11 @@ update_rocky_base_source() {
         return
     fi
 
-    # 备份
-    sudo cp -a $repo_dir/Rocky-*.repo $repo_dir/Rocky-*.repo.backup
-
     # 下载新的 repo 文件
-    sudo sed -e 's!^#baseurl=http://dl.rockylinux.org/$contentdir!baseurl=https://mirrors.aliyun.com/rockylinux!g' \
-        -e 's!^mirrorlist=!#mirrorlist=!g' \
-        -i $repo_dir/Rocky-*.repo
+    sed -e 's|^mirrorlist=|#mirrorlist=|g' \
+    -e 's|^#baseurl=http://dl.rockylinux.org/$contentdir|baseurl=https://mirrors.aliyun.com/rockylinux|g' \
+    -i.bak \
+    /etc/yum.repos.d/[Rr]ocky-*.repo
 
     # 清理和重建缓存
     sudo dnf clean all
