@@ -799,6 +799,8 @@
                   
                   // 重新获取分类和标签列表
                   this.getSortAndLabel().then(() => {
+                    // 新增：强制刷新labelsTemp，确保下拉框显示新标签
+                    this.labelsTemp = this.labels.filter(l => l.sortId === this.article.sortId);
                     // 自动选中新创建的标签
                     const newLabel = this.labels.find(label => 
                       label.labelName === this.newLabelForm.labelName && 
