@@ -132,7 +132,7 @@
               @click="goToArticle(item.id)"
             >
               <i class="fa fa-file-text-o"></i>
-              <span>{{ item.title }}</span>
+              <span>{{ item.articleTitle }}</span>
             </a>
           </div>
         </div>
@@ -688,10 +688,8 @@ export default {
 
 /* 底部提示 */
 .footer-hint {
-  position: absolute;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
+  margin-top: 60px;
+  text-align: center;
   z-index: 10;
 }
 
@@ -755,4 +753,4 @@ export default {
     display: none;
   }
 }
-</style> 
+</style>

@@ -12,7 +12,7 @@ async function renderIds(ids = [], options = {}) {
     throw new Error('ids must be a non-empty array');
   }
 
-  const BASE_URL = options.baseUrl || process.env.PRERENDER_BASE_URL || 'http://poetize-article-ssr:3000';
+  const BASE_URL = options.baseUrl || process.env.PRERENDER_BASE_URL || 'http://poetize-prerender:4000';
   const OUTPUT_ROOT = options.outputRoot || process.env.PRERENDER_OUTPUT || path.resolve(__dirname, '../dist/prerender/article');
 
   const langs = ['zh', 'en'];
