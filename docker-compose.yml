@@ -42,8 +42,6 @@ services:
       context: .
       dockerfile: docker/poetize-ui/Dockerfile
     container_name: poetize-ui
-    environment:
-      - PUPPETEER_DOWNLOAD_HOST=https://npmmirror.com/mirrors
     volumes:
       - ./poetize-ui:/app/src
       - poetize_node_modules:/app/src/node_modules
@@ -86,8 +84,6 @@ services:
       context: .
       dockerfile: docker/poetize-im-ui/Dockerfile
     container_name: poetize-im-ui
-    environment:
-      - PUPPETEER_DOWNLOAD_HOST=https://npmmirror.com/mirrors
     volumes:
       - ./poetize-im-ui:/app/src
       - im_node_modules:/app/src/node_modules

@@ -3,6 +3,6 @@
     "vue-slider-verify": "^0.1.0"
   },
   "devDependencies": {
-    "prerender-spa-plugin": "^3.4.0"
+
   }
 }
