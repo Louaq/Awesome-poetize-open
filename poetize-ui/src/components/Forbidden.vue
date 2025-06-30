@@ -182,7 +182,7 @@ export default {
       try {
         // 通过API获取用户真实IP地址
         const res = await this.$http.get(this.$constant.baseURL + "/webInfo/getUserIP");
-        if (res.data && res.data.success) {
+        if (res.data && res.data.code === 200 && res.data.data) {
           this.userIP = res.data.data.ip || '无法获取';
         } else {
           this.userIP = '无法获取';
