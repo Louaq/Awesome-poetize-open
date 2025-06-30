@@ -2,7 +2,7 @@
 ## 作者: LeapYa
 ## 修改时间: 2025-06-30
 ## 描述: 部署 Poetize 博客系统安装脚本
-## 版本: 1.0.25
+## 版本: 1.0.26
 
 # 定义颜色
 RED='\033[0;31m'
@@ -493,6 +493,12 @@ detect_os_type() {
         # openEuler / EulerOS (转换为小写进行比较)
         if [[ "$id_lower" == "openeuler" || "$id_lower" == "euleros" ]]; then
             echo "openeuler"
+            return 0
+        fi
+
+        # TencentOS Server / Tencent Linux
+        if [[ "$id_lower" == "tencentos" || "$id_lower" == "tlinux" ]]; then
+            echo "tencentos"
             return 0
         fi
 
@@ -1958,6 +1964,142 @@ install_docker_china_kylin() {
     fi
 }
 
+# TencentOS Server安装Docker
+install_docker_china_tencentos() {
+    info "在TencentOS Server系统安装Docker (使用 $DOCKER_MIRROR_SOURCE 镜像源)..."
+    
+    # 移除旧版本Docker
+    sudo yum remove -y -q docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine 2>/dev/null || true
+    
+    # 检测TencentOS版本
+    local tencentos_version=""
+    if [ -f /etc/os-release ]; then
+        tencentos_version=$(grep '^VERSION_ID=' /etc/os-release | cut -d= -f2 | tr -d '"' 2>/dev/null)
+    fi
+    
+    # 根据版本选择包管理器
+    local pkg_manager="yum"
+    if [[ "$tencentos_version" =~ ^3 ]] || [[ "$tencentos_version" =~ ^4 ]] || command -v dnf &>/dev/null; then
+        pkg_manager="dnf"
+    fi
+    
+    info "检测到TencentOS Server版本: ${tencentos_version:-未知}，使用包管理器: $pkg_manager"
+    
+    # 安装必要的软件包
+    info "安装必要的依赖包..."
+    if [ "$pkg_manager" = "dnf" ]; then
+        sudo dnf install -y -q dnf-utils device-mapper-persistent-data lvm2
+    else
+        sudo yum install -y -q yum-utils device-mapper-persistent-data lvm2
+    fi
+    
+    # 尝试使用Docker CE源（优先）
+    info "尝试添加Docker CE软件源..."
+    local docker_repo_added=false
+    
+    # TencentOS Server与CentOS兼容，可以使用CentOS的Docker CE源
+    if [ "$pkg_manager" = "dnf" ]; then
+        if sudo dnf config-manager --add-repo "https://$DOCKER_MIRROR_SOURCE/linux/centos/docker-ce.repo" 2>/dev/null; then
+            docker_repo_added=true
+            info "正在安装Docker CE..."
+            if sudo dnf install -y -q docker-ce docker-ce-cli containerd.io docker-compose-plugin; then
+                success "成功安装Docker CE版本"
+                DOCKER_SOURCE="Docker CE"
+            else
+                warning "Docker CE安装失败，尝试使用系统仓库版本..."
+                # 清理失败的源
+                sudo rm -f /etc/yum.repos.d/docker-ce.repo 2>/dev/null || true
+                docker_repo_added=false
+            fi
+        fi
+    else
+        if sudo yum-config-manager --add-repo "https://$DOCKER_MIRROR_SOURCE/linux/centos/docker-ce.repo" 2>/dev/null; then
+            docker_repo_added=true
+            info "正在安装Docker CE..."
+            if sudo yum install -y -q docker-ce docker-ce-cli containerd.io docker-compose-plugin; then
+                success "成功安装Docker CE版本"
+                DOCKER_SOURCE="Docker CE"
+            else
+                warning "Docker CE安装失败，尝试使用系统仓库版本..."
+                # 清理失败的源
+                sudo rm -f /etc/yum.repos.d/docker-ce.repo 2>/dev/null || true
+                docker_repo_added=false
+            fi
+        fi
+    fi
+    
+    # 如果Docker CE安装失败，使用TencentOS系统仓库
+    if [ "$docker_repo_added" = false ] || ! command -v docker &>/dev/null; then
+        warning "Docker CE源不可用，使用TencentOS系统仓库..."
+        if [ "$pkg_manager" = "dnf" ]; then
+            if sudo dnf install -y docker; then
+                success "成功安装系统仓库Docker版本"
+                DOCKER_SOURCE="TencentOS系统仓库"
+                
+                # 尝试安装Docker Compose v2插件
+                if sudo dnf install -y docker-compose-plugin 2>/dev/null; then
+                    info "成功安装Docker Compose v2插件"
+                else
+                    warning "Docker Compose v2插件安装失败，将使用docker compose子命令"
+                fi
+            else
+                error "所有Docker安装方式都失败"
+                return 1
+            fi
+        else
+            if sudo yum install -y docker; then
+                success "成功安装系统仓库Docker版本"
+                DOCKER_SOURCE="TencentOS系统仓库"
+                
+                # 尝试安装Docker Compose v2插件
+                if sudo yum install -y docker-compose-plugin 2>/dev/null; then
+                    info "成功安装Docker Compose v2插件"
+                else
+                    warning "Docker Compose v2插件安装失败，尝试安装传统docker-compose包..."
+                    if sudo yum install -y docker-compose 2>/dev/null; then
+                        info "安装了传统docker-compose包（建议使用docker compose命令）"
+                    else
+                        warning "Docker Compose安装失败，将使用docker compose子命令"
+                    fi
+                fi
+            else
+                error "所有Docker安装方式都失败"
+                return 1
+            fi
+        fi
+    fi
+    
+    # 启动和启用Docker服务
+    sudo systemctl start docker
+    sudo systemctl enable docker
+    
+    # 验证安装
+    if command -v docker &>/dev/null; then
+        success "TencentOS Server Docker安装完成"
+        
+        # 显示版本信息
+        DOCKER_VERSION=$(docker --version 2>/dev/null || echo "未知版本")
+        info "安装的版本信息："
+        info "  Docker: $DOCKER_VERSION (来源: $DOCKER_SOURCE)"
+        
+        # 检查docker-compose
+        if command -v docker-compose &>/dev/null; then
+            COMPOSE_VERSION=$(docker-compose --version 2>/dev/null || echo "未知版本")
+            info "  Docker Compose: $COMPOSE_VERSION"
+        elif docker compose version &>/dev/null; then
+            COMPOSE_VERSION=$(docker compose version --short 2>/dev/null || echo "Docker Compose Plugin")
+            info "  Docker Compose: $COMPOSE_VERSION (插件模式)"
+        else
+            warning "Docker Compose未安装，某些功能可能受限"
+        fi
+        
+        return 0
+    else
+        error "Docker安装验证失败"
+        return 1
+    fi
+}
+
 # 国内环境Docker安装主函数
 install_docker_china() {
     info "开始在国内环境安装Docker..."
@@ -2002,6 +2144,17 @@ install_docker_china() {
                     break
                 else
                     error "麒麟系统Docker安装失败"
+                    return 1
+                fi
+                ;;
+            "tencentos")
+                # TencentOS Server系统使用特殊的安装方式，不需要尝试多个镜像源
+                install_docker_china_tencentos
+                local install_result=$?
+                if [ $install_result -eq 0 ]; then
+                    break
+                else
+                    error "TencentOS Server系统Docker安装失败"
                     return 1
                 fi
                 ;;
@@ -2356,7 +2509,7 @@ setup_swap() {
       }
       
       # 设置权限
-      chmod 600 $SWAP_FILE || warning "设置swap文件权限失败"
+      sudo chmod 600 $SWAP_FILE || warning "设置swap文件权限失败"
       
       # 格式化为swap
       mkswap $SWAP_FILE || {
@@ -2677,8 +2830,8 @@ setup_https() {
   
   while [ $wait_time -lt $max_wait ]; do
     # 检查certbot容器状态
-    CERTBOT_EXIT_CODE=$(docker inspect poetize-certbot --format='{{.State.ExitCode}}' 2>/dev/null || echo "-1")
-    CERTBOT_RUNNING=$(docker inspect poetize-certbot --format='{{.State.Running}}' 2>/dev/null || echo "false")
+    CERTBOT_EXIT_CODE=$(sudo docker inspect poetize-certbot --format='{{.State.ExitCode}}' 2>/dev/null || echo "-1")
+    CERTBOT_RUNNING=$(sudo docker inspect poetize-certbot --format='{{.State.Running}}' 2>/dev/null || echo "false")
     
     # 如果certbot已完成且成功
     if [ "$CERTBOT_EXIT_CODE" = "0" ] && [ "$CERTBOT_RUNNING" = "false" ]; then
@@ -2702,12 +2855,12 @@ setup_https() {
     info "SSL证书已成功生成，正在启用HTTPS..."
     
     # 验证证书文件是否存在
-    if docker exec poetize-nginx ls /etc/letsencrypt/live/*/fullchain.pem >/dev/null 2>&1; then
+    if sudo docker exec poetize-nginx ls /etc/letsencrypt/live/*/fullchain.pem >/dev/null 2>&1; then
       info "确认证书文件存在，继续配置HTTPS..."
     else
       warning "证书文件未找到，等待文件系统同步..."
       sleep 10
-      if ! docker exec poetize-nginx ls /etc/letsencrypt/live/*/fullchain.pem >/dev/null 2>&1; then
+      if ! sudo docker exec poetize-nginx ls /etc/letsencrypt/live/*/fullchain.pem >/dev/null 2>&1; then
         warning "证书文件仍未找到，HTTPS配置可能失败"
       fi
     fi
@@ -3049,13 +3202,19 @@ check_system_resources() {
   # 根据内存大小自动调整SWAP_SIZE
   if command -v bc &>/dev/null; then
     # 如果内存小于或等于2GB，将SWAP_SIZE设置为2G
-    if [ $(echo "$TOTAL_MEM_GB <= 2.0" | bc -l) -eq 1 ]; then
+    if [ $(echo "$TOTAL_MEM_GB <= 1.0" | bc -l) -eq 1 ]; then
+      info "检测到1GB或更低内存环境，自动将交换空间设置为3G以提高性能"
+      SWAP_SIZE="3G"
+    elif [ $(echo "$TOTAL_MEM_GB <= 2.0" | bc -l) -eq 1 ]; then
       info "检测到2GB或更低内存环境，自动将交换空间设置为2G以提高性能"
       SWAP_SIZE="2G"
     fi
   else
     # 使用替代方法判断
-    if float_lte "$TOTAL_MEM_GB" "2.0"; then
+    if float_lte "$TOTAL_MEM_GB" "1.0"; then
+      info "检测到1GB或更低内存环境，自动将交换空间设置为3G以提高性能"
+      SWAP_SIZE="3G"
+    elif float_lte "$TOTAL_MEM_GB" "2.0"; then
       info "检测到2GB或更低内存环境，自动将交换空间设置为2G以提高性能"
       SWAP_SIZE="2G"
     fi
@@ -3064,9 +3223,9 @@ check_system_resources() {
   if command -v bc &>/dev/null; then
     # 使用bc命令进行比较
     if [ $(echo "$TOTAL_MEM_GB <= 0.95" | bc -l) -eq 1 ]; then
-      error "系统内存不足 (${TOTAL_MEM_GB}GB)。运行翻译模型至少需要2GB内存，推荐4GB以上。"
-      error "请升级服务器配置或选择不安装翻译模型功能。"
-      exit 1
+      warning "系统内存不足 (${TOTAL_MEM_GB}GB)，可能会导致部署失败或性能下降"
+      info "自动应用极低内存模式优化..."
+      apply_memory_optimizations "very-low" "$TOTAL_MEM_GB"
     # 基于内存大小应用不同级别的优化
     elif [ "$MEMORY" -lt 2 ] || [ $(echo "$TOTAL_MEM_GB <= 2.0" | bc -l) -eq 1 ]; then
     warning "检测到低内存服务器 (内存: ${TOTAL_MEM_GB}GB)"
@@ -3087,9 +3246,9 @@ check_system_resources() {
   else
     # 使用替代方法进行比较
     if float_lte "$TOTAL_MEM_GB" "0.95"; then
-      error "系统内存不足 (${TOTAL_MEM_GB}GB)。运行翻译模型至少需要2GB内存，推荐4GB以上。"
-      error "请升级服务器配置或选择不安装翻译模型功能。"
-      exit 1
+      warning "系统内存不足 (${TOTAL_MEM_GB}GB)，可能会导致部署失败或性能下降"
+      info "自动应用极低内存模式优化..."
+      apply_memory_optimizations "very-low" "$TOTAL_MEM_GB"
     # 基于内存大小应用不同级别的优化
     elif [ "$MEMORY" -lt 2 ] || float_lte "$TOTAL_MEM_GB" "2.0"; then
       warning "检测到低内存服务器 (内存: ${TOTAL_MEM_GB}GB)"
@@ -4575,6 +4734,88 @@ update_centos8_base_source() {
   fi
 }
 
+update_tencentos_base_source() {
+  info "开始为 TencentOS Server 更换源..."
+  local repo_dir="/etc/yum.repos.d"
+  if [ ! -d "$repo_dir" ]; then
+    warning "YUM 配置目录不存在: $repo_dir，跳过换源"
+    return
+  fi
+
+  # 备份原始源文件
+  if [ -f /etc/yum.repos.d/TencentOS.repo ]; then
+    sudo cp /etc/yum.repos.d/TencentOS.repo /etc/yum.repos.d/TencentOS.repo.bak
+  fi
+
+  # 检测TencentOS版本
+  local version_id
+  version_id=$(grep '^VERSION_ID=' /etc/os-release | cut -d= -f2 | tr -d '"')
+  
+  if [[ "$version_id" =~ ^3\. ]]; then
+    # TencentOS Server 3.x 使用阿里云镜像源
+    cat <<EOF | sudo tee /etc/yum.repos.d/TencentOS.repo > /dev/null
+[TencentOS-BaseOS]
+name=TencentOS Server \$releasever - BaseOS
+baseurl=https://mirrors.aliyun.com/tencentos/\$releasever/BaseOS/\$basearch/os/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-TencentOS-3
+
+[TencentOS-AppStream]
+name=TencentOS Server \$releasever - AppStream
+baseurl=https://mirrors.aliyun.com/tencentos/\$releasever/AppStream/\$basearch/os/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-TencentOS-3
+
+[TencentOS-PowerTools]
+name=TencentOS Server \$releasever - PowerTools
+baseurl=https://mirrors.aliyun.com/tencentos/\$releasever/PowerTools/\$basearch/os/
+gpgcheck=1
+enabled=0
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-TencentOS-3
+EOF
+  elif [[ "$version_id" =~ ^2\. ]]; then
+    # TencentOS Server 2.x 使用腾讯云镜像源
+    cat <<EOF | sudo tee /etc/yum.repos.d/TencentOS.repo > /dev/null
+[TencentOS-base]
+name=TencentOS Server \$releasever - Base
+baseurl=https://mirrors.cloud.tencent.com/tencentos/\$releasever/os/\$basearch/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-TencentOS-2
+
+[TencentOS-updates]
+name=TencentOS Server \$releasever - Updates
+baseurl=https://mirrors.cloud.tencent.com/tencentos/\$releasever/updates/\$basearch/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-TencentOS-2
+
+[TencentOS-extras]
+name=TencentOS Server \$releasever - Extras
+baseurl=https://mirrors.cloud.tencent.com/tencentos/\$releasever/extras/\$basearch/
+gpgcheck=1
+enabled=1
+gpgkey=file:///etc/pki/rpm-gpg/RPM-GPG-KEY-TencentOS-2
+EOF
+  else
+    warning "未知的 TencentOS 版本: $version_id，跳过换源"
+    return
+  fi
+
+  # 清理和重建缓存
+  if command -v dnf &>/dev/null; then
+    sudo dnf clean all
+    sudo dnf makecache
+  elif command -v yum &>/dev/null; then
+    sudo yum clean all
+    sudo yum makecache
+  fi
+  
+  info "TencentOS Server 源已成功更换为国内镜像。"
+}
+
 update_arch_base_source() {
   # 备份原始源列表
   if [ -f /etc/pacman.d/mirrorlist ]; then
@@ -4856,6 +5097,9 @@ update_base_source() {
         ;;
     "rocky")
         update_rocky_base_source
+        ;;
+    "tencentos")
+        update_tencentos_base_source
         ;;
     *)
         warning "不支持的操作系统类型: $os_type，请提交issue，https://github.com/LeapYa/Awesome-poetize-open/issues，将跳过换源，时间可能过长，建议手动换源或耐心等待..."
