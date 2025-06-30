@@ -1,8 +1,8 @@
 #!/bin/bash
 ## 作者: LeapYa
-## 修改时间: 2025-06-30
+## 修改时间: 2025-07-01
 ## 描述: 部署 Poetize 博客系统安装脚本
-## 版本: 1.0.26
+## 版本: 1.0.27
 
 # 定义颜色
 RED='\033[0;31m'
@@ -1652,26 +1652,73 @@ install_docker_china_amazon() {
     info "使用Amazon Linux系统仓库安装Docker..."
     if [ "$pkg_manager" = "dnf" ]; then
         sudo dnf install -y docker
+        sudo systemctl enable --now docker
+
+        local DOCKER_CONFIG=${DOCKER_CONFIG:-/usr/local/lib/docker}
+        sudo mkdir -p $DOCKER_CONFIG/cli-plugins
         
-        # 尝试安装Docker Compose v2插件
-        if sudo dnf install -y docker-compose-plugin 2>/dev/null; then
-            info "成功安装Docker Compose v2插件"
-        else
-            warning "Docker Compose v2插件安装失败，将使用docker compose子命令"
+        # 尝试多个下载源，优化国内网络环境
+        local compose_url="https://github.com/docker/compose/releases/download/v2.37.3/docker-compose-linux-x86_64"
+        local compose_mirrors=(
+            "$compose_url"
+            "https://gh-proxy.com/github.com/docker/compose/releases/download/v2.37.3/docker-compose-linux-x86_64"
+            "https://ghfast.top/$compose_url"
+        )
+        
+        local download_success=false
+        for mirror in "${compose_mirrors[@]}"; do
+            info "尝试从 $mirror 下载Docker Compose..."
+            if sudo curl --connect-timeout 30 --max-time 300 -SL "$mirror" -o $DOCKER_CONFIG/cli-plugins/docker-compose; then
+                download_success=true
+                info "Docker Compose下载成功"
+                break
+            else
+                warn "从 $mirror 下载失败，尝试下一个源..."
+                sleep 2
+            fi
+        done
+        
+        if [ "$download_success" = false ]; then
+            error "所有下载源都失败，请检查网络连接或手动下载Docker Compose"
+            exit 1
         fi
+        
+        sudo chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
+        info "成功安装Docker Compose v2插件"
     else
         sudo yum install -y docker
+        sudo systemctl enable --now docker
+
+        local DOCKER_CONFIG=${DOCKER_CONFIG:-/usr/local/lib/docker}
+        sudo mkdir -p $DOCKER_CONFIG/cli-plugins
+         # 尝试多个下载源，优化国内网络环境
+        local compose_url="https://github.com/docker/compose/releases/download/v2.37.3/docker-compose-linux-x86_64"
+        local compose_mirrors=(
+            "$compose_url"
+            "https://gh-proxy.com/github.com/docker/compose/releases/download/v2.37.3/docker-compose-linux-x86_64"
+            "https://ghfast.top/$compose_url"
+        )
         
-        # 尝试安装Docker Compose v2插件
-        if ! sudo yum install -y docker-compose-plugin 2>/dev/null; then
-            warning "系统仓库中没有docker-compose-plugin，将使用pip安装Docker Compose v2..."
-            sudo yum install -y python3-pip
-            # 安装最新的docker-compose v2
-            sudo pip3 install docker-compose
-            info "通过pip安装了Docker Compose（建议使用docker compose命令）"
-        else
-            info "成功安装Docker Compose v2插件"
+        local download_success=false
+        for mirror in "${compose_mirrors[@]}"; do
+            info "尝试从 $mirror 下载Docker Compose..."
+            if sudo curl --connect-timeout 30 --max-time 300 -SL "$mirror" -o $DOCKER_CONFIG/cli-plugins/docker-compose; then
+                download_success=true
+                info "Docker Compose下载成功"
+                break
+            else
+                warn "从 $mirror 下载失败，尝试下一个源..."
+                sleep 2
+            fi
+        done
+        
+        if [ "$download_success" = false ]; then
+            error "所有下载源都失败，请检查网络连接或手动下载Docker Compose"
+            exit 1
         fi
+        
+        sudo chmod +x $DOCKER_CONFIG/cli-plugins/docker-compose
+        info "成功安装Docker Compose v2插件"
     fi
     
     # 启动和启用Docker服务
@@ -2361,13 +2408,18 @@ install_docker() {
     if curl -fsSL https://get.docker.com -o get-docker.sh; then
         # 执行安装脚本
         if ! sh get-docker.sh; then
-            error "Docker官方脚本安装失败，当前系统可能不支持Docker"
-            error "请检查系统版本和架构，或手动安装Docker"
-            return 1
+            warning "请检查系统版本和架构，将回退到国内镜像源安装Docker..."
+            if ! install_docker_china; then
+                error "Docker官方脚本安装失败，当前系统可能不支持Docker"
+                exit 1
+            fi
         fi
     else
         warning "无法下载Docker官方安装脚本，将回退到国内镜像源安装Docker"
-        install_docker_china
+        if ! install_docker_china; then
+            error "Docker官方脚本安装失败，当前系统可能不支持Docker"
+            exit 1
+        fi
     fi
   fi
   
