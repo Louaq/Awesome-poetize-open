@@ -211,7 +211,7 @@ export default {
 
 <style scoped>
 .forbidden-container {
-  min-height: 100vh;
+  height: 100vh;
   background: linear-gradient(135deg, #ff4b2b, #ff416c, #dc2626, #b91c1c);
   background-size: 400% 400%;
   animation: warningGradient 8s ease infinite;
@@ -220,8 +220,8 @@ export default {
   align-items: center;
   justify-content: center;
   position: relative;
-  overflow: hidden;
-  padding: 20px;
+  overflow: auto;
+  padding: 10px;
   box-sizing: border-box;
 }
 
@@ -268,7 +268,7 @@ export default {
 
 /* 标题区域 */
 .title-section {
-  margin-bottom: 40px;
+  margin-bottom: 20px;
 }
 
 .shield-icon {
@@ -300,18 +300,18 @@ export default {
 }
 
 .main-title {
-  font-size: 3.5rem;
+  font-size: 2.8rem;
   font-weight: 800;
   color: white;
-  margin: 0 0 10px 0;
+  margin: 0 0 5px 0;
   text-shadow: 0 4px 20px rgba(0,0,0,0.4);
   letter-spacing: 2px;
 }
 
 .subtitle {
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   color: white;
-  margin: 0 0 10px 0;
+  margin: 0 0 5px 0;
   opacity: 0.9;
 }
 
@@ -325,9 +325,9 @@ export default {
 /* 3D插画区域 */
 .illustration-container {
   perspective: 1000px;
-  margin: 60px 0;
+  margin: 20px 0;
   position: relative;
-  height: 300px;
+  height: 200px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -341,8 +341,8 @@ export default {
 }
 
 .digit {
-  width: 80px;
-  height: 120px;
+  width: 60px;
+  height: 90px;
   position: relative;
   transform-style: preserve-3d;
   animation: digitFloat 4s ease-in-out infinite;
@@ -361,12 +361,12 @@ export default {
 
 .digit-face {
   position: absolute;
-  width: 80px;
-  height: 120px;
+  width: 60px;
+  height: 90px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 4rem;
+  font-size: 3rem;
   font-weight: bold;
   color: white;
   text-shadow: 0 2px 10px rgba(0,0,0,0.3);
@@ -493,7 +493,7 @@ export default {
 
 /* 警告信息区域 */
 .warning-section {
-  margin: 40px 0;
+  margin: 15px 0;
 }
 
 .warning-box {
@@ -501,10 +501,10 @@ export default {
   backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 15px;
-  padding: 30px;
+  padding: 20px;
   display: flex;
   align-items: flex-start;
-  gap: 20px;
+  gap: 15px;
   text-align: left;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
 }
@@ -548,14 +548,14 @@ export default {
 
 /* 操作按钮区域 */
 .action-section {
-  margin: 40px 0;
+  margin: 15px 0;
 }
 
 .button-group {
   display: flex;
-  gap: 20px;
+  gap: 15px;
   justify-content: center;
-  margin-bottom: 30px;
+  margin-bottom: 15px;
   flex-wrap: wrap;
 }
 
@@ -603,7 +603,7 @@ export default {
   background: rgba(0, 0, 0, 0.2);
   backdrop-filter: blur(10px);
   border-radius: 10px;
-  padding: 20px;
+  padding: 15px;
   text-align: left;
   max-width: 500px;
   margin: 0 auto;
@@ -631,7 +631,7 @@ export default {
   position: relative;
   z-index: 10;
   text-align: center;
-  margin-top: 30px;
+  margin-top: 10px;
 }
 
 .footer-hint p {
@@ -687,4 +687,4 @@ export default {
     width: 200px;
   }
 }
-</style> 
+</style>
