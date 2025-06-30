@@ -80,7 +80,7 @@
           <!-- 警告标志 -->
           <div class="decoration warning-1">⚠️</div>
           <div class="decoration warning-2">🔒</div>
-          <div class="decoration warning-3">�️</div>
+          <div class="decoration warning-3">🛡️</div>
           
           <!-- 安全扫描线 -->
           <div class="scan-line horizontal"></div>
