@@ -1,8 +1,8 @@
 #!/bin/bash
 ## 作者: LeapYa
-## 修改时间: 2025-06-28
+## 修改时间: 2025-06-30
 ## 描述: 部署 Poetize 博客系统安装脚本
-## 版本: 1.0.24
+## 版本: 1.0.25
 
 # 定义颜色
 RED='\033[0;31m'
@@ -383,120 +383,121 @@ is_china_environment() {
 detect_os_type() {
     if [ -f /etc/os-release ]; then
         . /etc/os-release
-        
+        local id_lower=$(echo "$ID" | tr '[:upper:]' '[:lower:]')
         # Ubuntu
-        if [[ "$ID" == "ubuntu" ]]; then
+        if [[ "$id_lower" == "ubuntu" ]]; then
             echo "ubuntu"
             return 0
         fi
         
         # Debian
-        if [[ "$ID" == "debian" ]]; then
+        if [[ "$id_lower" == "debian" ]]; then
             echo "debian"
             return 0
         fi
         
         # CentOS Stream
-        if [[ "$ID" == "centos" && "$VARIANT_ID" == "stream" ]]; then
+        if [[ "$id_lower" == "centos" && "$VARIANT_ID" == "stream" ]]; then
+
             echo "centos-stream"
             return 0
         fi
         
         # CentOS
-        if [[ "$ID" == "centos" ]]; then
+        if [[ "$id_lower" == "centos" ]]; then
             if [[ "$VERSION_ID" =~ ^7 ]]; then
                 echo "centos7"
             else
-                echo "centos8"
+                echo "centos7"
             fi
             return 0
         fi
         
         # Red Hat Enterprise Linux
-        if [[ "$ID" == "rhel" ]]; then
+        if [[ "$id_lower" == "rhel" ]]; then
             echo "rhel"
             return 0
         fi
         
         # Rocky Linux
-        if [[ "$ID" == "rocky" ]]; then
+        if [[ "$id_lower" == "rocky" ]]; then
             echo "rocky"
             return 0
         fi
         
         # AlmaLinux
-        if [[ "$ID" == "almalinux" ]]; then
+        if [[ "$id_lower" == "almalinux" ]]; then
             echo "almalinux"
             return 0
         fi
         
         # Amazon Linux
-        if [[ "$ID" == "amzn" ]]; then
+        if [[ "$id_lower" == "amzn" ]]; then
             echo "amazon"
             return 0
         fi
         
         # Oracle Linux
-        if [[ "$ID" == "ol" ]]; then
+        if [[ "$id_lower" == "ol" ]]; then
             echo "oracle"
             return 0
         fi
         
         # Fedora
-        if [[ "$ID" == "fedora" ]]; then
+        if [[ "$id_lower" == "fedora" ]]; then
             echo "fedora"
             return 0
         fi
 
         # openSUSE
-        if [[ "$ID" == "opensuse-leap" || "$ID" == "sles" || "$ID" == "opensuse-tumbleweed" ]]; then
+        if [[ "$id_lower" == "opensuse-leap" || "$id_lower" == "sles" || "$id_lower" == "opensuse-tumbleweed" ]]; then
             echo "opensuse"
             return 0
         fi
         
         # Arch Linux
-        if [[ "$ID" == "arch" ]]; then
+        if [[ "$id_lower" == "arch" ]]; then
             echo "arch"
             return 0
         fi
         
         # Alpine Linux
-        if [[ "$ID" == "alpine" ]]; then
+        if [[ "$id_lower" == "alpine" ]]; then
             echo "alpine"
             return 0
         fi
         
         # 龙蜥OS
-        if [[ "$ID" == "anolis" ]]; then
+        if [[ "$id_lower" == "anolis" ]]; then
             echo "anolis"
             return 0
         fi
         
         # 阿里云Linux (Alibaba Cloud Linux)
-        if [[ "$ID" == "alinux" || "$ID" == "alibaba" || "$ID" == "alios" ]]; then
+        if [[ "$id_lower" == "alinux" || "$id_lower" == "alibaba" || "$id_lower" == "alios" ]]; then
             echo "alinux"
             return 0
         fi
         # 麒麟 / 银河麒麟
-        if [[ "$ID" == "kylin" ]]; then
+        if [[ "$id_lower" == "kylin" ]]; then
             echo "kylin"
             return 0
         fi
 
         # 统信 UOS / Deepin
-        if [[ "$ID" == "uos" || "$ID" == "deepin" ]]; then
+        if [[ "$id_lower" == "uos" || "$id_lower" == "deepin" ]]; then
             echo "deepin"
             return 0
         fi
 
-        # openEuler / EulerOS
-        if [[ "$ID" == "openeuler" || "$ID" == "euleros" ]]; then
+        # openEuler / EulerOS (转换为小写进行比较)
+        if [[ "$id_lower" == "openeuler" || "$id_lower" == "euleros" ]]; then
             echo "openeuler"
             return 0
         fi
 
         # NeoKylin
-        if [[ "$ID" == "neokylin" ]]; then
+        if [[ "$id_lower" == "neokylin" ]]; then
             echo "centos7"
             return 0
         fi
@@ -519,6 +520,15 @@ detect_os_type() {
     elif command -v apk &>/dev/null; then
         echo "alpine"
     elif command -v yum &>/dev/null || command -v dnf &>/dev/null; then
+        # 检查是否为openEuler系统（防止被误识别为CentOS）
+         if [ -f /etc/os-release ]; then
+             local os_id=$(grep '^ID=' /etc/os-release | cut -d'=' -f2 | tr -d '"' | tr '[:upper:]' '[:lower:]')
+             if [[ "$os_id" == "openeuler" || "$os_id" == "euleros" ]]; then
+                 echo "openeuler"
+                 return 0
+             fi
+         fi
+        
         if [ -f /etc/redhat-release ]; then
             if grep -q "release 7" /etc/redhat-release; then
                 echo "centos7"
@@ -1018,23 +1028,35 @@ install_docker_china_alinux() {
     if [ "$docker_repo_added" = false ] || ! command -v docker &>/dev/null; then
         warning "Docker CE源不可用，使用阿里云Linux系统仓库..."
         if [ "$pkg_manager" = "dnf" ]; then
-            if sudo dnf install -y docker docker-compose; then
+            if sudo dnf install -y docker; then
                 success "成功安装系统仓库Docker版本"
                 DOCKER_SOURCE="阿里云Linux系统仓库"
+                
+                # 尝试安装Docker Compose v2插件
+                if sudo dnf install -y docker-compose-plugin 2>/dev/null; then
+                    info "成功安装Docker Compose v2插件"
+                else
+                    warning "Docker Compose v2插件安装失败，将使用docker compose子命令"
+                fi
             else
                 error "所有Docker安装方式都失败"
                 return 1
             fi
         else
             if sudo yum install -y docker; then
-                # 阿里云Linux 2可能需要单独安装docker-compose
-                if ! sudo yum install -y docker-compose 2>/dev/null; then
-                    warning "系统仓库中没有docker-compose，将使用pip安装..."
-                    sudo yum install -y python3-pip
-                    sudo pip3 install docker-compose
-                fi
                 success "成功安装系统仓库Docker版本"
                 DOCKER_SOURCE="阿里云Linux系统仓库"
+                
+                # 尝试安装Docker Compose v2插件
+                if ! sudo yum install -y docker-compose-plugin 2>/dev/null; then
+                    warning "系统仓库中没有docker-compose-plugin，将使用pip安装Docker Compose v2..."
+                    sudo yum install -y python3-pip
+                    # 安装最新的docker-compose v2
+                    sudo pip3 install docker-compose
+                    info "通过pip安装了Docker Compose（建议使用docker compose命令）"
+                else
+                    info "成功安装Docker Compose v2插件"
+                fi
             else
                 error "所有Docker安装方式都失败"
                 return 1
@@ -1080,8 +1102,12 @@ install_docker_china_arch() {
     # 更新包数据库
     sudo pacman -Sy --quiet
                         
-    # 安装Docker
-    sudo pacman -S --noconfirm --quiet docker docker-compose
+    # 安装Docker和Docker Compose v2插件
+    if ! sudo pacman -S --noconfirm --quiet docker docker-compose-plugin; then
+        warn "无法安装docker-compose-plugin，尝试安装传统docker-compose包"
+        sudo pacman -S --noconfirm --quiet docker docker-compose
+        warn "已安装传统docker-compose，建议使用 'docker compose' 子命令"
+    fi
     
     # 启动和启用Docker服务
     sudo systemctl start docker
@@ -1098,8 +1124,12 @@ install_docker_china_alpine() {
     # 更新包索引
     sudo apk update -q
                 
-    # 安装Docker
-    sudo apk add -q docker docker-compose
+    # 安装Docker和Docker Compose v2插件
+    if ! sudo apk add -q docker docker-compose-plugin; then
+        warn "无法安装docker-compose-plugin，尝试安装传统docker-compose包"
+        sudo apk add -q docker docker-compose
+        warn "已安装传统docker-compose，建议使用 'docker compose' 子命令"
+    fi
                 
     # 启动Docker服务
     sudo rc-update add docker boot
@@ -1113,8 +1143,12 @@ install_docker_china_alpine() {
 install_docker_china_opensuse() {
     info "在openSUSE系统安装Docker..."
     
-    # 安装Docker
-    sudo zypper install -y docker docker-compose
+    # 安装Docker和Docker Compose v2插件
+    if ! sudo zypper install -y docker docker-compose-plugin; then
+        warn "无法安装docker-compose-plugin，尝试安装传统docker-compose包"
+        sudo zypper install -y docker docker-compose
+        warn "已安装传统docker-compose，建议使用 'docker compose' 子命令"
+    fi
     
     # 启动Docker服务
     sudo systemctl start docker
@@ -1126,7 +1160,7 @@ install_docker_china_opensuse() {
 
 # openEuler系统安装Docker
 install_docker_china_openeuler() {
-    info "在openEuler系统安装Docker (使用 $DOCKER_MIRROR_SOURCE 镜像源)..."
+    info "在openEuler系统安装Docker..."
     
     # 移除可能存在的旧版本Docker
     sudo dnf remove -y -q docker docker-client docker-client-latest docker-common docker-latest docker-latest-logrotate docker-logrotate docker-engine podman buildah 2>/dev/null || true
@@ -1135,34 +1169,26 @@ install_docker_china_openeuler() {
     info "安装必要的依赖包..."
     sudo dnf install -y -q dnf-utils device-mapper-persistent-data lvm2
     
-    # 尝试使用Docker CE源（优先）
-    info "尝试添加Docker CE软件源..."
-    if sudo dnf config-manager --add-repo "https://$DOCKER_MIRROR_SOURCE/linux/centos/docker-ce.repo" 2>/dev/null; then
-        info "正在安装Docker CE..."
-        if sudo dnf install -y -q docker-ce docker-ce-cli containerd.io docker-compose-plugin; then
-            success "成功安装Docker CE版本"
-            DOCKER_SOURCE="Docker CE"
+    # openEuler系统直接使用系统仓库安装Docker（推荐方式）
+    info "使用openEuler系统仓库安装Docker..."
+    if sudo dnf install -y docker; then
+        success "成功安装openEuler系统仓库Docker版本"
+        DOCKER_SOURCE="openEuler系统仓库"
+        
+        # 尝试安装Docker Compose v2插件
+        if sudo dnf install -y docker-compose-plugin 2>/dev/null; then
+            info "成功安装Docker Compose v2插件"
         else
-            warning "Docker CE安装失败，尝试使用系统仓库版本..."
-            # 清理失败的源
-            sudo rm -f /etc/yum.repos.d/docker-ce.repo 2>/dev/null || true
-            
-            # 使用openEuler系统仓库
-            if sudo dnf install -y docker docker-compose; then
-                success "成功安装系统仓库Docker版本"
-                DOCKER_SOURCE="openEuler系统仓库"
-            else
-                error "所有Docker安装方式都失败"
-                return 1
-            fi
+            warning "Docker Compose v2插件安装失败，将使用docker compose子命令"
         fi
     else
-        warning "无法添加Docker CE源，使用openEuler系统仓库..."
-        if sudo dnf install -y docker docker-compose; then
-            success "成功安装系统仓库Docker版本"
-            DOCKER_SOURCE="openEuler系统仓库"
+        # 如果系统仓库失败，尝试安装docker-ce（使用华为云源）
+        warning "系统仓库安装失败，尝试安装Docker CE..."
+        if sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin; then
+            success "成功安装Docker CE版本（包含Compose v2插件）"
+            DOCKER_SOURCE="Docker CE"
         else
-            error "Docker安装失败"
+            error "所有Docker安装方式都失败"
             return 1
         fi
     fi
@@ -1208,10 +1234,22 @@ install_docker_china_deepin() {
     # 移除可能存在的旧版本Docker
     sudo apt-get remove -y docker docker-engine docker.io containerd runc 2>/dev/null || true
     
-    # 安装Docker.io和docker-compose（使用系统仓库中的版本）
-    info "安装docker.io和docker-compose..."
-    if sudo apt-get install -y docker.io docker-compose; then
-        success "Docker和Docker Compose安装成功"
+    # 安装Docker.io和docker-compose-plugin（使用系统仓库中的版本）
+    info "安装docker.io和docker-compose-plugin..."
+    if sudo apt-get install -y docker.io; then
+        success "Docker安装成功"
+        
+        # 尝试安装Docker Compose v2插件
+        if sudo apt-get install -y docker-compose-plugin 2>/dev/null; then
+            info "成功安装Docker Compose v2插件"
+        else
+            warning "Docker Compose v2插件安装失败，尝试安装传统docker-compose包..."
+            if sudo apt-get install -y docker-compose 2>/dev/null; then
+                info "安装了传统docker-compose包（建议使用docker compose命令）"
+            else
+                warning "Docker Compose安装失败，将使用docker compose子命令"
+            fi
+        fi
     else
         error "Docker安装失败"
         return 1
@@ -1222,7 +1260,7 @@ install_docker_china_deepin() {
     sudo systemctl enable docker
     
     # 验证安装
-    if command -v docker &>/dev/null && command -v docker-compose &>/dev/null; then
+    if command -v docker &>/dev/null; then
         success "Deepin Docker安装完成"
         
         # 显示版本信息
@@ -1263,9 +1301,16 @@ install_docker_china_centos_stream() {
             sudo rm -f /etc/yum.repos.d/docker-ce.repo 2>/dev/null || true
             
             # 使用CentOS Stream系统仓库
-            if sudo dnf install -y docker docker-compose; then
+            if sudo dnf install -y docker; then
                 success "成功安装系统仓库Docker版本"
                 DOCKER_SOURCE="CentOS Stream系统仓库"
+                
+                # 尝试安装Docker Compose v2插件
+                if sudo dnf install -y docker-compose-plugin 2>/dev/null; then
+                    info "成功安装Docker Compose v2插件"
+                else
+                    warning "Docker Compose v2插件安装失败，将使用docker compose子命令"
+                fi
             else
                 error "所有Docker安装方式都失败"
                 return 1
@@ -1273,9 +1318,16 @@ install_docker_china_centos_stream() {
         fi
     else
         warning "无法添加Docker CE源，使用CentOS Stream系统仓库..."
-        if sudo dnf install -y docker docker-compose; then
+        if sudo dnf install -y docker; then
             success "成功安装系统仓库Docker版本"
             DOCKER_SOURCE="CentOS Stream系统仓库"
+            
+            # 尝试安装Docker Compose v2插件
+            if sudo dnf install -y docker-compose-plugin 2>/dev/null; then
+                info "成功安装Docker Compose v2插件"
+            else
+                warning "Docker Compose v2插件安装失败，将使用docker compose子命令"
+            fi
         else
             error "Docker安装失败"
             return 1
@@ -1425,9 +1477,16 @@ install_docker_china_rocky() {
             sudo rm -f /etc/yum.repos.d/docker-ce.repo 2>/dev/null || true
             
             # 使用Rocky Linux系统仓库
-            if sudo dnf install -y docker docker-compose; then
+            if sudo dnf install -y docker; then
                 success "成功安装系统仓库Docker版本"
                 DOCKER_SOURCE="Rocky Linux系统仓库"
+                
+                # 尝试安装Docker Compose v2插件
+                if sudo dnf install -y docker-compose-plugin 2>/dev/null; then
+                    info "成功安装Docker Compose v2插件"
+                else
+                    warning "Docker Compose v2插件安装失败，将使用docker compose子命令"
+                fi
             else
                 error "所有Docker安装方式都失败"
                 return 1
@@ -1435,9 +1494,16 @@ install_docker_china_rocky() {
         fi
     else
         warning "无法添加Docker CE源，使用Rocky Linux系统仓库..."
-        if sudo dnf install -y docker docker-compose; then
+        if sudo dnf install -y docker; then
             success "成功安装系统仓库Docker版本"
             DOCKER_SOURCE="Rocky Linux系统仓库"
+            
+            # 尝试安装Docker Compose v2插件
+            if sudo dnf install -y docker-compose-plugin 2>/dev/null; then
+                info "成功安装Docker Compose v2插件"
+            else
+                warning "Docker Compose v2插件安装失败，将使用docker compose子命令"
+            fi
         else
             error "Docker安装失败"
             return 1
@@ -1499,9 +1565,16 @@ install_docker_china_almalinux() {
             sudo rm -f /etc/yum.repos.d/docker-ce.repo 2>/dev/null || true
             
             # 使用AlmaLinux系统仓库
-            if sudo dnf install -y docker docker-compose; then
+            if sudo dnf install -y docker; then
                 success "成功安装系统仓库Docker版本"
                 DOCKER_SOURCE="AlmaLinux系统仓库"
+                
+                # 尝试安装Docker Compose v2插件
+                if sudo dnf install -y docker-compose-plugin 2>/dev/null; then
+                    info "成功安装Docker Compose v2插件"
+                else
+                    warning "Docker Compose v2插件安装失败，将使用docker compose子命令"
+                fi
             else
                 error "所有Docker安装方式都失败"
                 return 1
@@ -1509,9 +1582,16 @@ install_docker_china_almalinux() {
         fi
     else
         warning "无法添加Docker CE源，使用AlmaLinux系统仓库..."
-        if sudo dnf install -y docker docker-compose; then
+        if sudo dnf install -y docker; then
             success "成功安装系统仓库Docker版本"
             DOCKER_SOURCE="AlmaLinux系统仓库"
+            
+            # 尝试安装Docker Compose v2插件
+            if sudo dnf install -y docker-compose-plugin 2>/dev/null; then
+                info "成功安装Docker Compose v2插件"
+            else
+                warning "Docker Compose v2插件安装失败，将使用docker compose子命令"
+            fi
         else
             error "Docker安装失败"
             return 1
@@ -1565,14 +1645,26 @@ install_docker_china_amazon() {
     # 安装Docker（Amazon Linux有自己的Docker包）
     info "使用Amazon Linux系统仓库安装Docker..."
     if [ "$pkg_manager" = "dnf" ]; then
-        sudo dnf install -y docker docker-compose
+        sudo dnf install -y docker
+        
+        # 尝试安装Docker Compose v2插件
+        if sudo dnf install -y docker-compose-plugin 2>/dev/null; then
+            info "成功安装Docker Compose v2插件"
+        else
+            warning "Docker Compose v2插件安装失败，将使用docker compose子命令"
+        fi
     else
         sudo yum install -y docker
-        # Amazon Linux 2可能需要单独安装docker-compose
-        if ! sudo yum install -y docker-compose 2>/dev/null; then
-            warning "系统仓库中没有docker-compose，将使用pip安装..."
+        
+        # 尝试安装Docker Compose v2插件
+        if ! sudo yum install -y docker-compose-plugin 2>/dev/null; then
+            warning "系统仓库中没有docker-compose-plugin，将使用pip安装Docker Compose v2..."
             sudo yum install -y python3-pip
+            # 安装最新的docker-compose v2
             sudo pip3 install docker-compose
+            info "通过pip安装了Docker Compose（建议使用docker compose命令）"
+        else
+            info "成功安装Docker Compose v2插件"
         fi
     fi
     
@@ -1631,9 +1723,16 @@ install_docker_china_oracle() {
             sudo rm -f /etc/yum.repos.d/docker-ce.repo 2>/dev/null || true
             
             # Oracle Linux通常推荐使用podman，但也可能有docker
-            if sudo dnf install -y docker docker-compose; then
+            if sudo dnf install -y docker; then
                 success "成功安装系统仓库Docker版本"
                 DOCKER_SOURCE="Oracle Linux系统仓库"
+                
+                # 尝试安装Docker Compose v2插件
+                if sudo dnf install -y docker-compose-plugin 2>/dev/null; then
+                    info "成功安装Docker Compose v2插件"
+                else
+                    warning "Docker Compose v2插件安装失败，将使用docker compose子命令"
+                fi
             else
                 error "所有Docker安装方式都失败"
                 return 1
@@ -1641,9 +1740,16 @@ install_docker_china_oracle() {
         fi
     else
         warning "无法添加Docker CE源，使用Oracle Linux系统仓库..."
-        if sudo dnf install -y docker docker-compose; then
+        if sudo dnf install -y docker; then
             success "成功安装系统仓库Docker版本"
             DOCKER_SOURCE="Oracle Linux系统仓库"
+            
+            # 尝试安装Docker Compose v2插件
+            if sudo dnf install -y docker-compose-plugin 2>/dev/null; then
+                info "成功安装Docker Compose v2插件"
+            else
+                warning "Docker Compose v2插件安装失败，将使用docker compose子命令"
+            fi
         else
             error "Docker安装失败"
             return 1
@@ -1705,9 +1811,16 @@ install_docker_china_fedora() {
             sudo rm -f /etc/yum.repos.d/docker-ce.repo 2>/dev/null || true
             
             # Fedora系统仓库中通常有docker包
-            if sudo dnf install -y docker docker-compose; then
+            if sudo dnf install -y docker; then
                 success "成功安装系统仓库Docker版本"
                 DOCKER_SOURCE="Fedora系统仓库"
+                
+                # 尝试安装Docker Compose v2插件
+                if sudo dnf install -y docker-compose-plugin 2>/dev/null; then
+                    info "成功安装Docker Compose v2插件"
+                else
+                    warning "Docker Compose v2插件安装失败，将使用docker compose子命令"
+                fi
             else
                 error "所有Docker安装方式都失败"
                 return 1
@@ -1722,8 +1835,15 @@ install_docker_china_fedora() {
             else
                 warning "CentOS兼容源安装失败，使用Fedora系统仓库..."
                 sudo rm -f /etc/yum.repos.d/docker-ce.repo 2>/dev/null || true
-                if sudo dnf install -y docker docker-compose; then
+                if sudo dnf install -y docker; then
                     success "成功安装系统仓库Docker版本"
+                    
+                    # 尝试安装Docker Compose v2插件
+                    if sudo dnf install -y docker-compose-plugin 2>/dev/null; then
+                        info "成功安装Docker Compose v2插件"
+                    else
+                        warning "Docker Compose v2插件安装失败，将使用docker compose子命令"
+                    fi
                     DOCKER_SOURCE="Fedora系统仓库"
                 else
                     error "Docker安装失败"
@@ -1786,9 +1906,21 @@ install_docker_china_kylin() {
         DOCKER_SOURCE="Docker CE"
     else
         warning "Docker CE安装失败，尝试安装系统仓库版本..."
-        if sudo apt-get install -y docker.io docker-compose; then
+        if sudo apt-get install -y docker.io; then
             success "成功安装系统仓库Docker版本"
             DOCKER_SOURCE="系统仓库"
+            
+            # 尝试安装Docker Compose v2插件
+            if sudo apt-get install -y docker-compose-plugin 2>/dev/null; then
+                info "成功安装Docker Compose v2插件"
+            else
+                warning "Docker Compose v2插件安装失败，尝试安装传统docker-compose包..."
+                if sudo apt-get install -y docker-compose 2>/dev/null; then
+                    info "安装了传统docker-compose包（建议使用docker compose命令）"
+                else
+                    warning "Docker Compose安装失败，将使用docker compose子命令"
+                fi
+            fi
         else
             error "所有Docker安装方式都失败"
             return 1
@@ -4603,83 +4735,79 @@ EOF
 
 # openEuler系统源配置函数
 update_openeuler_base_source() {
-  # openEuler系统使用特定的镜像源
-  local openeuler_repo_dir="/etc/yum.repos.d"
+  info "openEuler无需配置国内源，默认使用官方源"
+  info "为openEuler系统配置docker ce源"
   
-  if [ -d "$openeuler_repo_dir" ]; then
-    # 备份原始源配置
-    sudo mkdir -p "${openeuler_repo_dir}/backup.$(date +%Y%m%d_%H%M%S)" 2>/dev/null || true
-    sudo cp -r "${openeuler_repo_dir}"/*.repo "${openeuler_repo_dir}/backup.$(date +%Y%m%d_%H%M%S)/" 2>/dev/null || true
-    
-    # 获取openEuler版本信息
-    local version_id=""
-    if [ -f /etc/os-release ]; then
-      version_id=$(grep '^VERSION_ID=' /etc/os-release | cut -d= -f2 | tr -d '"' 2>/dev/null)
-    fi
-    
-    # 如果没找到版本信息，使用默认值
-    if [ -z "$version_id" ]; then
-      version_id="22.03"
-      warning "无法检测openEuler版本，使用默认版本: $version_id"
-    fi
-    
-    info "为openEuler系统配置国内镜像源，版本: $version_id"
-    
-    # 创建openEuler清华镜像源配置
-    cat <<EOF | sudo tee "${openeuler_repo_dir}/openEuler.repo" > /dev/null
-# openEuler官方源 - 清华大学镜像
-[OS]
-name=OS
-baseurl=https://mirrors.tuna.tsinghua.edu.cn/openeuler/openEuler-${version_id}/OS/\$basearch/
+  # 覆盖写入Docker CE源配置
+  sudo tee /etc/yum.repos.d/docker-ce.repo > /dev/null <<EOF
+[docker-ce-stable]
+name=Docker CE Stable - \$basearch
+baseurl=https://repo.huaweicloud.com/docker-ce/linux/centos/8/\$basearch/stable
 enabled=1
 gpgcheck=1
-gpgkey=https://mirrors.tuna.tsinghua.edu.cn/openeuler/openEuler-${version_id}/OS/\$basearch/RPM-GPG-KEY-openEuler
+gpgkey=https://repo.huaweicloud.com/docker-ce/linux/centos/gpg
 
-[everything]
-name=everything
-baseurl=https://mirrors.tuna.tsinghua.edu.cn/openeuler/openEuler-${version_id}/everything/\$basearch/
-enabled=1
-gpgcheck=1
-gpgkey=https://mirrors.tuna.tsinghua.edu.cn/openeuler/openEuler-${version_id}/everything/\$basearch/RPM-GPG-KEY-openEuler
-
-[EPOL]
-name=EPOL
-baseurl=https://mirrors.tuna.tsinghua.edu.cn/openeuler/openEuler-${version_id}/EPOL/main/\$basearch/
-enabled=1
-gpgcheck=1
-gpgkey=https://mirrors.tuna.tsinghua.edu.cn/openeuler/openEuler-${version_id}/OS/\$basearch/RPM-GPG-KEY-openEuler
-
-[debuginfo]
-name=debuginfo
-baseurl=https://mirrors.tuna.tsinghua.edu.cn/openeuler/openEuler-${version_id}/debuginfo/\$basearch/
+[docker-ce-stable-debuginfo]
+name=Docker CE Stable - Debuginfo \$basearch
+baseurl=https://repo.huaweicloud.com/docker-ce/linux/centos/8/debug-\$basearch/stable
 enabled=0
 gpgcheck=1
-gpgkey=https://mirrors.tuna.tsinghua.edu.cn/openeuler/openEuler-${version_id}/debuginfo/\$basearch/RPM-GPG-KEY-openEuler
+gpgkey=https://repo.huaweicloud.com/docker-ce/linux/centos/gpg
 
-[source]
-name=source
-baseurl=https://mirrors.tuna.tsinghua.edu.cn/openeuler/openEuler-${version_id}/source/
+[docker-ce-stable-source]
+name=Docker CE Stable - Sources
+baseurl=https://repo.huaweicloud.com/docker-ce/linux/centos/8/source/stable
 enabled=0
 gpgcheck=1
-gpgkey=https://mirrors.tuna.tsinghua.edu.cn/openeuler/openEuler-${version_id}/source/RPM-GPG-KEY-openEuler
+gpgkey=https://repo.huaweicloud.com/docker-ce/linux/centos/gpg
 
-[update]
-name=update
-baseurl=https://mirrors.tuna.tsinghua.edu.cn/openeuler/openEuler-${version_id}/update/\$basearch/
-enabled=1
+[docker-ce-test]
+name=Docker CE Test - \$basearch
+baseurl=https://repo.huaweicloud.com/docker-ce/linux/centos/8/\$basearch/test
+enabled=0
 gpgcheck=1
-gpgkey=https://mirrors.tuna.tsinghua.edu.cn/openeuler/openEuler-${version_id}/OS/\$basearch/RPM-GPG-KEY-openEuler
+gpgkey=https://repo.huaweicloud.com/docker-ce/linux/centos/gpg
+
+[docker-ce-test-debuginfo]
+name=Docker CE Test - Debuginfo \$basearch
+baseurl=https://repo.huaweicloud.com/docker-ce/linux/centos/8/debug-\$basearch/test
+enabled=0
+gpgcheck=1
+gpgkey=https://repo.huaweicloud.com/docker-ce/linux/centos/gpg
+
+[docker-ce-test-source]
+name=Docker CE Test - Sources
+baseurl=https://repo.huaweicloud.com/docker-ce/linux/centos/8/source/test
+enabled=0
+gpgcheck=1
+gpgkey=https://repo.huaweicloud.com/docker-ce/linux/centos/gpg
+
+[docker-ce-nightly]
+name=Docker CE Nightly - \$basearch
+baseurl=https://repo.huaweicloud.com/docker-ce/linux/centos/8/\$basearch/nightly
+enabled=0
+gpgcheck=1
+gpgkey=https://repo.huaweicloud.com/docker-ce/linux/centos/gpg
+
+[docker-ce-nightly-debuginfo]
+name=Docker CE Nightly - Debuginfo \$basearch
+baseurl=https://repo.huaweicloud.com/docker-ce/linux/centos/8/debug-\$basearch/nightly
+enabled=0
+gpgcheck=1
+gpgkey=https://repo.huaweicloud.com/docker-ce/linux/centos/gpg
+
+[docker-ce-nightly-source]
+name=Docker CE Nightly - Sources
+baseurl=https://repo.huaweicloud.com/docker-ce/linux/centos/8/source/nightly
+enabled=0
+gpgcheck=1
+gpgkey=https://repo.huaweicloud.com/docker-ce/linux/centos/gpg
 EOF
-    
-    # 更新仓库缓存
-    if sudo dnf clean all && sudo dnf makecache; then
-      success "openEuler系统源配置完成"
-      info "已配置清华大学镜像源，版本: $version_id"
-    else
-      warning "源配置完成但缓存更新失败，请手动执行: sudo dnf makecache"
-    fi
+  
+  if [ $? -eq 0 ]; then
+    info "Docker CE源配置成功"
   else
-    warning "未找到YUM配置目录: $openeuler_repo_dir，跳过换源"
+    error "Docker CE源配置失败"
   fi
 }
 
@@ -5274,4 +5402,4 @@ if [ "$RUN_IN_BACKGROUND" = true ]; then
 else
   # 正常运行模式
 main "$@" 
-fi 
+fi
