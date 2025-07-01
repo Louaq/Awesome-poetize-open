@@ -2,7 +2,7 @@
 ## 作者: LeapYa
 ## 修改时间: 2025-07-01
 ## 描述: 部署 Poetize 博客系统安装脚本
-## 版本: 1.0.27
+## 版本: 1.0.28
 
 # 定义颜色
 RED='\033[0;31m'
@@ -5315,27 +5315,27 @@ require_root_or_sudo() {
 main() {
   # 显示横幅
   echo ""
-  printf "${BLUE}╔═══════════════════════════════════════════════════════════════════════════╗${NC}\n"
-  printf "${BLUE}║                                                                           ║${NC}\n"
-  printf "${BLUE}║                              ${GREEN}P O E T I Z E${BLUE}                                ║${NC}\n"
-  printf "${BLUE}║                        ${YELLOW}* 优雅的博客与聊天平台 *${BLUE}                           ║${NC}\n"
-  printf "${BLUE}║                                                                           ║${NC}\n"
-  printf "${BLUE}╠═══════════════════════════════════════════════════════════════════════════╣${NC}\n"
-  printf "${BLUE}║                                                                           ║${NC}\n"
-  printf "${BLUE}║          ${GREEN}██████╗  ██████╗ ███████╗████████╗██╗███████╗███████╗${BLUE}            ║${NC}\n"
-  printf "${BLUE}║          ${GREEN}██╔══██╗██╔═══██╗██╔════╝╚══██╔══╝██║╚══███╔╝██╔════╝${BLUE}            ║${NC}\n"
-  printf "${BLUE}║          ${GREEN}██████╔╝██║   ██║█████╗     ██║   ██║  ███╔╝ █████╗${BLUE}              ║${NC}\n"
-  printf "${BLUE}║          ${GREEN}██╔═══╝ ██║   ██║██╔══╝     ██║   ██║ ███╔╝  ██╔══╝${BLUE}              ║${NC}\n"
-  printf "${BLUE}║          ${GREEN}██║     ╚██████╔╝███████╗   ██║   ██║███████╗███████╗${BLUE}            ║${NC}\n"
-  printf "${BLUE}║          ${GREEN}╚═╝      ╚═════╝ ╚══════╝   ╚═╝   ╚═╝╚══════╝╚══════╝${BLUE}            ║${NC}\n"
-  printf "${BLUE}║                                                                           ║${NC}\n"
-  printf "${BLUE}╠═══════════════════════════════════════════════════════════════════════════╣${NC}\n"
-  printf "${BLUE}║                                                                           ║${NC}\n"
-  printf "${BLUE}║           ${YELLOW}* 作者: ${GREEN}LeapYa${BLUE}                                                  ║${NC}\n"
-  printf "${BLUE}║           ${YELLOW}* 邮箱: ${GREEN}enable_lazy@qq.com${BLUE}                                      ║${NC}\n"
-  printf "${BLUE}║           ${YELLOW}* 仓库: ${GREEN}https://github.com/LeapYa/Awesome-poetize-open${BLUE}          ║${NC}\n"
-  printf "${BLUE}║                                                                           ║${NC}\n"
-  printf "${BLUE}╚═══════════════════════════════════════════════════════════════════════════╝${NC}\n"
+  printf "${BLUE}╔═══════════════════════════════════════════════════════════════════════╗${NC}\n"
+  printf "${BLUE}║                                                                       ║${NC}\n"
+  printf "${BLUE}║                            ${GREEN}P O E T I Z E${BLUE}                              ║${NC}\n"
+  printf "${BLUE}║                      ${YELLOW}* 优雅的博客与聊天平台 *${BLUE}                         ║${NC}\n"
+  printf "${BLUE}║                                                                       ║${NC}\n"
+  printf "${BLUE}╠═══════════════════════════════════════════════════════════════════════╣${NC}\n"
+  printf "${BLUE}║                                                                       ║${NC}\n"
+  printf "${BLUE}║        ${GREEN}██████╗  ██████╗ ███████╗████████╗██╗███████╗███████╗${BLUE}          ║${NC}\n"
+  printf "${BLUE}║        ${GREEN}██╔══██╗██╔═══██╗██╔════╝╚══██╔══╝██║╚══███╔╝██╔════╝${BLUE}          ║${NC}\n"
+  printf "${BLUE}║        ${GREEN}██████╔╝██║   ██║█████╗     ██║   ██║  ███╔╝ █████╗${BLUE}            ║${NC}\n"
+  printf "${BLUE}║        ${GREEN}██╔═══╝ ██║   ██║██╔══╝     ██║   ██║ ███╔╝  ██╔══╝${BLUE}            ║${NC}\n"
+  printf "${BLUE}║        ${GREEN}██║     ╚██████╔╝███████╗   ██║   ██║███████╗███████╗${BLUE}          ║${NC}\n"
+  printf "${BLUE}║        ${GREEN}╚═╝      ╚═════╝ ╚══════╝   ╚═╝   ╚═╝╚══════╝╚══════╝${BLUE}          ║${NC}\n"
+  printf "${BLUE}║                                                                       ║${NC}\n"
+  printf "${BLUE}╠═══════════════════════════════════════════════════════════════════════╣${NC}\n"
+  printf "${BLUE}║                                                                       ║${NC}\n"
+  printf "${BLUE}║         ${YELLOW}* 作者: ${GREEN}LeapYa${BLUE}                                                ║${NC}\n"
+  printf "${BLUE}║         ${YELLOW}* 邮箱: ${GREEN}enable_lazy@qq.com${BLUE}                                    ║${NC}\n"
+  printf "${BLUE}║         ${YELLOW}* 仓库: ${GREEN}https://github.com/LeapYa/Awesome-poetize-open${BLUE}        ║${NC}\n"
+  printf "${BLUE}║                                                                       ║${NC}\n"
+  printf "${BLUE}╚═══════════════════════════════════════════════════════════════════════╝${NC}\n"
   
   echo -e "${YELLOW}✨ 正在初始化部署环境...${NC}"
   sleep 3

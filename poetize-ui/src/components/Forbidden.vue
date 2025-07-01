@@ -104,7 +104,7 @@
               </div>
               <div class="info-item">
                 <i class="fa fa-map-marker"></i>
-                <span>访问IP：{{ userIP || '获取中...' }}</span>
+                <span>访问IP：{{ userIP }}</span>
               </div>
               <div class="info-item">
                 <i class="fa fa-shield"></i>
@@ -159,6 +159,7 @@ export default {
     }
   },
   mounted() {
+    console.log('Forbidden组件已挂载，开始获取IP和时间');
     // 获取用户IP和服务器时间
     this.getUserIPAndTime();
     
@@ -173,6 +174,7 @@ export default {
       try {
         // 通过API获取用户真实IP地址和时间戳
         const res = await this.$http.get(this.$constant.baseURL + "/webInfo/getUserIP");
+        console.log('API响应:', res.data); // 添加调试日志
         if (res.data && res.data.code === 200 && res.data.data) {
           this.userIP = res.data.data.ip || '无法获取';
           if (res.data.data.timestamp) {
@@ -180,7 +182,11 @@ export default {
           } else {
             this.currentTime = new Date().toLocaleString('zh-CN');
           }
+          console.log('设置成功 - IP:', this.userIP, '时间:', this.currentTime); // 添加调试日志
+          // 强制更新视图
+          this.$forceUpdate();
         } else {
+          console.log('API响应格式错误:', res.data);
           this.userIP = '无法获取';
           this.currentTime = '无法获取';
         }

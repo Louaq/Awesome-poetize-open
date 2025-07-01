@@ -20,6 +20,52 @@ function safeExec(fn, defaultValue) {
   }
 }
 
+// 动态添加preload标签的函数
+function addLive2DPreload() {
+  const live2dResources = [
+    { href: live2d_path + "live2d.min.js", as: "script" },
+    { href: live2d_path + "waifu.css", as: "style" },
+    { href: constant.cdnPath + "model_list.json", as: "fetch", crossorigin: "anonymous", fallback: "/static/live2d_api/model_list.json" }
+  ];
+  
+  live2dResources.forEach(resource => {
+    // 检查是否已经存在相同的preload标签
+    const existingPreload = document.querySelector(`link[rel="preload"][href="${resource.href}"]`);
+    if (!existingPreload) {
+      const link = document.createElement('link');
+      link.rel = 'preload';
+      link.href = resource.href;
+      link.as = resource.as;
+      if (resource.crossorigin) {
+        link.crossOrigin = resource.crossorigin;
+      }
+      
+      // 为model_list.json添加容错机制
+      if (resource.fallback) {
+        link.addEventListener('error', () => {
+          console.warn(`预加载失败，尝试使用备用路径: ${resource.fallback}`);
+          // 移除失败的preload标签
+          if (link.parentNode) {
+            link.parentNode.removeChild(link);
+          }
+          // 创建新的preload标签使用备用路径
+          const fallbackLink = document.createElement('link');
+          fallbackLink.rel = 'preload';
+          fallbackLink.href = resource.fallback;
+          fallbackLink.as = resource.as;
+          if (resource.crossorigin) {
+            fallbackLink.crossOrigin = resource.crossorigin;
+          }
+          document.head.appendChild(fallbackLink);
+        });
+      }
+      
+      document.head.appendChild(link);
+      console.log(`动态添加preload: ${resource.href}`);
+    }
+  });
+}
+
 // 检查是否启用看板娘
 function shouldLoadLive2D() {
   // 屏幕尺寸过小不加载
@@ -41,6 +87,9 @@ function shouldLoadLive2D() {
 
 // 加载 waifu.css live2d.min.js
 if (shouldLoadLive2D()) {
+  // 动态添加preload标签以优化资源加载
+  addLive2DPreload();
+  
   Promise.all([
     loadExternalResource(live2d_path + "waifu.css", "css"),
     loadExternalResource(live2d_path + "live2d.min.js", "js"),
