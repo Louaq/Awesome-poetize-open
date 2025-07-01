@@ -2,7 +2,7 @@
 ## 作者: LeapYa
 ## 修改时间: 2025-07-01
 ## 描述: Poetize 博客系统自动迁移脚本
-## 版本: 0.1.0
+## 版本: 0.1.1
 
 # 定义颜色
 RED='\033[0;31m'
@@ -264,7 +264,7 @@ pull_code_on_target() {
         fi
 
         # 进入项目目录
-        if [ -d $CURRENT_DIR ] then
+        if [ -d $CURRENT_DIR ]; then
             cd $CURRENT_DIR
         else
             mkdir -p $CURRENT_DIR
