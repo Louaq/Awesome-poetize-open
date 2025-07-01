@@ -2,7 +2,7 @@
 ## 作者: LeapYa
 ## 修改时间: 2025-07-01
 ## 描述: 部署 Poetize 博客系统安装脚本
-## 版本: 1.1.0
+## 版本: 1.1.1
 
 # 定义颜色
 RED='\033[0;31m'
@@ -2852,7 +2852,7 @@ start_services() {
   if [ -z "$SKIP_BUILD" ] && [ "$DISABLE_DOCKER_CACHE" = true ]; then
     # 如果需要构建且禁用缓存
     info "启动服务（已禁用Docker构建缓存）..."
-    DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 BUILDKIT_PROGRESS=plain \
+    DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 BUILDKIT_PROGRESS=auto \
     run_docker_compose up -d --build
   else
     # 使用离线镜像或正常构建
@@ -4025,7 +4025,10 @@ run_docker_compose() {
       compose_cmd=(sudo "${compose_cmd[@]}")
     fi
 
-    info "执行Docker Compose命令: ${compose_cmd[*]} $*"
+    # 只在调试模式下显示详细命令
+    if [ "${DEBUG:-false}" = "true" ]; then
+      info "执行Docker Compose命令: ${compose_cmd[*]} $*"
+    fi
 
     # shellcheck disable=SC2068
     "${compose_cmd[@]}" "$@"

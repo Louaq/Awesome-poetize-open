@@ -56,7 +56,7 @@ services:
                            npm cache clean --force && \
                            npm cache verify && \
                            echo '=== 安装依赖 ===' && \
-                           npm install --force --legacy-peer-deps --no-fund --no-audit --prefer-offline --verbose && \
+                           npm install --force --legacy-peer-deps --no-fund --no-audit --prefer-offline && \
                            echo '=== 安装Brotli压缩工具 ===' && \
                            (npm install -g brotli --no-fund --no-audit || echo '警告: brotli安装失败，将跳过.br文件生成') && \
                            echo '=== 运行构建 ===' && \
@@ -100,12 +100,12 @@ services:
                            echo '=== 安装依赖（使用npm ci确保精确安装） ===' && \
                            if [ -f package-lock.json ]; then \
                              echo '使用npm ci安装依赖' && \
-                             npm ci --prefer-offline --verbose --no-audit --no-fund || \
+                             npm ci --prefer-offline --no-audit --no-fund || \
                              (echo '使用npm ci失败，回退到npm install' && \
-                             npm install --prefer-offline --verbose --no-audit --no-fund --legacy-peer-deps); \
+                             npm install --prefer-offline --no-audit --no-fund --legacy-peer-deps); \
                            else \
                              echo '无package-lock.json，使用npm install' && \
-                             npm install --prefer-offline --verbose --no-audit --no-fund --legacy-peer-deps; \
+                             npm install --prefer-offline --no-audit --no-fund --legacy-peer-deps; \
                            fi && \
                            echo '=== 安装Brotli压缩工具 ===' && \
                            npm install -g brotli --no-fund --no-audit 2>/dev/null || echo '警告: brotli安装失败，将跳过.br文件生成' && \
