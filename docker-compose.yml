@@ -30,10 +30,10 @@ services:
         condition: service_completed_successfully
       poetize-im-ui:
         condition: service_completed_successfully
-      java-backend:
-        condition: service_healthy
-      python-backend:
-        condition: service_healthy
+      # java-backend:
+      #   condition: service_healthy
+      # python-backend:
+      #   condition: service_healthy
     restart: always
 
   # 主站前端（Vue 2）
@@ -90,9 +90,9 @@ services:
       - poetize_im_dist:/app/dist
     networks:
       - poetize-network
-    depends_on:
-      poetize-ui:
-        condition: service_completed_successfully
+    # depends_on:
+    #   poetize-ui:
+    #     condition: service_completed_successfully
     restart: "no"
     working_dir: /app/src
     command: ["sh", "-c", "echo '=== 构建聊天室前端 (Vue 3) ===' && \
