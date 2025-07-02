@@ -5393,6 +5393,9 @@ require_root_or_sudo() {
 
 # 主函数
 main() {
+  # 解析命令行参数
+  parse_arguments "$@"
+  
   # 显示横幅
   echo ""
   printf "${BLUE}╔═══════════════════════════════════════════════════════════════════╗${NC}\n"
@@ -5422,9 +5425,6 @@ main() {
 
   # 检查是否需要特权
   require_root_or_sudo
-
-  # 解析命令行参数
-  parse_arguments "$@"
 
   # 如果未设置域名和邮箱，则提示用户输入
   if [ -z "$PRIMARY_DOMAIN" ]; then
