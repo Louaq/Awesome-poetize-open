@@ -5397,8 +5397,6 @@ require_root_or_sudo() {
 
 # 主函数
 main() {
-  # 解析命令行参数
-  parse_arguments "$@"
 
   # 显示横幅
   echo ""
@@ -5764,7 +5762,10 @@ update_rocky_base_source() {
     info "Rocky Linux 源已成功更换为阿里云镜像。"
 }
 
-# 执行主函数
+# 解析参数
+parse_arguments "$@"
+
+# 检查是否需要后台运行
 if [ "$RUN_IN_BACKGROUND" = true ]; then
   # 后台运行模式
   echo "Poetize 部署脚本将在后台运行，日志输出到: $LOG_FILE"
@@ -5785,5 +5786,5 @@ if [ "$RUN_IN_BACKGROUND" = true ]; then
   exit 0
 else
   # 正常运行模式
-main "$@" 
+  main "$@" 
 fi
