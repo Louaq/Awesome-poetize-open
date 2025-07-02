@@ -73,10 +73,10 @@ RUN set -e; \
 # 复制所有Python服务代码
 COPY --chown=root:root ./py/ /app/
 
-RUN uv venv
-
-# 复制并安装Python依赖
+# 创建虚拟环境并安装Python依赖
 RUN UV_DEFAULT_INDEX=$(cat /tmp/pypi_index.txt) && \
+    uv venv && \
+    . .venv/bin/activate && \
     uv pip install --no-cache-dir --upgrade pip -i ${UV_DEFAULT_INDEX} && \
     uv pip install --no-cache-dir wheel -i ${UV_DEFAULT_INDEX} && \
     uv pip install --no-cache-dir -r requirements.txt -i ${UV_DEFAULT_INDEX} && \
@@ -97,4 +97,4 @@ RUN node --version && npm --version && npx --version && \
 EXPOSE 5000
 
 # 使用Uvicorn启动FastAPI应用
-CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5000", "--workers", "4"] 
+CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5000", "--workers", "4"]
