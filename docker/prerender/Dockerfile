@@ -2,6 +2,9 @@ FROM node:18-alpine
 
 WORKDIR /app
 
+# 安装curl用于健康检查
+RUN apk add --no-cache curl
+
 RUN npm config set registry https://registry.npmmirror.com
 
 # 安装依赖 puppeteer & express

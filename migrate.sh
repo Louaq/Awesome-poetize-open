@@ -2,7 +2,7 @@
 ## 作者: LeapYa
 ## 修改时间: 2025-07-02
 ## 描述: Poetize 博客系统自动迁移脚本
-## 版本: 0.3.1
+## 版本: 0.4.0
 
 # 定义颜色
 RED='\033[0;31m'
@@ -21,6 +21,7 @@ warning() { echo -e "${YELLOW}[警告]${NC} $1"; }
 TARGET_IP=""
 TARGET_USER=""
 TARGET_PASSWORD=""
+TARGET_SSH_KEY=""  # SSH私钥文件路径，如果设置则优先使用密钥认证
 TARGET_PORT="22"
 DB_ROOT_PASSWORD=""
 DB_USER_PASSWORD=""
@@ -28,6 +29,8 @@ BACKUP_DIR=""
 IS_CHINA_ENV=false
 CURRENT_DIR=$(dirname "$(pwd)")
 MIGRATE_PRERENDER="yes"  # 是否迁移预渲染文件，默认为yes
+MIGRATE_UPLOADS="yes"    # 是否迁移用户上传文件，默认为yes
+MIGRATE_IM_DIST="yes"    # 是否迁移聊天室前端文件，默认为yes
 
 # 断点续传和重试配置
 STATE_FILE=".migrate_state"
@@ -146,10 +149,39 @@ ssh_retry() {
     local use_sudo="${3:-false}"
     
     local full_cmd
-    if [ "$use_sudo" = "true" ] && [ "$TARGET_USER" != "root" ]; then
-        full_cmd="sshpass -p '$TARGET_PASSWORD' ssh -p $TARGET_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT -o ServerAliveInterval=60 '$TARGET_USER@$TARGET_IP' \"echo '$TARGET_PASSWORD' | sudo -S bash -c '$ssh_cmd'\""
+    local ssh_auth_options=""
+    
+    # 检查是否使用SSH密钥认证
+    if [ -n "$TARGET_SSH_KEY" ] && [ -f "$TARGET_SSH_KEY" ]; then
+        ssh_auth_options="-i '$TARGET_SSH_KEY'"
+        info "使用SSH密钥认证: $TARGET_SSH_KEY"
+    elif [ -n "$TARGET_PASSWORD" ]; then
+        ssh_auth_options="sshpass -p '$TARGET_PASSWORD'"
+        info "使用SSH密码认证"
     else
-        full_cmd="sshpass -p '$TARGET_PASSWORD' ssh -p $TARGET_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT -o ServerAliveInterval=60 '$TARGET_USER@$TARGET_IP' '$ssh_cmd'"
+        error "未设置SSH认证方式，请提供密钥文件路径或密码"
+        return 1
+    fi
+    
+    if [ "$use_sudo" = "true" ] && [ "$TARGET_USER" != "root" ]; then
+        if [ -n "$TARGET_SSH_KEY" ] && [ -f "$TARGET_SSH_KEY" ]; then
+            # 使用密钥认证时，sudo需要密码
+            if [ -n "$TARGET_PASSWORD" ]; then
+                full_cmd="ssh $ssh_auth_options -p $TARGET_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT -o ServerAliveInterval=60 '$TARGET_USER@$TARGET_IP' \"echo '$TARGET_PASSWORD' | sudo -S bash -c '$ssh_cmd'\""
+            else
+                warning "使用密钥认证但未提供sudo密码，尝试无密码sudo"
+                full_cmd="ssh $ssh_auth_options -p $TARGET_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT -o ServerAliveInterval=60 '$TARGET_USER@$TARGET_IP' \"sudo bash -c '$ssh_cmd'\""
+            fi
+        else
+            # 使用密码认证
+            full_cmd="$ssh_auth_options ssh -p $TARGET_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT -o ServerAliveInterval=60 '$TARGET_USER@$TARGET_IP' \"echo '$TARGET_PASSWORD' | sudo -S bash -c '$ssh_cmd'\""
+        fi
+    else
+        if [ -n "$TARGET_SSH_KEY" ] && [ -f "$TARGET_SSH_KEY" ]; then
+            full_cmd="ssh $ssh_auth_options -p $TARGET_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT -o ServerAliveInterval=60 '$TARGET_USER@$TARGET_IP' '$ssh_cmd'"
+        else
+            full_cmd="$ssh_auth_options ssh -p $TARGET_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT -o ServerAliveInterval=60 '$TARGET_USER@$TARGET_IP' '$ssh_cmd'"
+        fi
     fi
     
     retry_command "$MAX_RETRIES" "$RETRY_DELAY" "$description" "$full_cmd"
@@ -162,7 +194,17 @@ scp_retry() {
     local destination="$3"
     local options="${4:-}"
     
-    local scp_cmd="sshpass -p '$TARGET_PASSWORD' scp -P $TARGET_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT $options '$source' '$TARGET_USER@$TARGET_IP:$destination'"
+    local scp_cmd
+    
+    # 检查是否使用SSH密钥认证
+    if [ -n "$TARGET_SSH_KEY" ] && [ -f "$TARGET_SSH_KEY" ]; then
+        scp_cmd="scp -i '$TARGET_SSH_KEY' -P $TARGET_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT $options '$source' '$TARGET_USER@$TARGET_IP:$destination'"
+    elif [ -n "$TARGET_PASSWORD" ]; then
+        scp_cmd="sshpass -p '$TARGET_PASSWORD' scp -P $TARGET_PORT -o StrictHostKeyChecking=no -o ConnectTimeout=$CONNECT_TIMEOUT $options '$source' '$TARGET_USER@$TARGET_IP:$destination'"
+    else
+        error "未设置SSH认证方式，请提供密钥文件路径或密码"
+        return 1
+    fi
     
     retry_command "$MAX_RETRIES" "$RETRY_DELAY" "$description" "$scp_cmd"
 }
@@ -280,14 +322,58 @@ get_user_input() {
         TARGET_USER="root"
     fi
     
-    # 获取目标服务器密码
-    while [ -z "$TARGET_PASSWORD" ]; do
-        read -s -p "目标服务器密码: " TARGET_PASSWORD
-        echo
-        if [ -z "$TARGET_PASSWORD" ]; then
-            warning "密码不能为空，请重新输入"
+    # 选择认证方式
+    echo
+    info "请选择SSH认证方式:"
+    echo "1) SSH密钥认证 (推荐)"
+    echo "2) 密码认证"
+    read -p "请选择 (1-2, 默认: 1): " auth_choice
+    
+    if [ -z "$auth_choice" ] || [ "$auth_choice" = "1" ]; then
+        # SSH密钥认证
+        while [ -z "$TARGET_SSH_KEY" ]; do
+            read -p "SSH私钥文件路径 (默认: ~/.ssh/id_rsa): " TARGET_SSH_KEY
+            if [ -z "$TARGET_SSH_KEY" ]; then
+                TARGET_SSH_KEY="~/.ssh/id_rsa"
+            fi
+            
+            # 展开波浪号
+            TARGET_SSH_KEY=$(eval echo "$TARGET_SSH_KEY")
+            
+            # 检查密钥文件是否存在
+            if [ ! -f "$TARGET_SSH_KEY" ]; then
+                warning "SSH密钥文件不存在: $TARGET_SSH_KEY"
+                TARGET_SSH_KEY=""
+            else
+                # 检查密钥文件权限
+                if [ "$(stat -c %a "$TARGET_SSH_KEY" 2>/dev/null || stat -f %A "$TARGET_SSH_KEY" 2>/dev/null)" != "600" ]; then
+                    warning "SSH密钥文件权限不安全，建议设置为600"
+                    read -p "是否继续使用此密钥? (y/N): " continue_choice
+                    if [ "$continue_choice" != "y" ] && [ "$continue_choice" != "Y" ]; then
+                        TARGET_SSH_KEY=""
+                    fi
+                fi
+            fi
+        done
+        
+        # 如果用户不是root，可能需要密码用于sudo
+        if [ "$TARGET_USER" != "root" ]; then
+            read -s -p "sudo密码 (如果需要): " TARGET_PASSWORD
+            echo
         fi
-    done
+        
+        info "将使用SSH密钥认证: $TARGET_SSH_KEY"
+    else
+        # 密码认证
+        while [ -z "$TARGET_PASSWORD" ]; do
+            read -s -p "目标服务器密码: " TARGET_PASSWORD
+            echo
+            if [ -z "$TARGET_PASSWORD" ]; then
+                warning "密码不能为空，请重新输入"
+            fi
+        done
+        info "将使用密码认证"
+    fi
     
     # 获取SSH端口
     read -p "SSH端口 (默认: 22): " TARGET_PORT
@@ -650,6 +736,99 @@ deploy_on_target() {
     fi
 }
 
+# 通用volume迁移函数
+migrate_volume() {
+    local volume_name="$1"
+    local volume_description="$2"
+    local backup_prefix="$3"
+    local data_path="$4"  # volume内的数据路径，默认为根目录
+    
+    if [ -z "$data_path" ]; then
+        data_path="."
+    fi
+    
+    info "开始迁移${volume_description}..."
+    
+    local backup_file="${backup_prefix}_backup_$(date +%Y%m%d_%H%M%S).tar.gz"
+    local has_data=false
+    
+    # 检查Docker volume中的数据
+    local actual_volume=$(docker volume ls --format "{{.Name}}" | grep "$volume_name")
+    if [ -n "$actual_volume" ]; then
+        info "检查Docker volume中的${volume_description}..."
+        info "找到volume: $actual_volume"
+        
+        # 创建临时容器来访问volume并检查数据
+        if docker run --rm -v "$actual_volume":/data alpine sh -c "[ -d /data/$data_path ] && [ \"\$(ls -A /data/$data_path 2>/dev/null)\" ]"; then
+            success "发现${volume_description}"
+            has_data=true
+            
+            # 导出数据
+            info "导出${volume_description}到 $backup_file..."
+            if docker run --rm -v "$actual_volume":/data -v "$(pwd):/backup" alpine tar -czf "/backup/$backup_file" -C /data $data_path; then
+                success "${volume_description}导出成功"
+            else
+                error "${volume_description}导出失败"
+                return 1
+            fi
+        else
+            warning "未发现${volume_description}或数据为空"
+        fi
+    else
+        warning "未发现$volume_name volume"
+    fi
+    
+    if [ "$has_data" = true ]; then
+        # 传输数据到目标服务器
+        info "传输${volume_description}到目标服务器..."
+        if scp_retry "${volume_description}" "$backup_file" "/tmp/"; then
+            success "${volume_description}传输成功"
+            
+            # 在目标服务器上导入数据
+            info "在目标服务器上导入${volume_description}..."
+            if ssh_retry "导入${volume_description}" "
+                cd /tmp && 
+                # 确保Docker volume存在（使用实际的volume名称）
+                local target_volume=\$(docker volume ls --format \"{{.Name}}\" | grep \"$volume_name\" | head -1)
+                if [ -z \"\$target_volume\" ]; then
+                    # 如果没有找到，尝试创建标准名称的volume（带项目前缀）
+                    target_volume=\"awesome-poetize-open_$volume_name\"
+                    docker volume create \$target_volume 2>/dev/null || true
+                    # 如果带前缀的创建失败，尝试创建不带前缀的
+                    if [ \$? -ne 0 ]; then
+                        target_volume=\"$volume_name\"
+                        docker volume create \$target_volume 2>/dev/null || true
+                    fi
+                fi && 
+                echo \"使用volume: \$target_volume\" && 
+                # 导入数据
+                docker run --rm -v \"\$target_volume\":/data -v /tmp:/backup alpine sh -c '
+                    mkdir -p /data/$data_path && 
+                    cd /data && 
+                    tar -xzf /backup/$backup_file && 
+                    echo \"${volume_description}导入完成\"' && 
+                # 清理临时文件
+                rm -f /tmp/$backup_file
+            " "true"; then
+                success "${volume_description}导入成功"
+            else
+                error "${volume_description}导入失败"
+                return 1
+            fi
+        else
+            error "${volume_description}传输失败"
+            return 1
+        fi
+        
+        # 清理本地备份文件
+        rm -f "$backup_file"
+        success "已清理本地${volume_description}备份文件"
+    fi
+    
+    success "${volume_description}迁移完成"
+    return 0
+}
+
 # 预渲染文件迁移函数
 migrate_prerender_files() {
     if [ "$MIGRATE_PRERENDER" != "yes" ]; then
@@ -657,87 +836,27 @@ migrate_prerender_files() {
         return 0
     fi
     
-    info "开始迁移预渲染文件..."
-    
-    # 检查本地是否有预渲染文件
-    local prerender_backup="prerender_backup_$(date +%Y%m%d_%H%M%S).tar.gz"
-    local has_prerender=false
-    
-    # 检查Docker volume中的预渲染文件
-    local actual_volume=$(docker volume ls --format "{{.Name}}" | grep "poetize_ui_dist")
-    if [ -n "$actual_volume" ]; then
-        info "检查Docker volume中的预渲染文件..."
-        info "找到volume: $actual_volume"
-        
-        # 创建临时容器来访问volume
-        if docker run --rm -v "$actual_volume":/data alpine sh -c "[ -d /data/prerender ] && [ \"\$(ls -A /data/prerender 2>/dev/null)\" ]"; then
-            success "发现预渲染文件"
-            has_prerender=true
-            
-            # 导出预渲染文件
-            info "导出预渲染文件到 $prerender_backup..."
-            if docker run --rm -v "$actual_volume":/data -v "$(pwd):/backup" alpine tar -czf "/backup/$prerender_backup" -C /data prerender; then
-                success "预渲染文件导出成功"
-            else
-                error "预渲染文件导出失败"
-                return 1
-            fi
-        else
-            warning "未发现预渲染文件或文件为空"
-        fi
-    else
-        warning "未发现poetize_ui_dist volume"
+    migrate_volume "poetize_ui_dist" "预渲染文件" "prerender" "prerender"
+}
+
+# 用户上传文件迁移函数
+migrate_uploads() {
+    if [ "$MIGRATE_UPLOADS" != "yes" ]; then
+        warning "跳过用户上传文件迁移"
+        return 0
     fi
     
-    if [ "$has_prerender" = true ]; then
-        # 传输预渲染文件到目标服务器
-        info "传输预渲染文件到目标服务器..."
-        if scp_retry "预渲染文件" "$prerender_backup" "/tmp/"; then
-            success "预渲染文件传输成功"
-            
-            # 在目标服务器上导入预渲染文件
-            info "在目标服务器上导入预渲染文件..."
-            if ssh_retry "导入预渲染文件" "
-                cd /tmp && 
-                # 确保Docker volume存在（使用实际的volume名称）
-                local target_volume=\$(docker volume ls --format \"{{.Name}}\" | grep \"poetize_ui_dist\" | head -1)
-                if [ -z \"\$target_volume\" ]; then
-                    # 如果没有找到，尝试创建标准名称的volume（带项目前缀）
-                    target_volume=\"awesome-poetize-open_poetize_ui_dist\"
-                    docker volume create \$target_volume 2>/dev/null || true
-                    # 如果带前缀的创建失败，尝试创建不带前缀的
-                    if [ \$? -ne 0 ]; then
-                        target_volume=\"poetize_ui_dist\"
-                        docker volume create \$target_volume 2>/dev/null || true
-                    fi
-                fi && 
-                echo \"使用volume: \$target_volume\" && 
-                # 导入预渲染文件
-                docker run --rm -v \"\$target_volume\":/data -v /tmp:/backup alpine sh -c '
-                    mkdir -p /data/prerender && 
-                    cd /data && 
-                    tar -xzf /backup/$prerender_backup && 
-                    echo \"预渲染文件导入完成\"' && 
-                # 清理临时文件
-                rm -f /tmp/$prerender_backup
-            " "true"; then
-                success "预渲染文件导入成功"
-            else
-                error "预渲染文件导入失败"
-                return 1
-            fi
-        else
-            error "预渲染文件传输失败"
-            return 1
-        fi
-        
-        # 清理本地备份文件
-        rm -f "$prerender_backup"
-        success "已清理本地预渲染备份文件"
+    migrate_volume "poetize_uploads" "用户上传文件" "uploads" "."
+}
+
+# 聊天室前端文件迁移函数
+migrate_im_dist() {
+    if [ "$MIGRATE_IM_DIST" != "yes" ]; then
+        warning "跳过聊天室前端文件迁移"
+        return 0
     fi
     
-    success "预渲染文件迁移完成"
-    return 0
+    migrate_volume "poetize_im_dist" "聊天室前端文件" "im_dist" "."
 }
 
 # 清理临时文件
@@ -750,12 +869,14 @@ cleanup() {
         success "临时备份目录已清理"
     fi
     
-    # 清理预渲染备份文件
-    for file in prerender_backup_*.tar.gz; do
-        if [ -f "$file" ]; then
-            rm -f "$file"
-            success "已清理预渲染备份文件: $file"
-        fi
+    # 清理所有volume备份文件
+    for pattern in "prerender_backup_*.tar.gz" "uploads_backup_*.tar.gz" "im_dist_backup_*.tar.gz"; do
+        for file in $pattern; do
+            if [ -f "$file" ]; then
+                rm -f "$file"
+                success "已清理备份文件: $file"
+            fi
+        done
     done
     
     success "临时文件清理完成"
@@ -782,6 +903,15 @@ show_summary() {
     printf "  ✓ 数据库凭据\n"
     printf "  ✓ Python配置文件\n"
     printf "  ✓ 项目代码\n"
+    if [ "$MIGRATE_PRERENDER" = "yes" ]; then
+        printf "  ✓ 预渲染文件\n"
+    fi
+    if [ "$MIGRATE_UPLOADS" = "yes" ]; then
+        printf "  ✓ 用户上传文件\n"
+    fi
+    if [ "$MIGRATE_IM_DIST" = "yes" ]; then
+        printf "  ✓ 聊天室前端文件\n"
+    fi
     printf "\n"
     
     printf "${BLUE}访问信息${NC}\n"
@@ -846,10 +976,24 @@ main() {
     transfer_files
     deploy_on_target
     
+    # 执行volume数据迁移
+    info "开始volume数据迁移..."
+    
     # 执行预渲染文件迁移
-    info "开始预渲染文件迁移..."
     if ! migrate_prerender_files; then
         error "预渲染文件迁移失败"
+        exit 1
+    fi
+    
+    # 执行用户上传文件迁移
+    if ! migrate_uploads; then
+        error "用户上传文件迁移失败"
+        exit 1
+    fi
+    
+    # 执行聊天室前端文件迁移
+    if ! migrate_im_dist; then
+        error "聊天室前端文件迁移失败"
         exit 1
     fi
     
@@ -892,6 +1036,18 @@ show_migration_summary() {
         echo "  ✓ 预渲染文件迁移: ${GREEN}completed${NC}"
     else
         echo "  ⏭ 预渲染文件迁移: ${YELLOW}skipped${NC}"
+    fi
+    
+    if [ "$MIGRATE_UPLOADS" = "yes" ]; then
+        echo "  ✓ 用户上传文件迁移: ${GREEN}completed${NC}"
+    else
+        echo "  ⏭ 用户上传文件迁移: ${YELLOW}skipped${NC}"
+    fi
+    
+    if [ "$MIGRATE_IM_DIST" = "yes" ]; then
+        echo "  ✓ 聊天室前端文件迁移: ${GREEN}completed${NC}"
+    else
+        echo "  ⏭ 聊天室前端文件迁移: ${YELLOW}skipped${NC}"
     fi
     
     step_status=$(get_step_status "$STEP_DEPLOY")
