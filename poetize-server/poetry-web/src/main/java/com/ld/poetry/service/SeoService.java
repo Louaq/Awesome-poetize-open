@@ -1,6 +1,8 @@
 package com.ld.poetry.service;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -24,16 +26,15 @@ import java.util.Map;
 @Slf4j
 public class SeoService {
 
-    private final RestTemplate restTemplate;
-    private final ArticleService articleService;
+    @Autowired
+    private RestTemplate restTemplate;
+    
+    @Autowired
+    @Lazy
+    private ArticleService articleService;
     
     @Value("${PYTHON_SERVICE_URL:http://poetize-python:5000}")
     private String pythonServerUrl;
-    
-    public SeoService(RestTemplate restTemplate, ArticleService articleService) {
-        this.restTemplate = restTemplate;
-        this.articleService = articleService;
-    }
 
     /**
      * 将文章提交到搜索引擎
@@ -123,4 +124,4 @@ public class SeoService {
             return false;
         }
     }
-} 
+}
