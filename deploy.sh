@@ -1,8 +1,8 @@
 #!/bin/bash
 ## 作者: LeapYa
-## 修改时间: 2025-07-04
+## 修改时间: 2025-07-05
 ## 描述: 部署 Poetize 博客系统安装脚本
-## 版本: 1.3.1
+## 版本: 1.3.2
 
 # 定义颜色
 RED='\033[0;31m'
@@ -27,7 +27,12 @@ auto_confirm() {
     echo "自动回答: $default_answer (AUTO_YES=true)"
     REPLY="$default_answer"
     echo ""
-    return 0
+    # 根据默认答案返回相应的退出码
+    case "$default_answer" in
+      [Yy]|[Yy][Ee][Ss]) return 0 ;;
+      [Nn]|[Nn][Oo]) return 1 ;;
+      *) return 0 ;;
+    esac
   fi
   
   # 带超时的用户输入
@@ -42,7 +47,28 @@ auto_confirm() {
     REPLY="$default_answer"
   fi
   echo ""
-  return 0
+  
+  # 根据用户输入返回相应的退出码
+  case "$REPLY" in
+    [Yy]|[Yy][Ee][Ss]) return 0 ;;
+    [Nn]|[Nn][Oo]) return 1 ;;
+    "") 
+      # 空输入使用默认答案
+      case "$default_answer" in
+        [Yy]|[Yy][Ee][Ss]) return 0 ;;
+        [Nn]|[Nn][Oo]) return 1 ;;
+        *) return 0 ;;
+      esac
+      ;;
+    *) 
+      # 其他输入使用默认答案
+      case "$default_answer" in
+        [Yy]|[Yy][Ee][Ss]) return 0 ;;
+        [Nn]|[Nn][Oo]) return 1 ;;
+        *) return 0 ;;
+      esac
+      ;;
+  esac
 }
 
 # 初始化默认参数
