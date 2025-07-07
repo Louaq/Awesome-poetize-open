@@ -1,8 +1,8 @@
 #!/bin/bash
 ## 作者: LeapYa
-## 修改时间: 2025-07-05
+## 修改时间: 2025-07-07
 ## 描述: 部署 Poetize 博客系统安装脚本
-## 版本: 1.3.3
+## 版本: 1.3.4
 
 # 定义颜色
 RED='\033[0;31m'
@@ -5673,11 +5673,8 @@ patch_dockerfile_alpine_mirror() {
   local df=$1
   local num=$2
   if [ -f "$df" ]; then    
-  sed_i "$num i\\
-# ===== 国内镜像加速 begin =====\\
-RUN sed -i 's#https\\?://dl-cdn.alpinelinux.org/alpine#https://mirrors.tuna.tsinghua.edu.cn/alpine#g' /etc/apk/repositories\\
-# ===== 国内镜像加速 end =====" "$df"
-
+    sed_i "$num i\\
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories" "$df"
   fi
 }
 
@@ -5687,15 +5684,11 @@ patch_dockerfile_mirror() {
     patch_dockerfile_slim_mirror "docker/poetize-im-ui/Dockerfile"
     patch_dockerfile_slim_mirror "docker/poetize-ui/Dockerfile"
   fi
-  if [ -f "docker/node-base/Dockerfile" ] && [ -f "docker/nginx/Dockerfile" ]; then
-    # 因换了清华源反而构建失败，所以此处不再更换源了，alpine官方源走的是cdn，不换源，通常也很快
-
-    # patch_dockerfile_alpine_mirror "docker/node-base/Dockerfile" 2
-    # patch_dockerfile_alpine_mirror "docker/nginx/Dockerfile" 3
-    # patch_dockerfile_alpine_mirror "docker/nginx/Dockerfile" 83
-    # patch_dockerfile_alpine_mirror "docker/translation-model/Dockerfile" 5
-    # patch_dockerfile_alpine_mirror "docker/java/Dockerfile" 16
-    :
+  if [ -f "docker/java/Dockerfile" ] && [ -f "docker/nginx/Dockerfile" ]; then
+    patch_dockerfile_alpine_mirror "docker/nginx/Dockerfile" 3
+    patch_dockerfile_alpine_mirror "docker/nginx/Dockerfile" 138
+    patch_dockerfile_alpine_mirror "docker/translation-model/Dockerfile" 5
+    patch_dockerfile_alpine_mirror "docker/java/Dockerfile" 16
 
   fi
   if [ -f "docker/mysql/Dockerfile" ]; then

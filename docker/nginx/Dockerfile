@@ -26,6 +26,7 @@ RUN set -e; \
         echo "✅ 从GitHub下载ngx_brotli成功"; \
     # 如果GitHub失败，尝试Gitee镜像
     elif timeout -s TERM 240 \
+        rm -rf ngx_brotli && \
         git clone --depth=1 https://gitee.com/lirko/ngx_brotli.git; then \
         echo "🔄 Gitee 主仓库成功，开始处理子模块…"; \
         cd ngx_brotli && \
@@ -87,6 +88,7 @@ RUN set -e; \
         echo "✅ 从GitHub下载lua-resty-openssl成功"; \
     # 如果GitHub失败，尝试Gitee
     elif timeout -s TERM 240 \
+        rm -rf lua-resty-openssl && \
         git clone --depth=1 https://gitee.com/mirrors_fffonion/lua-resty-openssl.git; then \
         echo "🔄 从Gitee下载lua-resty-openssl成功"; \
     # 如果都失败，尝试直接下载
@@ -113,6 +115,7 @@ RUN set -e; \
         echo "✅ 从GitHub下载lua-resty-http成功"; \
     # 如果GitHub失败，尝试Gitee
     elif timeout -s TERM 240 \
+        rm -rf lua-resty-http && \
         git clone --depth=1 https://gitee.com/mirrors_ledgetech/lua-resty-http.git; then \
         echo "🔄 从Gitee下载lua-resty-http成功"; \
     # 如果都失败，尝试直接下载
