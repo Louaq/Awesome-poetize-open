@@ -2,8 +2,15 @@
   <div class="myFooter-wrap" v-show="showFooter">
     <div class="myFooter" :class="{ 'has-bg-image': hasBgImage, 'minimal': isMinimalFooter }" :style="footerStyle">
       <div class="footer-title font" :style="textStyle" v-if="!isMinimalFooter">{{$store.state.webInfo.footer}}</div>
-      <div class="icp font" :style="textStyle">让每一次访问都更美好 <a href="http://beian.miit.gov.cn/" target="_blank">{{ $store.state.sysConfig.beian }}</a></div>
-      <div class="copyright font" :style="textStyle">© 2025 {{ $store.state.webInfo.webTitle }} | 保留所有权利 | <a href="/privacy" class="policy-link">隐私政策</a></div>
+      <div class="icp font" :style="textStyle" v-if="$store.state.sysConfig.beian || $store.state.sysConfig.policeBeian">
+        <a href="http://beian.miit.gov.cn/" target="_blank" v-if="$store.state.sysConfig.beian">{{ $store.state.sysConfig.beian }}</a>
+        <span v-if="$store.state.sysConfig.beian && $store.state.sysConfig.policeBeian">&nbsp;</span>
+        <a href="http://www.beian.gov.cn/portal/registerSystemInfo" target="_blank" v-if="$store.state.sysConfig.policeBeian">
+          <img src="/static/assets/gonganbei.svg" alt="公安备案" style="vertical-align: middle; margin-right: 4px; width: 14px; height: 14px;">
+          {{ $store.state.sysConfig.policeBeian }}
+        </a>
+      </div>
+      <div class="copyright font" :style="textStyle">© 2025 {{ $store.state.webInfo.webTitle }} &nbsp; 保留所有权利 &nbsp; <a href="/privacy" class="policy-link">隐私政策</a></div>
       <div class="extra-info font" :style="textStyle" v-if="!isMinimalFooter">用心创作，用爱传递，让文字的力量激发心灵共鸣</div>
       <div class="contact font" :style="textStyle" v-if="!isMinimalFooter">本站内容均为原创或合法转载，如有侵权请通过邮箱：{{ $store.state.webInfo.email || 'admin@poetize.cn' }} 与我们联系，确认后将立即删除</div>
     </div>
