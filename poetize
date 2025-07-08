@@ -1,8 +1,8 @@
 #!/bin/bash
 ## 作者: LeapYa
-## 修改时间: 2025-07-03
+## 修改时间: 2025-07-08
 ## 描述: Poetize 博客系统全局管理命令
-## 版本: 1.2.0
+## 版本: 1.2.1
 
 # 定义颜色
 RED='\033[0;31m'
@@ -164,7 +164,6 @@ find_project_dir() {
     elif [ ${#dirs[@]} -eq 1 ]; then
         echo "发现一个博客目录: ${dirs[0]}"
         cd "${dirs[0]}" || { echo "切换目录失败: ${dirs[0]}"; exit 1; }
-        exec $SHELL
     else
         echo "发现多个博客目录："
         for i in "${!dirs[@]}"; do
