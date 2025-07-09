@@ -84,7 +84,9 @@ py/*.egg
 temp/
 tmp/
 temporary/
+# 排除Java源码中的cache包目录
 cache/
+!**/src/**/cache/
 logs/
 log/
 
