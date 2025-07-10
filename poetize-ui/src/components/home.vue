@@ -667,9 +667,15 @@
         root.style.setProperty("--borderHoverColor", "black");
         root.style.setProperty("--articleFontColor", "#E4E4E4");
         root.style.setProperty("--articleGreyFontColor", "#D4D4D4");
-        root.style.setProperty("--commentContent", "#D4D4D4");
+        root.style.setProperty("--commentContent", "#383838");
         root.style.setProperty("--favoriteBg", "#1e1e1e");
-        root.style.setProperty("--whiteMask", "#383838");
+        // 修复遮罩相关变量
+        root.style.setProperty("--whiteMask", "rgba(56, 56, 56, 0.3)");
+        root.style.setProperty("--maxWhiteMask", "rgba(56, 56, 56, 0.5)");
+        root.style.setProperty("--maxMaxWhiteMask", "rgba(56, 56, 56, 0.7)");
+        root.style.setProperty("--miniWhiteMask", "rgba(56, 56, 56, 0.15)");
+        root.style.setProperty("--mask", "rgba(0, 0, 0, 0.5)");
+        root.style.setProperty("--miniMask", "rgba(0, 0, 0, 0.3)");
         root.style.setProperty("--inputBackground", "#383838");
         root.style.setProperty("--secondaryText", "#B0B0B0");
         // 设置卡片背景RGB值用于半透明背景
@@ -686,6 +692,13 @@
         root.style.setProperty("--articleGreyFontColor", "#616161");
         root.style.setProperty("--commentContent", "#F7F9FE");
         root.style.setProperty("--favoriteBg", "#f7f9fe");
+        // 恢复亮色模式的遮罩变量
+        root.style.setProperty("--whiteMask", "rgba(255, 255, 255, 0.3)");
+        root.style.setProperty("--maxWhiteMask", "rgba(255, 255, 255, 0.5)");
+        root.style.setProperty("--maxMaxWhiteMask", "rgba(255, 255, 255, 0.7)");
+        root.style.setProperty("--miniWhiteMask", "rgba(255, 255, 255, 0.15)");
+        root.style.setProperty("--mask", "rgba(0, 0, 0, 0.3)");
+        root.style.setProperty("--miniMask", "rgba(0, 0, 0, 0.15)");
         root.style.setProperty("--inputBackground", "#f5f5f5");
         root.style.setProperty("--secondaryText", "#666666");
         // 设置卡片背景RGB值用于半透明背景

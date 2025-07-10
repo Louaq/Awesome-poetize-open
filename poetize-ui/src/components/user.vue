@@ -1254,6 +1254,7 @@
   .user-content >>> .el-input__inner, .user-content >>> .el-textarea__inner {
     border: none;
     background: var(--whiteMask);
+    color: var(--fontColor);
   }
 
   .user-content >>> .el-input__count {
