@@ -8,6 +8,9 @@ import {ElMessage} from "element-plus";
 
 import {reactive, getCurrentInstance, onMounted, onBeforeUnmount, watchEffect, toRefs} from 'vue';
 
+// 声明全局jQuery变量
+/* global $ */
+
 export default function () {
   const globalProperties = getCurrentInstance().appContext.config.globalProperties;
   const $common = globalProperties.$common;

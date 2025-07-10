@@ -1247,7 +1247,7 @@ async function renderHomePage(lang = 'zh') {
       'og:title': title,
       'og:description': description,
       'og:type': 'website',
-      'og:url': seoConfig.site_address || process.env.SITE_URL || 'https://poetize.cn',
+      'og:url': seoConfig.site_address || process.env.SITE_URL,
       'og:image': ogImage,
       'twitter:card': seoConfig.twitter_card || 'summary_large_image',
       'twitter:title': title,
@@ -1349,7 +1349,7 @@ async function renderFavoritePage(lang = 'zh') {
     const ogImage = webInfo.avatar || seoConfig.og_image || '';
     
     // 网站地址：优先使用SEO配置，fallback到环境变量或webInfo
-    const baseUrl = seoConfig.site_address || process.env.SITE_URL || 'http://154.89.203.185';
+    const baseUrl = seoConfig.site_address || process.env.SITE_URL;
     
     // 在基础关键词基础上添加页面特定关键词
     const baseKeywords = seoConfig.site_keywords || '博客,个人网站,技术分享';
@@ -1486,7 +1486,7 @@ async function renderDefaultSortPage(lang = 'zh') {
     const description = '浏览所有文章分类，找到您感兴趣的内容主题';
     const author = seoConfig.default_author || webInfo.webName || 'Admin';
     const ogImage = seoConfig.og_image || webInfo.avatar || '';
-    const baseUrl = seoConfig.site_address || process.env.SITE_URL || 'https://poetize.cn';
+    const baseUrl = seoConfig.site_address || process.env.SITE_URL;
     
     // 在基础关键词基础上添加页面特定关键词
     const baseKeywords = seoConfig.site_keywords || '博客,个人网站,技术分享';
@@ -1587,7 +1587,7 @@ async function renderSortPage(sortId, labelId = null, lang = 'zh') {
     const description = sortData.sortDescription || `${sortData.sortName}分类下的所有文章`;
     const author = seoConfig.default_author || webInfo.webName || 'Admin';
     const ogImage = seoConfig.og_image || webInfo.avatar || '';
-    const baseUrl = seoConfig.site_address || process.env.SITE_URL || 'https://poetize.cn';
+    const baseUrl = seoConfig.site_address || process.env.SITE_URL;
     
     // 在基础关键词基础上添加分类特定关键词
     const baseKeywords = seoConfig.site_keywords || '博客,个人网站,技术分享';
@@ -1768,7 +1768,7 @@ async function renderIds(ids = [], options = {}) {
           const siteName = seoConfig.site_title || webInfo.webName || 'Poetize';
           const baseKeywords = seoConfig.site_keywords || '博客,个人网站,技术分享';
           const author = seoConfig.default_author || webInfo.webName || 'Admin';
-          const baseUrl = seoConfig.site_address || process.env.SITE_URL || 'https://poetize.cn';
+          const baseUrl = seoConfig.site_address || process.env.SITE_URL;
           
           // 合并meta信息：文章特定meta + SEO配置
           const meta = {

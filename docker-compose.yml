@@ -247,6 +247,7 @@ services:
       - OLLAMA_MODEL_NAME=qwen3:0.6b
       - PRERENDER_URL=http://poetize-prerender:4000/render
       - PRERENDER_PAGES_URL=http://poetize-prerender:4000/render/pages
+      - SITE_URL=http://example.com
     networks:
       poetize-network:
         ipv4_address: 172.28.147.7
@@ -308,7 +309,7 @@ services:
       - PRERENDER_OUTPUT=/app/dist/prerender
       - JAVA_BACKEND_URL=http://poetize-java:8081
       - PYTHON_BACKEND_URL=http://poetize-python:5000
-      - SITE_URL=https://example.com
+      - SITE_URL=http://example.com
       - NODE_ENV=production
     volumes:
       - poetize_ui_dist:/app/dist

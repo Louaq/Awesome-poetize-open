@@ -2878,7 +2878,7 @@ init_deploy() {
     sed_i "s/example.com www.example.com/$DOMAIN_CONFIG/g" docker/nginx/default.https.conf
     sed_i "s/example.com www.example.com/$DOMAIN_CONFIG/g" docker/nginx/default.conf
 
-    sed_i "s/SITE_URL=https:\/\/example.com/SITE_URL=https:\/\/$PRIMARY_DOMAIN/g" docker-compose.yml
+    sed_i "s/SITE_URL=http:\/\/example.com/SITE_URL=http:\/\/$PRIMARY_DOMAIN/g" docker-compose.yml
 
     sed_i "s/valid_referers none blocked server_names ~\.example\.com$ example.com;/valid_referers none blocked server_names $DOMAIN_CONFIG;/g" docker/nginx/default.conf
     sed_i "s/valid_referers none blocked server_names ~\.example\.com$ example.com;/valid_referers none blocked server_names $DOMAIN_CONFIG;/g" docker/nginx/default.http.conf

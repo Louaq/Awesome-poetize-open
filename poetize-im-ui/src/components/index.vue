@@ -668,7 +668,7 @@
             }
           })
           .catch((error) => {
-            this.$message({
+            ElMessage({
               message: error.message,
               type: "error"
             });

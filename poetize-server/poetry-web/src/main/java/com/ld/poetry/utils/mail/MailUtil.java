@@ -1,12 +1,16 @@
 package com.ld.poetry.utils.mail;
 
 import com.alibaba.fastjson.JSON;
+import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.ld.poetry.constants.CommonConst;
+import com.ld.poetry.dao.ResourcePathMapper;
+import com.ld.poetry.entity.ResourcePath;
 import com.ld.poetry.service.MailService;
 import com.ld.poetry.utils.AsyncTaskUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import jakarta.annotation.PostConstruct;
 import java.util.Collections;
@@ -46,6 +50,9 @@ public class MailUtil {
     @Autowired
     private MailService mailService;
 
+    @Autowired
+    private ResourcePathMapper resourcePathMapper;
+
     private String mailText;
 
     /**
@@ -63,6 +70,7 @@ public class MailUtil {
 
     @PostConstruct
     public void init() {
+        // 邮件模板，URL将在发送时动态替换
         this.mailText = "<div style=\"font-family: serif;line-height: 22px;padding: 30px\">\n" +
                 "    <div style=\"display: flex;flex-direction: column;align-items: center\">\n" +
                 "        <div style=\"margin: 10px auto 20px;text-align: center\">\n" +
@@ -86,7 +94,7 @@ public class MailUtil {
                 "            </div>\n" +
                 "            %s\n" +
                 "            <a style=\"width: 150px;height: 38px;background: #ef859d38;border-radius: 32px;display: flex;align-items: center;justify-content: center;text-decoration: none;margin: 40px auto 0\"\n" +
-                "               href=\"https://poetize.cn\" target=\"_blank\">\n" +
+                "               href=\"{SITE_URL}\" target=\"_blank\">\n" +
                 "                <span style=\"color: #DB214B\">有朋自远方来</span>\n" +
                 "            </a>\n" +
                 "        </div>\n" +
@@ -97,8 +105,64 @@ public class MailUtil {
                 "</div>";
     }
 
+    /**
+     * 动态获取网站URL
+     * @return 网站URL
+     */
+    private String getSiteUrl() {
+        try {
+            // 从资源聚合表中获取网站信息
+            LambdaQueryChainWrapper<ResourcePath> wrapper = new LambdaQueryChainWrapper<>(resourcePathMapper);
+            ResourcePath siteInfo = wrapper.eq(ResourcePath::getType, CommonConst.RESOURCE_PATH_TYPE_SITE_INFO)
+                    .eq(ResourcePath::getStatus, Boolean.TRUE)
+                    .one();
+            
+            if (siteInfo != null && StringUtils.hasText(siteInfo.getUrl())) {
+                String url = siteInfo.getUrl().trim();
+                // 确保URL以http://或https://开头
+                if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                    url = "https://" + url;
+                }
+                // 移除末尾的斜杠
+                if (url.endsWith("/")) {
+                    url = url.substring(0, url.length() - 1);
+                }
+                log.info("动态获取网站URL成功: {}", url);
+                return url;
+            }
+        } catch (Exception e) {
+            log.warn("动态获取网站URL失败，尝试从环境变量获取: {}", e.getMessage());
+        }
+        
+        // 如果数据库中未配置或获取失败，尝试从环境变量获取
+        String envSiteUrl = System.getenv("SITE_URL");
+        if (StringUtils.hasText(envSiteUrl)) {
+            String url = envSiteUrl.trim();
+            // 确保URL以http://或https://开头
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+                url = "https://" + url;
+            }
+            // 移除末尾的斜杠
+            if (url.endsWith("/")) {
+                url = url.substring(0, url.length() - 1);
+            }
+            log.info("从环境变量获取网站URL成功: {}", url);
+            return url;
+        }
+        
+        // 如果环境变量也未配置，返回默认URL
+        log.info("使用默认网站URL");
+        return "#";
+    }
+
+    /**
+     * 获取邮件模板，动态替换网站URL
+     * @return 包含动态URL的邮件模板
+     */
     public String getMailText() {
-        return mailText;
+        // 每次获取邮件模板时都动态获取最新的网站URL
+        String siteUrl = getSiteUrl();
+        return mailText.replace("{SITE_URL}", siteUrl);
     }
 
     /**
