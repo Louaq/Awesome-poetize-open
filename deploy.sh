@@ -1,8 +1,8 @@
 #!/bin/bash
 ## 作者: LeapYa
-## 修改时间: 2025-07-09
+## 修改时间: 2025-07-10
 ## 描述: 部署 Poetize 博客系统安装脚本
-## 版本: 1.4.0
+## 版本: 1.4.1
 
 # 定义颜色
 RED='\033[0;31m'
@@ -1847,7 +1847,7 @@ install_docker_china_almalinux() {
 }
 
 install_docker_compose() {
-  local DOCKER_CONFIG={$1:-/usr/local/lib/docker}
+  local DOCKER_CONFIG=${1:-/usr/local/lib/docker}
   # 尝试多个下载源，优化国内网络环境
   local arch=$(uname -m)
   local compose_url="https://github.com/docker/compose/releases/download/v2.37.3/docker-compose-linux-$arch"
@@ -1857,10 +1857,13 @@ install_docker_compose() {
       "https://ghfast.top/$compose_url"
   )
   
+  # 确保目录存在
+  sudo mkdir -p "$DOCKER_CONFIG"
+  
   local download_success=false
   for mirror in "${compose_mirrors[@]}"; do
       info "尝试从 $mirror 下载Docker Compose..."
-      if sudo curl --connect-timeout 30 --max-time 300 -SL "$mirror" -o $DOCKER_CONFIG/docker-compose; then
+      if sudo curl --connect-timeout 30 --max-time 300 -SL "$mirror" -o "$DOCKER_CONFIG/docker-compose"; then
           download_success=true
           info "Docker Compose下载成功"
           break
@@ -1874,7 +1877,7 @@ install_docker_compose() {
       error "所有下载源都失败，请检查网络连接或手动下载Docker Compose"
       exit 1
   fi
-  sudo chmod +x $DOCKER_CONFIG/docker-compose
+  sudo chmod +x "$DOCKER_CONFIG/docker-compose"
   info "成功安装Docker Compose"
   return 0
 }
