@@ -1286,6 +1286,171 @@
     }
   }
 
+  /* 极窄屏幕优化 */
+  @media screen and (max-width: 480px) {
+    .user-info {
+      width: 95%;
+      margin-top: 60px;
+    }
+
+    .user-left {
+      padding: 15px;
+    }
+
+    /* 改变布局方式：垂直堆叠 */
+    .myCenter {
+      flex-direction: column !important;
+    }
+
+    .user-title {
+      display: none; /* 隐藏原有的标题列 */
+    }
+
+    .user-content {
+      width: 100%;
+    }
+
+    .user-content > div {
+      margin-bottom: 15px;
+      flex-direction: column;
+      align-items: flex-start;
+      height: auto;
+      min-height: 45px;
+    }
+
+    /* 为每个字段添加标题 */
+    .user-content > div:nth-child(1):before {
+      content: "用户名：";
+      font-size: 0.85rem;
+      margin-bottom: 5px;
+      color: var(--fontColor);
+      font-weight: 500;
+    }
+
+    .user-content > div:nth-child(2):before {
+      content: "手机号：";
+      font-size: 0.85rem;
+      margin-bottom: 5px;
+      color: var(--fontColor);
+      font-weight: 500;
+    }
+
+    .user-content > div:nth-child(3):before {
+      content: "邮箱：";
+      font-size: 0.85rem;
+      margin-bottom: 5px;
+      color: var(--fontColor);
+      font-weight: 500;
+    }
+
+    .user-content > div:nth-child(4):before {
+      content: "性别：";
+      font-size: 0.85rem;
+      margin-bottom: 5px;
+      color: var(--fontColor);
+      font-weight: 500;
+    }
+
+    .user-content > div:nth-child(5):before {
+      content: "简介：";
+      font-size: 0.85rem;
+      margin-bottom: 5px;
+      color: var(--fontColor);
+      font-weight: 500;
+    }
+
+    .user-content >>> .el-input__inner {
+      font-size: 0.85rem;
+      padding: 8px 10px;
+    }
+
+    .user-content >>> .el-textarea__inner {
+      font-size: 0.85rem;
+      padding: 8px 10px;
+    }
+
+    .changeInfo {
+      font-size: 0.7rem;
+      padding: 2px 4px;
+      white-space: nowrap;
+      margin-left: 8px;
+    }
+
+    /* 手机号和邮箱显示优化 */
+    .user-content > div > div {
+      word-break: break-all;
+      overflow-wrap: break-word;
+      line-height: 1.3;
+      max-width: 100%;
+    }
+
+    /* 性别选项优化 */
+    .user-content >>> .el-radio-group {
+      flex-wrap: wrap;
+    }
+
+    .user-content >>> .el-radio {
+      margin-right: 8px;
+      margin-bottom: 5px;
+      font-size: 0.85rem;
+    }
+  }
+
+  /* 超窄屏幕优化 */
+  @media screen and (max-width: 360px) {
+    .user-info {
+      width: 98%;
+      margin-top: 50px;
+    }
+
+    .user-left {
+      padding: 10px;
+    }
+
+    .user-content > div:before {
+      font-size: 0.8rem !important;
+    }
+
+    .user-content > div {
+      margin-bottom: 12px;
+      min-height: 40px;
+    }
+
+    .user-content >>> .el-input__inner,
+    .user-content >>> .el-textarea__inner {
+      font-size: 0.8rem;
+      padding: 6px 8px;
+    }
+
+    .changeInfo {
+      font-size: 0.65rem;
+      padding: 1px 3px;
+      margin-left: 6px;
+    }
+
+    .user-content >>> .el-radio {
+      font-size: 0.8rem;
+      margin-right: 6px;
+    }
+
+    .user-avatar {
+      width: 50px !important;
+      height: 50px !important;
+    }
+  }
+
+  /* 移动端对话框优化 */
+  @media screen and (max-width: 768px) {
+    .el-dialog {
+      width: 90% !important;
+      margin: 0 auto !important;
+    }
+
+    .el-dialog__body {
+      padding: 15px 20px;
+    }
+  }
+
   .third-party-login {
     margin-top: 20px;
     width: 100%;
