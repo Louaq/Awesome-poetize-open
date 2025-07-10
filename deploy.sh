@@ -1,8 +1,8 @@
 #!/bin/bash
 ## 作者: LeapYa
-## 修改时间: 2025-07-10
+## 修改时间: 2025-07-11
 ## 描述: 部署 Poetize 博客系统安装脚本
-## 版本: 1.4.2
+## 版本: 1.4.3
 
 # 定义颜色
 RED='\033[0;31m'
@@ -1045,6 +1045,7 @@ install_docker_china_debian() {
     sudo mkdir -p /usr/share/keyrings
     
     # 添加Docker的GPG密钥
+    sudo rm -f /usr/share/keyrings/docker-archive-keyring.gpg
     curl -fsSL "https://$DOCKER_MIRROR_SOURCE/linux/debian/gpg" | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
     
     # 添加Docker软件源
@@ -1086,6 +1087,7 @@ install_docker_china_ubuntu() {
     sudo mkdir -p /usr/share/keyrings
     
     # 添加Docker的GPG密钥
+    sudo rm -f /usr/share/keyrings/docker-archive-keyring.gpg
     curl -fsSL "https://$DOCKER_MIRROR_SOURCE/linux/ubuntu/gpg" | sudo gpg --dearmor -o /usr/share/keyrings/docker-archive-keyring.gpg
     
     # 添加Docker软件源
