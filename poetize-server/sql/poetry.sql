@@ -370,7 +370,10 @@ INSERT INTO `poetize`.`sys_config` (`id`, `config_name`, `config_key`, `config_v
 INSERT INTO `poetize`.`sys_config` (`id`, `config_name`, `config_key`, `config_value`, `config_type`) VALUES (15, '备案号', 'beian', '', '2');
 INSERT INTO `poetize`.`sys_config` (`id`, `config_name`, `config_key`, `config_value`, `config_type`) VALUES (16, '公安备案号', 'policeBeian', '', '2');
 INSERT INTO `poetize`.`sys_config` (`id`, `config_name`, `config_key`, `config_value`, `config_type`) VALUES (17, '前端静态资源路径前缀', 'webStaticResourcePrefix', '/static/', '2');
-
+INSERT INTO `poetize`.`sys_config` (`id`, `config_name`, `config_key`, `config_value`, `config_type`) VALUES (18, '兰空图床-启用', 'lsky.enable', 'false', '1');
+INSERT INTO `poetize`.`sys_config` (`id`, `config_name`, `config_key`, `config_value`, `config_type`) VALUES (19, '兰空图床-API地址', 'lsky.url', 'http://your-lsky-instance.com/api/v1', '1');
+INSERT INTO `poetize`.`sys_config` (`id`, `config_name`, `config_key`, `config_value`, `config_type`) VALUES (20, '兰空图床-Token', 'lsky.token', '', '1');
+INSERT INTO `poetize`.`sys_config` (`id`, `config_name`, `config_key`, `config_value`, `config_type`) VALUES (21, '兰空图床-存储策略ID', 'lsky.strategy_id', '', '1'); 
 
 
 INSERT INTO `poetize`.`resource_path` (`title`, `cover`, `introduction`, `type`, `status`,  `remark`) VALUES ('POETIZE', 'https://s1.ax1x.com/2022/11/10/z9E7X4.jpg', '这是一个 Vue2 Vue3 与 SpringBoot 结合的产物～', 'siteInfo', 1, 'https://s1.ax1x.com/2022/11/10/z9VlHs.png');

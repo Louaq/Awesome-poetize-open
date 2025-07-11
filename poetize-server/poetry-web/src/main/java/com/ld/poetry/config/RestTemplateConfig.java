@@ -2,7 +2,8 @@ package com.ld.poetry.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
+import org.springframework.http.client.ClientHttpRequestFactory;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestTemplate;
 
 /**
@@ -10,10 +11,16 @@ import org.springframework.web.client.RestTemplate;
  */
 @Configuration
 public class RestTemplateConfig {
-
+    
     @Bean
-    @Primary
     public RestTemplate restTemplate() {
-        return new RestTemplate();
+        return new RestTemplate(getClientHttpRequestFactory());
+    }
+    
+    private ClientHttpRequestFactory getClientHttpRequestFactory() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(15000);
+        factory.setReadTimeout(15000);
+        return factory;
     }
 } 

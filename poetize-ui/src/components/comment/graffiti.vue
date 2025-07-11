@@ -280,6 +280,8 @@
           this.saveLocal(fd);
         } else if (storeType === "qiniu") {
           this.saveQiniu(fd);
+        } else if (storeType === "lsky") {
+          this.saveLsky(fd);
         }
       },
       saveLocal(fd) {
@@ -322,6 +324,30 @@
                     type: "error"
                   });
                 });
+            }
+          })
+          .catch((error) => {
+            this.$message({
+              message: error.message,
+              type: "error"
+            });
+          });
+      },
+      saveLsky(fd) {
+        this.$http.post(this.$constant.baseURL + "/resource/upload", fd)
+          .then((res) => {
+            if (!this.$common.isEmpty(res.data)) {
+              this.clearContext();
+              let url = res.data;
+              let file = fd.get("file");
+              this.$common.saveResource(this, "graffiti", url, file.size, file.type, null, "lsky");
+              let img = "[你画我猜," + url + "]";
+              this.$emit("addGraffitiComment", img);
+            } else {
+              this.$message({
+                message: "兰空图床上传失败：服务器未返回有效的图片URL",
+                type: "error"
+              });
             }
           })
           .catch((error) => {

@@ -207,7 +207,8 @@
         resourceDialog: false,
         storeTypes: [
           {label: "服务器", value: "local"},
-          {label: "七牛云", value: "qiniu"}
+          {label: "七牛云", value: "qiniu"},
+          {label: "兰空图床", value: "lsky"}
         ],
         storeType: localStorage.getItem("defaultStoreType"),
         previewMediaUrl: "",

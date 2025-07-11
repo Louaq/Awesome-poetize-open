@@ -6,7 +6,8 @@ import org.springframework.util.StringUtils;
 public enum StoreEnum {
 
     QINIU("qiniu"),
-    LOCAL("local");
+    LOCAL("local"),
+    LSKY("lsky");  // 添加兰空图床支持
 
     private String code;
 

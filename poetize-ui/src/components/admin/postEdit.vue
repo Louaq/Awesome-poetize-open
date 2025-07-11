@@ -316,6 +316,8 @@
             this.saveLocal(pos, fd);
           } else if (storeType === "qiniu") {
             this.saveQiniu(pos, fd);
+          } else if (storeType === "lsky") {
+            this.saveLsky(pos, fd);
           }
         } catch (error) {
           this.showError("图片上传准备失败", error);
@@ -364,6 +366,25 @@
           })
           .catch((error) => {
             this.showError("获取七牛云上传Token失败", error);
+          });
+      },
+      
+      // 兰空图床保存图片
+      saveLsky(pos, fd) {
+        this.$http.post(this.$constant.baseURL + "/resource/upload", fd, true)
+          .then((res) => {
+            if (!this.$common.isEmpty(res.data)) {
+              // 获取返回的图片URL
+              let url = res.data;
+              let file = fd.get("file");
+              this.$common.saveResource(this, "articlePicture", url, file.size, file.type, file.name, "lsky", true);
+              this.$refs.md.$img2Url(pos, url);
+            } else {
+              this.showError("兰空图床上传失败", "服务器未返回有效的图片URL");
+            }
+          })
+          .catch((error) => {
+            this.showError("兰空图床上传失败", error);
           });
       },
       

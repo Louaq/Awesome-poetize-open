@@ -147,6 +147,16 @@
           } catch (e) {
             return Promise.reject(e.message);
           }
+        } else if (this.storeType === "lsky") {
+          let fd = new FormData();
+          fd.append("file", options.file);
+          fd.append("originalName", options.file.name);
+          fd.append("key", key);
+          fd.append("relativePath", key);
+          fd.append("type", this.prefix);
+          fd.append("storeType", this.storeType);
+
+          return this.$http.upload(this.$constant.baseURL + "/resource/upload", fd, this.isAdmin, options);
         }
       },
 
@@ -158,6 +168,9 @@
         } else if (this.storeType === "qiniu") {
           url = this.$store.state.sysConfig['qiniu.downloadUrl'] + response.key;
           this.$common.saveResource(this, this.prefix, url, file.size, file.raw.type, file.name, "qiniu", this.isAdmin);
+        } else if (this.storeType === "lsky") {
+          url = response.data;
+          this.$common.saveResource(this, this.prefix, url, file.size, file.raw.type, file.name, "lsky", this.isAdmin);
         }
         this.$emit("addPicture", url);
       },
