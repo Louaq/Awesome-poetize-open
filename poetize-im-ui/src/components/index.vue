@@ -971,7 +971,7 @@
         ...toRefs(friendCircleData),
         ...toRefs(friendData),
         ...toRefs(groupData),
-        ...toRefs(imUtilData),
+        ...toRefs(imUtilData.imUtilData),
         ...toRefs(changeDataData),
         isActive,
         sendMsg,

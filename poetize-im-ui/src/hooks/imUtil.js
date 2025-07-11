@@ -28,7 +28,8 @@ export default function () {
   })
 
   onMounted(() => {
-    if ($common.mobile()) {
+    // 确保jQuery已加载
+    if (typeof $ !== 'undefined' && $common.mobile()) {
       $(".friend-aside").click(function () {
         imUtilData.showBodyLeft = true;
         mobileRight();
@@ -48,9 +49,9 @@ export default function () {
   }
 
   function mobileRight() {
-    if (imUtilData.showBodyLeft && $common.mobile()) {
+    if (typeof $ !== 'undefined' && imUtilData.showBodyLeft && $common.mobile()) {
       $(".body-right").addClass("mobile-right");
-    } else if (!imUtilData.showBodyLeft && $common.mobile()) {
+    } else if (typeof $ !== 'undefined' && !imUtilData.showBodyLeft && $common.mobile()) {
       $(".body-right").removeClass("mobile-right");
     }
   }
@@ -71,7 +72,7 @@ export default function () {
   }
 
   function hiddenBodyLeft() {
-    if ($common.mobile()) {
+    if (typeof $ !== 'undefined' && $common.mobile()) {
       $(".body-right").click(function () {
         imUtilData.showBodyLeft = false;
         mobileRight();
@@ -80,6 +81,10 @@ export default function () {
   }
 
   function imgShow() {
+    if (typeof $ === 'undefined') {
+      return;
+    }
+    
     $(".message img").click(function () {
       let src = $(this).attr("src");
       $("#bigImg").attr("src", src);
