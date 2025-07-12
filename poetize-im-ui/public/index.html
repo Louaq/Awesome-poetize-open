@@ -2,6 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
     
     <!-- 动态图标占位符 - 优先级高于默认图标 -->
@@ -11,14 +12,18 @@
     <link rel="icon" href="poetize.jpg" sizes="16x16" id="default-favicon">
     
     <title>POETIZE</title>
-    <link rel="canonical" href="https://poetize.cn">
-    <link rel="stylesheet" href="/im/static/css/inline-styles.css">
     <!-- SEO相关元数据占位符 - 将由Nginx动态替换 -->
     <!-- SEO_META_PLACEHOLDER -->
+
+    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qiniu-js/3.4.0/qiniu.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+        }
+    </style>
 </head>
 <body>
 <div id="app"></div>
-<script src="/im/libs/js/jquery.min.js"></script>
-<script src="/im/libs/js/qiniu.min.js"></script>
 </body>
 </html>

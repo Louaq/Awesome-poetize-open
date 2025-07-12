@@ -43,17 +43,9 @@ axios.interceptors.response.use(function (response) {
 
 export default {
   post(url, params = {}, json = true) {
-    if (params === null || typeof params !== 'object') {
-      params = {};
-    }
     let config = {
-      headers: {}
+      headers: {"Authorization": localStorage.getItem("userToken")}
     };
-
-    const token = localStorage.getItem("userToken");
-    if (token) {
-      config.headers.Authorization = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-    }
 
     return new Promise((resolve, reject) => {
       axios
@@ -68,14 +60,7 @@ export default {
   },
 
   get(url, params = {}) {
-    if (params === null || typeof params !== 'object') {
-      params = {};
-    }
-    let headers = {};
-    const token = localStorage.getItem("userToken");
-    if (token) {
-      headers.Authorization = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-    }
+    let headers = {"Authorization": localStorage.getItem("userToken")};
 
     return new Promise((resolve, reject) => {
       axios.get(url, {

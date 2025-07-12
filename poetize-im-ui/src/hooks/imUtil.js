@@ -8,9 +8,6 @@ import {ElMessage} from "element-plus";
 
 import {reactive, getCurrentInstance, onMounted, onBeforeUnmount, watchEffect, toRefs} from 'vue';
 
-// 声明全局jQuery变量
-/* global $ */
-
 export default function () {
   const globalProperties = getCurrentInstance().appContext.config.globalProperties;
   const $common = globalProperties.$common;
@@ -28,8 +25,7 @@ export default function () {
   })
 
   onMounted(() => {
-    // 确保jQuery已加载
-    if (typeof $ !== 'undefined' && $common.mobile()) {
+    if ($common.mobile()) {
       $(".friend-aside").click(function () {
         imUtilData.showBodyLeft = true;
         mobileRight();
@@ -49,9 +45,9 @@ export default function () {
   }
 
   function mobileRight() {
-    if (typeof $ !== 'undefined' && imUtilData.showBodyLeft && $common.mobile()) {
+    if (imUtilData.showBodyLeft && $common.mobile()) {
       $(".body-right").addClass("mobile-right");
-    } else if (typeof $ !== 'undefined' && !imUtilData.showBodyLeft && $common.mobile()) {
+    } else if (!imUtilData.showBodyLeft && $common.mobile()) {
       $(".body-right").removeClass("mobile-right");
     }
   }
@@ -72,7 +68,7 @@ export default function () {
   }
 
   function hiddenBodyLeft() {
-    if (typeof $ !== 'undefined' && $common.mobile()) {
+    if ($common.mobile()) {
       $(".body-right").click(function () {
         imUtilData.showBodyLeft = false;
         mobileRight();
@@ -81,10 +77,6 @@ export default function () {
   }
 
   function imgShow() {
-    if (typeof $ === 'undefined') {
-      return;
-    }
-    
     $(".message img").click(function () {
       let src = $(this).attr("src");
       $("#bigImg").attr("src", src);

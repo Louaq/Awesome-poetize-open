@@ -660,7 +660,7 @@
       }
 
       function getSysConfig() {
-        $http.get("/api/sysConfig/listSysConfig")
+        $http.get($constant.baseURL + "/sysConfig/listSysConfig")
           .then((res) => {
             if (!$common.isEmpty(res.data)) {
               store.commit("loadSysConfig", res.data);
@@ -668,7 +668,7 @@
             }
           })
           .catch((error) => {
-            ElMessage({
+            this.$message({
               message: error.message,
               type: "error"
             });
@@ -680,151 +680,96 @@
         let webStaticResourcePrefix = store.state.sysConfig['webStaticResourcePrefix'];
         root.style.setProperty("--commentURL", "url(" + webStaticResourcePrefix + "assets/commentURL.jpg)");
         root.style.setProperty("--imBackground", "url(" + webStaticResourcePrefix + "assets/backgroundPicture.jpg)");
-        
-        // 字体分块按需加载，避免重复加载
-        const fontChunks = [
-          { name: 'base', url: webStaticResourcePrefix + "assets/font_chunks/font.base.woff2", priority: 1 },
-          { name: 'level1', url: webStaticResourcePrefix + "assets/font_chunks/font.level1.woff2", priority: 2 },
-          { name: 'level2', url: webStaticResourcePrefix + "assets/font_chunks/font.level2.woff2", priority: 3 },
-          { name: 'other', url: webStaticResourcePrefix + "assets/font_chunks/font.other.woff2", priority: 4 }
-        ];
-        
-        // 检查字体是否已加载，避免重复加载
-        const loadedFonts = new Set();
-        
-        // 按优先级顺序加载字体
-        fontChunks.sort((a, b) => a.priority - b.priority).forEach(async (chunk, index) => {
-          if (!loadedFonts.has(chunk.name)) {
-            try {
-              const font = new FontFace("MyAwesomeFont", `url(${chunk.url})`);
-              
-              // 基础字体立即加载，其他字体延迟加载以优化性能
-              if (chunk.priority === 1) {
-                await font.load();
-                document.fonts.add(font);
-                loadedFonts.add(chunk.name);
-              } else {
-                // 延迟加载非关键字体
-                setTimeout(async () => {
-                  try {
-                    await font.load();
-                    document.fonts.add(font);
-                    loadedFonts.add(chunk.name);
-                  } catch (error) {
-                    console.warn(`字体块 ${chunk.name} 加载失败:`, error);
-                  }
-                }, index * 100); // 错开加载时间
-              }
-            } catch (error) {
-              console.warn(`字体块 ${chunk.name} 初始化失败:`, error);
-            }
-          }
-        });
+        // 移除单一字体的加载，改为使用CSS中声明的切割字体
+        // const font = new FontFace("poetize-font", "url(" + webStaticResourcePrefix + "assets/font.woff2)");
+        // font.load();
+        // document.fonts.add(font);
       }
 
       function getIm() {
-        try {
-          im = new Im();
-          im.initWs();
-          if (im.tio && im.tio.ws) {
-            im.tio.ws.onmessage = function (event) {
-              let message = JSON.parse(event.data);
-              message.content = parseMessage(message.content);
-              if (message.messageType === 1) {
-                if (message.fromId === store.state.currentUser.id && (friendData.friends[message.toId] !== null && friendData.friends[message.toId] !== undefined)) {
-                  if (data.imMessages[message.toId] === null || data.imMessages[message.toId] === undefined) {
-                    data.imMessages[message.toId] = [];
-                  }
-                  data.imMessages[message.toId].push(message);
-
-                  for (let i = 0; i < data.imChats.length; i++) {
-                    if (data.imChats[i] === message.toId) {
-                      data.imChats.splice(i, 1);
-                      break;
-                    }
-                  }
-                  data.imChats.splice(0, 0, message.toId);
-                  // 使用安全的方法引用DOM元素
-                  const currentElements = document.getElementsByClassName('im-user-current');
-                  if (currentElements && currentElements.length > 0) {
-                    isActive(currentElements[0], 'im-active', null, 2, message.toId, 2);
-                  }
-                } else if (message.fromId !== store.state.currentUser.id && (friendData.friends[message.fromId] !== null && friendData.friends[message.fromId] !== undefined)) {
-                  if (data.imMessages[message.fromId] === null || data.imMessages[message.fromId] === undefined) {
-                    for (let i = 0; i < data.imChats.length; i++) {
-                      if (data.imChats[i] === message.fromId) {
-                        data.imChats.splice(i, 1);
-                        break;
-                      }
-                    }
-                    data.imChats.splice(0, 0, message.fromId);
-
-                    data.imMessages[message.fromId] = [];
-                  }
-                  data.imMessages[message.fromId].push(message);
-
-                  if (data.subType !== 2 || data.currentChatFriendId !== message.fromId) {
-                    if (data.imMessageBadge[message.fromId] === null || data.imMessageBadge[message.fromId] === undefined) {
-                      data.imMessageBadge[message.fromId] = 1;
-                    } else {
-                      data.imMessageBadge[message.fromId] = data.imMessageBadge[message.fromId] + 1;
-                    }
-                  }
-                }
-
-                nextTick(() => {
-                  let msgContainer = document.getElementsByClassName('msg-container');
-                  if (msgContainer && msgContainer.length > 0) {
-                    msgContainer[0].scrollTop = msgContainer[0].scrollHeight;
-                  }
-                  imgShow();
-                });
-              } else if (message.messageType === 2 && (groupData.groups[message.groupId] !== null && groupData.groups[message.groupId] !== undefined)) {
-                if (data.groupMessages[message.groupId] === null || data.groupMessages[message.groupId] === undefined) {
-                  data.groupMessages[message.groupId] = [];
-                }
-                data.groupMessages[message.groupId].push(message);
-
-                if(message.fromId === store.state.currentUser.id || data.groupMessages[message.groupId] === null || data.groupMessages[message.groupId] === undefined) {
-                  for (let i = 0; i < data.groupChats.length; i++) {
-                    if (data.groupChats[i] === message.groupId) {
-                      data.groupChats.splice(i, 1);
-                      break;
-                    }
-                  }
-                  data.groupChats.splice(0, 0, message.groupId);
-                  
-                  // 安全地获取DOM元素
-                  const groupElements = document.getElementsByClassName('im-group-current');
-                  if (groupElements && groupElements.length > 0) {
-                    isActive(groupElements[0], 'im-active', null, 2, message.groupId, 1);
-                  }
-                }
-
-                if ((data.subType !== 2 || data.currentChatGroupId !== message.groupId) && message.fromId !== store.state.currentUser.id) {
-                  if (data.groupMessageBadge[message.groupId] === null || data.groupMessageBadge[message.groupId] === undefined) {
-                    data.groupMessageBadge[message.groupId] = 1;
-                  } else {
-                    data.groupMessageBadge[message.groupId] = data.groupMessageBadge[message.groupId] + 1;
-                  }
-                }
-
-                nextTick(() => {
-                  let msgContainer = document.getElementsByClassName('msg-container');
-                  if (msgContainer && msgContainer.length > 0) {
-                    msgContainer[0].scrollTop = msgContainer[0].scrollHeight;
-                  }
-                  imgShow();
-                });
+        im = new Im();
+        im.initWs();
+        im.tio.ws.onmessage = function (event) {
+          let message = JSON.parse(event.data);
+          message.content = parseMessage(message.content);
+          if (message.messageType === 1) {
+            if (message.fromId === store.state.currentUser.id && (friendData.friends[message.toId] !== null && friendData.friends[message.toId] !== undefined)) {
+              if (data.imMessages[message.toId] === null || data.imMessages[message.toId] === undefined) {
+                data.imMessages[message.toId] = [];
               }
-            };
+              data.imMessages[message.toId].push(message);
+
+              for (let i = 0; i < data.imChats.length; i++) {
+                if (data.imChats[i] === message.toId) {
+                  data.imChats.splice(i, 1);
+                  break;
+                }
+              }
+              data.imChats.splice(0, 0, message.toId);
+              isActive(document.getElementsByClassName('im-user-current')[0], 'im-active', null, 2, message.toId, 2);
+            } else if (message.fromId !== store.state.currentUser.id && (friendData.friends[message.fromId] !== null && friendData.friends[message.fromId] !== undefined)) {
+              if (data.imMessages[message.fromId] === null || data.imMessages[message.fromId] === undefined) {
+                for (let i = 0; i < data.imChats.length; i++) {
+                  if (data.imChats[i] === message.fromId) {
+                    data.imChats.splice(i, 1);
+                    break;
+                  }
+                }
+                data.imChats.splice(0, 0, message.fromId);
+
+                data.imMessages[message.fromId] = [];
+              }
+              data.imMessages[message.fromId].push(message);
+
+              if (data.subType !== 2 || data.currentChatFriendId !== message.fromId) {
+                if (data.imMessageBadge[message.fromId] === null || data.imMessageBadge[message.fromId] === undefined) {
+                  data.imMessageBadge[message.fromId] = 1;
+                } else {
+                  data.imMessageBadge[message.fromId] = data.imMessageBadge[message.fromId] + 1;
+                }
+              }
+            }
+
+            nextTick(() => {
+              let msgContainer = document.getElementsByClassName('msg-container');
+              if (msgContainer && msgContainer.length > 0) {
+                msgContainer[0].scrollTop = msgContainer[0].scrollHeight;
+              }
+              imgShow();
+            });
+          } else if (message.messageType === 2 && (groupData.groups[message.groupId] !== null && groupData.groups[message.groupId] !== undefined)) {
+            if (data.groupMessages[message.groupId] === null || data.groupMessages[message.groupId] === undefined) {
+              data.groupMessages[message.groupId] = [];
+            }
+            data.groupMessages[message.groupId].push(message);
+
+            if(message.fromId === store.state.currentUser.id || data.groupMessages[message.groupId] === null || data.groupMessages[message.groupId] === undefined) {
+              for (let i = 0; i < data.groupChats.length; i++) {
+                if (data.groupChats[i] === message.groupId) {
+                  data.groupChats.splice(i, 1);
+                  break;
+                }
+              }
+              data.groupChats.splice(0, 0, message.groupId);
+              isActive(document.getElementsByClassName('im-group-current')[0], 'im-active', null, 2, message.groupId, 1);
+            }
+
+            if ((data.subType !== 2 || data.currentChatGroupId !== message.groupId) && message.fromId !== store.state.currentUser.id) {
+              if (data.groupMessageBadge[message.groupId] === null || data.groupMessageBadge[message.groupId] === undefined) {
+                data.groupMessageBadge[message.groupId] = 1;
+              } else {
+                data.groupMessageBadge[message.groupId] = data.groupMessageBadge[message.groupId] + 1;
+              }
+            }
+
+            nextTick(() => {
+              let msgContainer = document.getElementsByClassName('msg-container');
+              if (msgContainer && msgContainer.length > 0) {
+                msgContainer[0].scrollTop = msgContainer[0].scrollHeight;
+              }
+              imgShow();
+            });
           }
-        } catch (error) {
-          console.error("初始化WebSocket时发生错误:", error);
-          ElMessage({
-            message: "聊天服务初始化失败，请刷新页面重试",
-            type: 'error'
-          });
         }
       }
 
@@ -875,19 +820,15 @@
           });
         }
 
-        // 移除指定class
         for (const tab of document.getElementsByClassName(className)) {
           tab.classList.remove(className);
         }
 
-        // 安全地添加class
-        if (e) {
-          if (e instanceof HTMLElement) {
-            e.classList.add(className);
-          } else if (e.currentTarget) {
-            let node = e.currentTarget;
-            node.classList.add(className);
-          }
+        if (e instanceof HTMLElement) {
+          e.classList.add(className);
+        } else {
+          let node = e.currentTarget;
+          node.classList.add(className);
         }
       }
 
@@ -900,18 +841,8 @@
         }
         data.imChats.splice(0, 0, friendData.currentFriendId);
         await nextTick();
-        
-        // 安全地获取DOM元素
-        const chatEl = document.getElementById('chat');
-        if (chatEl) {
-          isActive(chatEl, 'aside-active', 1);
-        }
-        
-        const userElements = document.getElementsByClassName('im-user-current');
-        if (userElements && userElements.length > 0) {
-          isActive(userElements[0], 'im-active', null, 2, friendData.currentFriendId, 2);
-        }
-        
+        isActive(document.getElementById('chat'), 'aside-active', 1);
+        isActive(document.getElementsByClassName('im-user-current')[0], 'im-active', null, 2, friendData.currentFriendId, 2);
         getMessages(friendData.currentFriendId);
       }
 
@@ -924,18 +855,8 @@
         }
         data.groupChats.splice(0, 0, groupData.currentGroupId);
         await nextTick();
-        
-        // 安全地获取DOM元素
-        const chatEl = document.getElementById('chat');
-        if (chatEl) {
-          isActive(chatEl, 'aside-active', 1);
-        }
-        
-        const groupElements = document.getElementsByClassName('im-group-current');
-        if (groupElements && groupElements.length > 0) {
-          isActive(groupElements[0], 'im-active', null, 2, groupData.currentGroupId, 1);
-        }
-        
+        isActive(document.getElementById('chat'), 'aside-active', 1);
+        isActive(document.getElementsByClassName('im-group-current')[0], 'im-active', null, 2, groupData.currentGroupId, 1);
         getGroupMessages(groupData.currentGroupId);
         if (groupData.groups[groupData.currentGroupId].groupType === 2) {
           addGroupTopic();
@@ -1014,7 +935,7 @@
         ...toRefs(friendCircleData),
         ...toRefs(friendData),
         ...toRefs(groupData),
-        ...toRefs(imUtilData.imUtilData),
+        ...toRefs(imUtilData),
         ...toRefs(changeDataData),
         isActive,
         sendMsg,

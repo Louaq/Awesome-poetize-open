@@ -26,8 +26,7 @@ import {
   ElUpload,
   ElButton,
   ElRadioGroup,
-  ElRadioButton,
-  ElMessage
+  ElRadioButton
 } from 'element-plus'
 import 'element-plus/dist/index.css'
 
@@ -59,7 +58,6 @@ app.component(ElRadioButton.name, ElRadioButton)
 app.config.globalProperties.$http = http
 app.config.globalProperties.$common = common
 app.config.globalProperties.$constant = constant
-app.config.globalProperties.$message = ElMessage
 
 router.beforeEach((to, from, next) => {
   if (to.meta.requiresAuth) {
@@ -70,7 +68,7 @@ router.beforeEach((to, from, next) => {
       if (typeof to.query.userToken !== "undefined") {
         let userToken = to.query.userToken;
         const xhr = new XMLHttpRequest();
-        xhr.open('post', "/user/token", false);
+        xhr.open('post', constant.baseURL + "/user/token", false);
         xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
         xhr.send("userToken=" + userToken);
         let result = JSON.parse(xhr.responseText);
