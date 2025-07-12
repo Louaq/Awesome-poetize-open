@@ -668,7 +668,7 @@
             }
           })
           .catch((error) => {
-            ElMessage({
+            this.$message({
               message: error.message,
               type: "error"
             });
@@ -856,15 +856,19 @@
           });
         }
 
+        // 移除指定class
         for (const tab of document.getElementsByClassName(className)) {
           tab.classList.remove(className);
         }
 
-        if (e instanceof HTMLElement) {
-          e.classList.add(className);
-        } else {
-          let node = e.currentTarget;
-          node.classList.add(className);
+        // 安全地添加class
+        if (e) {
+          if (e instanceof HTMLElement) {
+            e.classList.add(className);
+          } else if (e.currentTarget) {
+            let node = e.currentTarget;
+            node.classList.add(className);
+          }
         }
       }
 
