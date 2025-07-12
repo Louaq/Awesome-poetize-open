@@ -19,6 +19,15 @@ module.exports = {
         threshold: 10240,
         deleteOriginalAssets: false
       })
-    ]
+    ],
+    module: {
+      rules: [
+        {
+          test: /\.mjs$/,
+          include: /node_modules/,
+          type: 'javascript/auto'
+        }
+      ]
+    }
   }
 }

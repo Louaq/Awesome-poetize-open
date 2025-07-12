@@ -1,5 +1,13 @@
 module.exports = {
   presets: [
-    '@vue/cli-plugin-babel/preset'
+    ['@vue/cli-plugin-babel/preset', {
+      targets: {
+        node: 'current'
+      }
+    }]
+  ],
+  plugins: [
+    '@babel/plugin-proposal-optional-chaining',
+    '@babel/plugin-proposal-nullish-coalescing-operator'
   ]
 }
