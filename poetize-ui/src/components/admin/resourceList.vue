@@ -208,9 +208,10 @@
         storeTypes: [
           {label: "服务器", value: "local"},
           {label: "七牛云", value: "qiniu"},
-          {label: "兰空图床", value: "lsky"}
+          {label: "兰空图床", value: "lsky"},
+          {label: "简单图床", value: "easyimage"}
         ],
-        storeType: localStorage.getItem("defaultStoreType"),
+        storeType: this.$store.state.sysConfig ? (this.$store.state.sysConfig['store.type'] || 'local') : 'local',
         previewMediaUrl: "",
         previewMediaType: "",
         previewFileName: "",

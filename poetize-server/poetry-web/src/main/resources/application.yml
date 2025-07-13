@@ -88,6 +88,19 @@ qiniu:
   bucket:
   downloadUrl:
 
+# 兰空图床配置
+lsky:
+  enable:
+  url:
+  token:
+  strategy_id:
+
+# 简单图床配置  
+easyimage:
+  enable:
+  url:
+  token:
+
 python:
   server:
     url: ${PYTHON_SERVICE_URL:http://localhost:5000}
@@ -129,10 +142,10 @@ image:
   compress:
     # 默认压缩配置
     default:
-      max-width: 1920
-      max-height: 1080
-      quality: 0.85
-      target-size: 512000  # 500KB
+      max-width: 2560
+      max-height: 1440
+      quality: 0.9
+      target-size: 1024000  # 1000KB
     # 缩略图配置
     thumbnail:
       max-width: 300
@@ -141,14 +154,11 @@ image:
       target-size: 102400  # 100KB
     # 头像配置
     avatar:
-      max-width: 200
-      max-height: 200
+      max-width: 300
+      max-height: 300
       quality: 0.8
-      target-size: 51200   # 50KB
-    # 是否启用自动压缩
-    auto-compress: true
+      target-size: 128000  # 128KB
     # 压缩质量阈值（低于此质量不再压缩）
     min-quality: 0.3
     # 文件大小阈值（小于此大小不压缩）
     size-threshold: 204800  # 200KB
-

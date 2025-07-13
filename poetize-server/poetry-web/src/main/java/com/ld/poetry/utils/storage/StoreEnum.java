@@ -7,7 +7,8 @@ public enum StoreEnum {
 
     QINIU("qiniu"),
     LOCAL("local"),
-    LSKY("lsky");  // 添加兰空图床支持
+    LSKY("lsky"),
+    EASYIMAGE("easyimage");  // 添加EasyImage支持
 
     private String code;
 

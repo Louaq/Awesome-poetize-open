@@ -67,7 +67,7 @@
       },
       storeType: {
         type: String,
-        default: localStorage.getItem("defaultStoreType") || "local"
+        default: null // 改为null，使用计算属性获取
       },
       accept: {
         type: String,
@@ -84,21 +84,57 @@
     },
 
     data() {
-      return {}
+      return {
+        // 本地存储类型，当props未提供时使用
+        localStoreType: null
+      }
     },
 
-    computed: {},
+    computed: {
+      // 计算属性：获取当前存储类型
+      currentStoreType() {
+        // 优先使用props传入的storeType
+        if (this.storeType) {
+          return this.storeType;
+        }
+        
+        // 其次使用本地存储的localStoreType（可能通过事件更新）
+        if (this.localStoreType) {
+          return this.localStoreType;
+        }
+        
+        // 最后使用Vuex中的配置
+        return this.$store.state.sysConfig && this.$store.state.sysConfig['store.type'] 
+          ? this.$store.state.sysConfig['store.type'] 
+          : "local";
+      }
+    },
 
     watch: {},
 
     created() {
+      // 监听系统配置更新事件
+      this.$bus.$on('sysConfigUpdated', this.handleSysConfigUpdate);
     },
 
     mounted() {
 
     },
+    
+    beforeDestroy() {
+      // 移除事件监听，避免内存泄漏
+      this.$bus.$off('sysConfigUpdated', this.handleSysConfigUpdate);
+    },
 
     methods: {
+      // 处理系统配置更新事件
+      handleSysConfigUpdate(config) {
+        if (config && config['store.type']) {
+          this.localStoreType = config['store.type'];
+          console.log("上传组件收到系统配置更新，存储类型更新为:", this.localStoreType);
+        }
+      },
+    
       submitUpload() {
         this.$refs.upload.submit();
       },
@@ -111,17 +147,17 @@
 
         let key = this.prefix + "/" + (!this.$common.isEmpty(this.$store.state.currentUser.username) ? (this.$store.state.currentUser.username.replace(/[^a-zA-Z]/g, '') + this.$store.state.currentUser.id) : (this.$store.state.currentAdmin.username.replace(/[^a-zA-Z]/g, '') + this.$store.state.currentAdmin.id)) + new Date().getTime() + Math.floor(Math.random() * 1000) + suffix;
 
-        if (this.storeType === "local") {
+        if (this.currentStoreType === "local") {
           let fd = new FormData();
           fd.append("file", options.file);
           fd.append("originalName", options.file.name);
           fd.append("key", key);
           fd.append("relativePath", key);
           fd.append("type", this.prefix);
-          fd.append("storeType", this.storeType);
+          fd.append("storeType", this.currentStoreType);
 
           return this.$http.upload(this.$constant.baseURL + "/resource/upload", fd, this.isAdmin, options);
-        } else if (this.storeType === "qiniu") {
+        } else if (this.currentStoreType === "qiniu") {
           const xhr = new XMLHttpRequest();
           xhr.open('get', this.$constant.baseURL + "/qiniu/getUpToken?key=" + key, false);
           if (this.isAdmin) {
@@ -147,14 +183,14 @@
           } catch (e) {
             return Promise.reject(e.message);
           }
-        } else if (this.storeType === "lsky") {
+        } else if (this.currentStoreType === "lsky" || this.currentStoreType === "easyimage") {
           let fd = new FormData();
           fd.append("file", options.file);
           fd.append("originalName", options.file.name);
           fd.append("key", key);
           fd.append("relativePath", key);
           fd.append("type", this.prefix);
-          fd.append("storeType", this.storeType);
+          fd.append("storeType", this.currentStoreType);
 
           return this.$http.upload(this.$constant.baseURL + "/resource/upload", fd, this.isAdmin, options);
         }
@@ -163,14 +199,14 @@
       // 文件上传成功时的钩子
       handleSuccess(response, file, fileList) {
         let url;
-        if (this.storeType === "local") {
+        if (this.currentStoreType === "local") {
           url = response.data;
-        } else if (this.storeType === "qiniu") {
+        } else if (this.currentStoreType === "qiniu") {
           url = this.$store.state.sysConfig['qiniu.downloadUrl'] + response.key;
           this.$common.saveResource(this, this.prefix, url, file.size, file.raw.type, file.name, "qiniu", this.isAdmin);
-        } else if (this.storeType === "lsky") {
+        } else if (this.currentStoreType === "lsky" || this.currentStoreType === "easyimage") {
           url = response.data;
-          this.$common.saveResource(this, this.prefix, url, file.size, file.raw.type, file.name, "lsky", this.isAdmin);
+          this.$common.saveResource(this, this.prefix, url, file.size, file.raw.type, file.name, this.currentStoreType, this.isAdmin);
         }
         this.$emit("addPicture", url);
       },

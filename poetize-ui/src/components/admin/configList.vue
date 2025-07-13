@@ -104,6 +104,9 @@ export default {
             });
             this.getConfigInfo();
             this.handleClose();
+            
+            // 主动刷新系统配置，确保前端使用最新配置
+            this.refreshSysConfig();
           })
           .catch((error) => {
             this.$message({
@@ -137,6 +140,9 @@ export default {
           });
           this.getConfigInfo();
           this.handleClose();
+          
+          // 主动刷新系统配置，确保前端使用最新配置
+          this.refreshSysConfig();
         })
         .catch((error) => {
           this.$message({
@@ -175,6 +181,24 @@ export default {
             message: error.message,
             type: "error"
           });
+        });
+    },
+    
+    // 新增刷新系统配置方法
+    refreshSysConfig() {
+      this.$http.get(this.$constant.baseURL + "/sysConfig/listSysConfig")
+        .then((res) => {
+          if (!this.$common.isEmpty(res.data)) {
+            // 更新Vuex中的系统配置
+            this.$store.commit("loadSysConfig", res.data);
+            console.log("系统配置已刷新");
+            
+            // 触发全局事件，通知其他组件系统配置已更新
+            this.$bus.$emit('sysConfigUpdated', res.data);
+          }
+        })
+        .catch((error) => {
+          console.error("刷新系统配置失败:", error);
         });
     }
   }

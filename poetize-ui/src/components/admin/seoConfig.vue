@@ -442,7 +442,7 @@
                     :isAdmin="true" 
                     :prefix="'pwaDeskScreenshot'" 
                     @addPicture="addPwaDesktopScreenshot"
-                    :maxSize="3" 
+                    :maxSize="10" 
                     :maxNumber="1" 
                     class="upload-btn">
                   </uploadPicture>
@@ -466,7 +466,7 @@
                     :isAdmin="true" 
                     :prefix="'pwaMobileScreenshot'" 
                     @addPicture="addPwaMobileScreenshot"
-                    :maxSize="3" 
+                    :maxSize="10" 
                     :maxNumber="1" 
                     class="upload-btn">
                   </uploadPicture>
@@ -1342,6 +1342,7 @@ export default {
       editingSiteAddress: false,
       detectingAddress: false,
       originalSiteAddress: '',
+      currentStoreType: null, // 添加当前存储类型属性
       seoConfig: {
         enable: false,
         site_address: "",
@@ -1441,6 +1442,12 @@ export default {
     try {
       console.log('SEO配置组件初始化');
       this.getSeoConfig();
+      
+      // 初始化当前存储类型
+      this.currentStoreType = this.$store.state.sysConfig['store.type'] || "local";
+      
+      // 监听系统配置更新事件
+      this.$bus.$on('sysConfigUpdated', this.handleSysConfigUpdate);
     } catch (error) {
       console.error('SEO配置组件初始化失败', error);
       this.$message.error('SEO配置加载失败，请刷新页面重试');
@@ -1463,6 +1470,9 @@ export default {
   beforeDestroy() {
     // 移除文档点击事件监听器
     document.removeEventListener('click', this.handleDocumentClick);
+    
+    // 移除系统配置更新事件监听
+    this.$bus.$off('sysConfigUpdated', this.handleSysConfigUpdate);
   },
   
   watch: {
@@ -1478,6 +1488,14 @@ export default {
   },
   
   methods: {
+    // 处理系统配置更新事件
+    handleSysConfigUpdate(config) {
+      if (config && config['store.type']) {
+        this.currentStoreType = config['store.type'];
+        console.log("SEO配置页面收到系统配置更新，存储类型更新为:", this.currentStoreType);
+      }
+    },
+    
     // 自动检测网站地址
     async detectSiteAddress() {
       this.detectingAddress = true;
@@ -2259,6 +2277,9 @@ export default {
         const username = this.$store.state.currentAdmin.username.replace(/[^a-zA-Z]/g, '') + this.$store.state.currentAdmin.id;
         const key = prefix + "/" + username + new Date().getTime() + Math.floor(Math.random() * 1000) + "." + fileExtension;
         
+        // 获取当前配置的存储类型，优先使用更新后的配置
+        const storeType = this.currentStoreType || this.$store.state.sysConfig['store.type'] || "local";
+        
         // 创建FormData（使用与uploadPicture相同的字段结构）
         const formData = new FormData();
         formData.append('file', blob, fileName);
@@ -2266,9 +2287,9 @@ export default {
         formData.append('key', key);
         formData.append('relativePath', key);
         formData.append('type', prefix);
-        formData.append('storeType', 'local');
+        formData.append('storeType', storeType);
 
-        console.log(`开始上传图标: ${iconType} (${fileName})`);
+        console.log(`开始上传图标: ${iconType} (${fileName})，使用存储类型: ${storeType}`);
 
         // 调用现有的上传接口
         const response = await this.$http.upload(

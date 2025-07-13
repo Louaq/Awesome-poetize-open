@@ -500,7 +500,7 @@
           });
         } else {
           let userToken = this.$common.encrypt(localStorage.getItem("userToken"));
-          window.open(this.$constant.imBaseURL + "?userToken=" + userToken + "&defaultStoreType=" + localStorage.getItem("defaultStoreType"));
+          window.open(this.$constant.imBaseURL + "?userToken=" + userToken + "&defaultStoreType=" + (this.$store.state.sysConfig['store.type'] || 'local'));
         }
       },
 
@@ -531,7 +531,6 @@
               
               // 处理网站信息
               this.$store.commit("loadWebInfo", res.data);
-              localStorage.setItem("defaultStoreType", res.data.defaultStoreType);
               
               // 更新浏览器标签栏标题 - 使用原始的webTitle字符串
               if (originalWebTitle) {

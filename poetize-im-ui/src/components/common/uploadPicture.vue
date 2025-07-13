@@ -64,14 +64,29 @@
 
     data() {
       return {
-        storeType: localStorage.getItem("defaultStoreType")
+        storeType: this.$store.state.sysConfig && this.$store.state.sysConfig['store.type'] ? this.$store.state.sysConfig['store.type'] : "local"
       }
     },
 
     created() {
+      // 监听系统配置更新事件
+      this.$bus.$on('sysConfigUpdated', this.handleSysConfigUpdate);
+    },
+    
+    beforeDestroy() {
+      // 移除事件监听，避免内存泄漏
+      this.$bus.$off('sysConfigUpdated', this.handleSysConfigUpdate);
     },
 
     methods: {
+      // 处理系统配置更新事件
+      handleSysConfigUpdate(config) {
+        if (config && config['store.type']) {
+          this.storeType = config['store.type'];
+          console.log("IM聊天上传组件收到系统配置更新，存储类型更新为:", this.storeType);
+        }
+      },
+
       submitUpload() {
         this.$refs.upload.submit();
       },
@@ -84,9 +99,9 @@
         } else if (this.storeType === "qiniu") {
           url = this.$store.state.sysConfig['qiniu.downloadUrl'] + response.key;
           this.$common.saveResource(this, this.prefix, url, file.size, file.raw.type, file.name, "qiniu");
-        } else if (this.storeType === "lsky") {
+        } else if (this.storeType === "lsky" || this.storeType === "easyimage") {
           url = response.data;
-          this.$common.saveResource(this, this.prefix, url, file.size, file.raw.type, file.name, "lsky");
+          this.$common.saveResource(this, this.prefix, url, file.size, file.raw.type, file.name, this.storeType);
         }
         this.$emit("addPicture", url);
       },
@@ -130,7 +145,7 @@
           } catch (e) {
             return Promise.reject(e.message);
           }
-        } else if (this.storeType === "lsky") {
+        } else if (this.storeType === "lsky" || this.storeType === "easyimage") {
           data.relativePath = key;
           data.type = this.prefix;
           data.storeType = this.storeType;

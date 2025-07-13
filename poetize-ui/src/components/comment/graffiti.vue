@@ -109,7 +109,8 @@
         }, {
           className: "big el-icon-edit",
           lineWidth: 15,
-        }]
+        }],
+        currentStoreType: null, // 添加currentStoreType属性
       };
     },
     computed: {
@@ -143,6 +144,12 @@
       this.setCanvasStyle();
     },
     created() {
+      // 监听系统配置更新事件
+      this.$bus.$on('sysConfigUpdated', this.handleSysConfigUpdate);
+    },
+    beforeDestroy() {
+      // 移除事件监听，避免内存泄漏
+      this.$bus.$off('sysConfigUpdated', this.handleSysConfigUpdate);
     },
     methods: {
       canvasOutMove(e) {
@@ -267,7 +274,8 @@
         let obj = new Blob([u8arr], {type: mine});
         let key = "graffiti" + "/" + this.$store.state.currentUser.username.replace(/[^a-zA-Z]/g, '') + this.$store.state.currentUser.id + new Date().getTime() + Math.floor(Math.random() * 1000) + ".png";
 
-        let storeType = localStorage.getItem("defaultStoreType");
+        // 获取当前存储类型，优先使用更新后的配置
+        let storeType = this.currentStoreType || this.$store.state.sysConfig['store.type'] || "local";
 
         let fd = new FormData();
         fd.append("file", obj);
@@ -281,6 +289,8 @@
         } else if (storeType === "qiniu") {
           this.saveQiniu(fd);
         } else if (storeType === "lsky") {
+          this.saveLsky(fd);
+        } else if (storeType === "easyimage") {
           this.saveLsky(fd);
         }
       },
@@ -340,12 +350,13 @@
               this.clearContext();
               let url = res.data;
               let file = fd.get("file");
-              this.$common.saveResource(this, "graffiti", url, file.size, file.type, null, "lsky");
+              let storeType = fd.get("storeType") || "lsky";
+              this.$common.saveResource(this, "graffiti", url, file.size, file.type, null, storeType);
               let img = "[你画我猜," + url + "]";
               this.$emit("addGraffitiComment", img);
             } else {
               this.$message({
-                message: "兰空图床上传失败：服务器未返回有效的图片URL",
+                message: "图床上传失败：服务器未返回有效的图片URL",
                 type: "error"
               });
             }
@@ -356,6 +367,12 @@
               type: "error"
             });
           });
+      },
+      handleSysConfigUpdate(config) {
+        if (config && config['store.type']) {
+          this.currentStoreType = config['store.type'];
+          console.log("涂鸦组件收到系统配置更新，存储类型更新为:", this.currentStoreType);
+        }
       }
     }
   }

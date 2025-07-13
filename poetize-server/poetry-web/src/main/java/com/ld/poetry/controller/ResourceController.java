@@ -63,7 +63,32 @@ public class ResourceController {
         re.setMimeType(resource.getMimeType());
         re.setStoreType(resource.getStoreType());
         re.setUserId(PoetryUtil.getUserId());
+        
+        try {
+            // 先查询是否已存在相同路径的资源
+            Resource existingResource = resourceService.lambdaQuery()
+                .eq(Resource::getPath, resource.getPath())
+                .one();
+            
+            if (existingResource != null) {
+                // 如果存在，更新资源信息
+                existingResource.setType(resource.getType());
+                existingResource.setSize(resource.getSize());
+                existingResource.setOriginalName(resource.getOriginalName());
+                existingResource.setMimeType(resource.getMimeType());
+                existingResource.setStoreType(resource.getStoreType());
+                existingResource.setUserId(PoetryUtil.getUserId());
+                resourceService.updateById(existingResource);
+                log.info("更新已存在的资源记录: {}", resource.getPath());
+            } else {
+                // 不存在则保存新记录
         resourceService.save(re);
+            }
+        } catch (Exception e) {
+            log.error("保存资源信息失败: {}", e.getMessage(), e);
+            return PoetryResult.fail("保存资源信息失败: " + e.getMessage());
+        }
+        
         return PoetryResult.success();
     }
 
@@ -121,7 +146,26 @@ public class ResourceController {
             re.setStoreType(fileVO.getStoreType());
             re.setOriginalName(fileVO.getOriginalName());
             re.setUserId(PoetryUtil.getUserId());
+            
+            // 先查询是否已存在相同路径的资源
+            Resource existingResource = resourceService.lambdaQuery()
+                .eq(Resource::getPath, result.getVisitPath())
+                .one();
+            
+            if (existingResource != null) {
+                // 如果存在，更新资源信息
+                existingResource.setType(fileVO.getType());
+                existingResource.setSize(Integer.valueOf(Long.toString(processedFile.getSize())));
+                existingResource.setOriginalName(fileVO.getOriginalName());
+                existingResource.setMimeType(processedFile.getContentType());
+                existingResource.setStoreType(fileVO.getStoreType());
+                existingResource.setUserId(PoetryUtil.getUserId());
+                resourceService.updateById(existingResource);
+                log.info("更新已存在的资源记录: {}", result.getVisitPath());
+            } else {
+                // 不存在则保存新记录
             resourceService.save(re);
+            }
             
             return PoetryResult.success(result.getVisitPath());
             
@@ -180,7 +224,26 @@ public class ResourceController {
             re.setStoreType(fileVO.getStoreType());
             re.setOriginalName(fileVO.getOriginalName());
             re.setUserId(PoetryUtil.getUserId());
+            
+            // 先查询是否已存在相同路径的资源
+            Resource existingResource = resourceService.lambdaQuery()
+                .eq(Resource::getPath, result.getVisitPath())
+                .one();
+            
+            if (existingResource != null) {
+                // 如果存在，更新资源信息
+                existingResource.setType(fileVO.getType());
+                existingResource.setSize(Integer.valueOf(Long.toString(compressedFile.getSize())));
+                existingResource.setOriginalName(fileVO.getOriginalName());
+                existingResource.setMimeType(compressedFile.getContentType());
+                existingResource.setStoreType(fileVO.getStoreType());
+                existingResource.setUserId(PoetryUtil.getUserId());
+                resourceService.updateById(existingResource);
+                log.info("更新已存在的资源记录: {}", result.getVisitPath());
+            } else {
+                // 不存在则保存新记录
             resourceService.save(re);
+            }
 
             // 返回详细的压缩信息
             return PoetryResult.success(new Object() {

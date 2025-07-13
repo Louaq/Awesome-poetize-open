@@ -13,7 +13,6 @@ import com.ld.poetry.utils.cache.PoetryCache;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
@@ -37,9 +36,6 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/webInfo")
 public class WebInfoController {
-
-    @Value("${store.type}")
-    private String defaultType;
 
     @Autowired
     private WebInfoService webInfoService;
@@ -80,7 +76,6 @@ public class WebInfoController {
         LambdaQueryChainWrapper<WebInfo> wrapper = new LambdaQueryChainWrapper<>(webInfoService.getBaseMapper());
         List<WebInfo> list = wrapper.list();
         if (!CollectionUtils.isEmpty(list)) {
-            list.get(0).setDefaultStoreType(defaultType);
             PoetryCache.put(CommonConst.WEB_INFO, list.get(0));
             
             // 网站信息更新时，重新渲染首页和百宝箱页面
@@ -233,7 +228,6 @@ public class WebInfoController {
             List<WebInfo> list = wrapper.list();
             if (!CollectionUtils.isEmpty(list)) {
                 webInfo = list.get(0);
-                webInfo.setDefaultStoreType(defaultType);
                 PoetryCache.put(CommonConst.WEB_INFO, webInfo);
             } else {
                 webInfo = new WebInfo();

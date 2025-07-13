@@ -14,8 +14,8 @@ FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
-# 安装健康检查所需工具
-RUN apk add --no-cache netcat-openbsd curl
+# 安装健康检查所需工具和WebP支持库
+RUN apk add --no-cache netcat-openbsd curl libwebp libwebp-tools
 
 # 从构建阶段复制JAR文件
 COPY --from=builder /app/poetry-web/target/poetize-server-exec.jar /app/app.jar

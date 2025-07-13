@@ -191,6 +191,7 @@
         currentTaskId: null,
         newSortLoading: false,
         newLabelLoading: false,
+        currentStoreType: null, // 添加currentStoreType属性
         article: {
           articleTitle: "",
           articleContent: "",
@@ -289,11 +290,28 @@
 
     created() {
       this.getSortAndLabel();
+      
+      // 监听系统配置更新事件
+      this.$bus.$on('sysConfigUpdated', this.handleSysConfigUpdate);
+    },
+    
+    beforeDestroy() {
+      // 移除事件监听，避免内存泄漏
+      this.$bus.$off('sysConfigUpdated', this.handleSysConfigUpdate);
     },
 
 
 
     methods: {
+      // 处理系统配置更新事件
+      handleSysConfigUpdate(config) {
+        console.log("文章编辑器收到系统配置更新事件");
+        if (config && config['store.type']) {
+          this.currentStoreType = config['store.type'];
+          console.log("存储类型已更新为:", this.currentStoreType);
+        }
+      },
+      
       // 图片上传处理
       imgAdd(pos, file) {
         try {
@@ -302,7 +320,8 @@
                     + this.$store.state.currentAdmin.id + new Date().getTime() 
                     + Math.floor(Math.random() * 1000) + suffix;
 
-          let storeType = localStorage.getItem("defaultStoreType") || "local";
+          // 获取当前存储类型，优先使用更新后的配置
+          let storeType = this.currentStoreType || this.$store.state.sysConfig['store.type'] || "local";
 
           let fd = new FormData();
           fd.append("file", file);
@@ -317,6 +336,8 @@
           } else if (storeType === "qiniu") {
             this.saveQiniu(pos, fd);
           } else if (storeType === "lsky") {
+            this.saveLsky(pos, fd);
+          } else if (storeType === "easyimage") {
             this.saveLsky(pos, fd);
           }
         } catch (error) {
@@ -377,14 +398,15 @@
               // 获取返回的图片URL
               let url = res.data;
               let file = fd.get("file");
-              this.$common.saveResource(this, "articlePicture", url, file.size, file.type, file.name, "lsky", true);
+              let storeType = fd.get("storeType") || "lsky";
+              this.$common.saveResource(this, "articlePicture", url, file.size, file.type, file.name, storeType, true);
               this.$refs.md.$img2Url(pos, url);
             } else {
-              this.showError("兰空图床上传失败", "服务器未返回有效的图片URL");
+              this.showError("图床上传失败", "服务器未返回有效的图片URL");
             }
           })
           .catch((error) => {
-            this.showError("兰空图床上传失败", error);
+            this.showError("图床上传失败", error);
           });
       },
       

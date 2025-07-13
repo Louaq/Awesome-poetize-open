@@ -174,7 +174,7 @@
           </div>
           <uploadPicture :isAdmin="true" :prefix="'webBackgroundImage'" style="margin-top: 15px"
                          @addPicture="addBackgroundImage"
-                         :maxSize="3"
+                         :maxSize="10"
                          :maxNumber="1"></uploadPicture>
         </el-form-item>
 
@@ -226,7 +226,7 @@
           </div>
           <uploadPicture :isAdmin="true" :prefix="'footerBackground'" style="margin-top: 15px"
                          @addPicture="addFooterBackgroundImage"
-                         :maxSize="3"
+                         :maxSize="10"
                          :maxNumber="1"></uploadPicture>
           
           <!-- 背景图片配置选项 -->

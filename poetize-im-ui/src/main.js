@@ -59,6 +59,34 @@ app.config.globalProperties.$http = http
 app.config.globalProperties.$common = common
 app.config.globalProperties.$constant = constant
 
+// 创建事件总线
+app.config.globalProperties.$bus = {
+  // 简单的事件总线实现
+  _events: {},
+  $on(event, callback) {
+    if (!this._events[event]) {
+      this._events[event] = [];
+    }
+    this._events[event].push(callback);
+    return this;
+  },
+  $off(event, callback) {
+    if (!this._events[event]) return this;
+    if (!callback) {
+      this._events[event] = [];
+      return this;
+    }
+    this._events[event] = this._events[event].filter(fn => fn !== callback);
+    return this;
+  },
+  $emit(event, ...args) {
+    if (!this._events[event]) return this;
+    const cbs = [...this._events[event]];
+    cbs.forEach(cb => cb(...args));
+    return this;
+  }
+};
+
 router.beforeEach((to, from, next) => {
   if (to.meta.requiresAuth) {
     if (to.path === "/") {
