@@ -1669,9 +1669,11 @@ def register_seo_api(app: FastAPI):
                 try:
                     logger.info("正在清理Nginx SEO缓存...")
                     headers = {'X-Internal-Service': 'poetize-python'}
-                    async with httpx.AsyncClient(verify=False) as client:
+                    async with httpx.AsyncClient(verify=False, follow_redirects=True) as client:
                         response = await client.post(nginx_url, headers=headers, timeout=5)
-                    logger.info(f"Nginx SEO缓存清理结果: {'成功' if response.status_code == 200 else f'失败,非200状态码: {response.status_code}, 响应: {response.text}'}")
+                    # 将200和301都视为成功
+                    is_success = response.status_code == 200 or response.status_code == 301
+                    logger.info(f"Nginx SEO缓存清理结果: {'成功' if is_success else f'失败,状态码: {response.status_code}, 响应: {response.text}'}")
                 except Exception as e:
                     logger.error(f"清理Nginx SEO缓存失败: {str(e)}")
                 
@@ -1731,9 +1733,11 @@ def register_seo_api(app: FastAPI):
                     # 发送清理请求
                     logger.info("正在清理Nginx SEO缓存...")
                     headers = {'X-Internal-Service': 'poetize-python'}
-                    async with httpx.AsyncClient(verify=False) as client:
+                    async with httpx.AsyncClient(verify=False, follow_redirects=True) as client:
                         response = await client.post(nginx_url, headers=headers, timeout=5)
-                    logger.info(f"Nginx SEO缓存清理结果: {'成功' if response.status_code == 200 else f'失败,非200状态码: {response.status_code}, 响应: {response.text}'}")
+                    # 将200和301都视为成功
+                    is_success = response.status_code == 200 or response.status_code == 301
+                    logger.info(f"Nginx SEO缓存清理结果: {'成功' if is_success else f'失败,状态码: {response.status_code}, 响应: {response.text}'}")
                 except Exception as e:
                     logger.error(f"清理Nginx SEO缓存失败: {str(e)}")
                 
