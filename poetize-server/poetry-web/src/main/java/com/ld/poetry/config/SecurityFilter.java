@@ -32,6 +32,9 @@ public class SecurityFilter extends OncePerRequestFilter {
     // 拉黑IP记录 <IP, 拉黑时间>
     private static final ConcurrentHashMap<String, LocalDateTime> blacklistedIPs = new ConcurrentHashMap<>();
     
+    // 被拦截的恶意请求总数统计
+    private static final AtomicInteger totalBlockedRequests = new AtomicInteger(0);
+    
     // 攻击次数阈值 - 超过此次数将被拉黑
     private static final int ATTACK_THRESHOLD = 3;
     
@@ -86,7 +89,12 @@ public class SecurityFilter extends OncePerRequestFilter {
         "/web.config",              // IIS配置文件
         "/server.xml",              // Tomcat配置
         "/application.properties",  // Spring配置文件（如果在根目录就是恶意扫描）
-        "/application.yml"
+        "/application.yml",
+        "/build.sh",                // 构建脚本，常被扫描利用
+        "/index.html",              // 根目录index.html探测
+        "/translation/test-summary", // 翻译模型测试探测
+        "/translation/definite_notexist_path", // 翻译模型路径扫描
+        "/definite_notexist_path"  // 通用路径探测
     );
 
     @Override
@@ -126,8 +134,21 @@ public class SecurityFilter extends OncePerRequestFilter {
             isMaliciousRequest = true;
             attackType = "可疑请求特征";
         }
+        // 检查无参数的敏感API调用
+        else if (isInvalidApiCall(request)) {
+            isMaliciousRequest = true;
+            attackType = "恶意API探测";
+        }
         
         if (isMaliciousRequest) {
+            // 统计拦截请求总数
+            int blocked = totalBlockedRequests.incrementAndGet();
+            
+            // 每100次拦截记录一次统计信息
+            if (blocked % 100 == 0) {
+                log.info("安全过滤器已累计拦截 {} 次恶意请求", blocked);
+            }
+            
             // 记录攻击并检查是否需要拉黑
             recordAttackAndCheckBlacklist(clientIP, requestURI, attackType);
             
@@ -165,6 +186,34 @@ public class SecurityFilter extends OncePerRequestFilter {
                 lowerURI.contains("admin.php") || lowerURI.contains("login.php") ||
                 lowerURI.contains("config.php") || lowerURI.contains("phpinfo")) {
                 return true;
+            }
+            
+            // 只拦截已知的恶意翻译路径扫描，不拦截合法翻译服务请求
+            if (lowerURI.equals("/translation/test-summary") || lowerURI.equals("/translation/definite_notexist_path")) {
+                return true;
+            }
+            
+            // 检测明显的恶意探测模式
+            if (lowerURI.contains("notexist") || 
+                lowerURI.contains("test-") || 
+                lowerURI.contains("scanner") || 
+                lowerURI.contains("scan") ||
+                lowerURI.contains("probe")) {
+                return true;
+            }
+            
+            // 检测常见的CMS路径扫描
+            Set<String> commonCmsPatterns = Set.of(
+                "/wp-", "/wordpress", "/drupal", "/joomla", "/magento",
+                "/administrator", "/admin/login", "/phpmyadmin", "/xmlrpc", 
+                "/blog/wp-", "/cms/", "/old/", "/new/", "/backup/", "/bak/", 
+                "/beta/", "/temp/", "/dev/"
+            );
+            
+            for (String pattern : commonCmsPatterns) {
+                if (lowerURI.contains(pattern)) {
+                    return true;
+                }
             }
             
             // XSS和脚本注入检测
@@ -328,6 +377,13 @@ public class SecurityFilter extends OncePerRequestFilter {
     }
     
     /**
+     * 获取被拦截的恶意请求总数
+     */
+    public static int getTotalBlockedRequests() {
+        return totalBlockedRequests.get();
+    }
+    
+    /**
      * 手动解除IP拉黑（管理员功能）
      */
     public static boolean unblacklistIP(String ip) {
@@ -337,5 +393,26 @@ public class SecurityFilter extends OncePerRequestFilter {
             log.info("管理员手动解除IP拉黑: {}", ip);
         }
         return removed;
+    }
+    
+    /**
+     * 检查是否为无参数的敏感API调用
+     * 识别常见的恶意API探测模式，特别是那些缺少必要参数的请求
+     */
+    private boolean isInvalidApiCall(HttpServletRequest request) {
+        String requestURI = request.getRequestURI();
+        
+        // 1. 忘记密码API无参数调用
+        if (requestURI.equals("/user/getCodeForForgetPassword")) {
+            // 检查是否缺少必要参数'place'
+            String place = request.getParameter("place");
+            if (place == null || place.isEmpty()) {
+                log.warn("检测到无参数的密码找回API调用: {}, IP: {}", 
+                        requestURI, getClientIpAddress(request));
+                return true;
+            }
+        }
+        
+        return false;
     }
 }
