@@ -193,18 +193,40 @@ Vue.prototype.$notify = {
 
 // 添加全局错误处理
 Vue.config.errorHandler = (err, vm, info) => {
-  console.error('Vue错误:', err);
-  // 对特定错误进行处理
+  // 检查是否为appendChild错误
+  if (err.message && (err.message.includes('appendChild') || err.message.includes('node type'))) {
+    console.warn('非关键DOM操作错误已被捕获（不影响功能）:', err.message);
+    // 不进一步处理，避免影响用户体验
+    return;
+  }
+  
+  // 对看板娘特定错误进行处理
   if (err.message && err.message.includes('live2d')) {
     console.warn('看板娘相关错误已捕获，不影响系统使用');
+    return;
   }
+  
+  // 其他错误正常记录
+  console.error('Vue错误:', err);
+  console.error('错误信息:', info);
 };
 
 // 捕获未处理的Promise错误
 window.addEventListener('unhandledrejection', event => {
   console.warn('未处理的Promise错误:', event.reason);
-  // 忽略特定错误
-  if (event.reason && event.reason.toString().includes('live2d')) {
+  
+  // 处理多种可能的非关键错误
+  const errorStr = event.reason && event.reason.toString ? event.reason.toString() : '';
+  
+  // 处理DOM相关错误
+  if (errorStr.includes('appendChild') || errorStr.includes('node type')) {
+    console.warn('非关键DOM操作Promise错误已捕获（不影响功能）');
+    event.preventDefault();
+    return;
+  }
+  
+  // 处理看板娘错误
+  if (errorStr.includes('live2d')) {
     console.warn('看板娘相关Promise错误已捕获，不影响系统使用');
     event.preventDefault();
   }

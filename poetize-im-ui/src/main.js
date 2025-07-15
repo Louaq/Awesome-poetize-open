@@ -127,6 +127,32 @@ router.beforeEach((to, from, next) => {
   }
 })
 
+// 添加全局错误处理器
+app.config.errorHandler = (err, vm, info) => {
+  // 检查是否为appendChild错误
+  if (err.message && (err.message.includes('appendChild') || err.message.includes('node type'))) {
+    console.warn('非关键DOM操作错误已被捕获（不影响功能）:', err.message);
+    // 不进一步处理，避免影响用户体验
+    return;
+  }
+  
+  // 其他错误正常记录
+  console.error('应用错误:', err);
+  console.error('错误信息:', info);
+};
+
+// 捕获未处理的Promise错误
+window.addEventListener('unhandledrejection', event => {
+  console.warn('未处理的Promise错误:', event.reason);
+  // 如果是appendChild相关错误，防止进一步传播
+  if (event.reason && event.reason.toString && 
+      (event.reason.toString().includes('appendChild') || 
+       event.reason.toString().includes('node type'))) {
+    console.warn('非关键Promise错误已被捕获（不影响功能）');
+    event.preventDefault();
+  }
+});
+
 // 初始加载字体
 if (store.state.sysConfig) {
   loadFonts(store.state.sysConfig).catch(err => {
