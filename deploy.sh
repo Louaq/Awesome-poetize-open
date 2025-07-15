@@ -1,8 +1,8 @@
 #!/bin/bash
 ## 作者: LeapYa
-## 修改时间: 2025-07-11
+## 修改时间: 2025-07-15
 ## 描述: 部署 Poetize 博客系统安装脚本
-## 版本: 1.4.3
+## 版本: 1.4.4
 
 # 定义颜色
 RED='\033[0;31m'
@@ -2702,10 +2702,10 @@ setup_swap() {
       info "已加载zram模块，配置大小为${SWAP_SIZE}..."
       if command -v sudo &>/dev/null; then
         echo $ZRAM_SIZE_BYTES | sudo tee /sys/block/zram0/disksize >/dev/null
-        sudo mkswap $ZRAM_DEV && sudo swapon -p 100 $ZRAM_DEV
+        sudo mkswap $ZRAM_DEV && sudo swapon -p 10 $ZRAM_DEV
       else
         echo $ZRAM_SIZE_BYTES > /sys/block/zram0/disksize
-        mkswap $ZRAM_DEV && swapon -p 100 $ZRAM_DEV
+        mkswap $ZRAM_DEV && swapon -p 10 $ZRAM_DEV
       fi
 
       if swapon --show | grep -q "$ZRAM_DEV"; then
@@ -2737,8 +2737,8 @@ setup_swap() {
         return 1
       }
       
-      # 启用swap
-      sudo swapon $SWAP_FILE || {
+      # 启用swap，设置低优先级
+      sudo swapon -p 5 $SWAP_FILE || {
         error "启用swap失败"
         return 1
       }
@@ -2763,8 +2763,8 @@ setup_swap() {
         return 1
       }
       
-      # 启用swap
-      swapon $SWAP_FILE || {
+      # 启用swap，设置低优先级
+      swapon -p 5 $SWAP_FILE || {
         error "启用swap失败"
         return 1
       }
@@ -2778,6 +2778,18 @@ setup_swap() {
     # 验证swap是否已启用
     if free | grep -q "Swap:" && [ "$(free | grep "Swap:" | awk '{print $2}')" -gt 0 ]; then
       success "成功创建并启用了${SWAP_SIZE}的swap空间"
+      
+      # 调整swappiness参数，减少系统对swap的依赖
+      info "正在调整系统swappiness参数..."
+      if command -v sudo &>/dev/null; then
+        sudo sysctl -w vm.swappiness=10 &>/dev/null && \
+        echo "vm.swappiness=10" | sudo tee -a /etc/sysctl.conf &>/dev/null && \
+        success "已设置swappiness=10，降低系统对swap的使用倾向"
+      else
+        sysctl -w vm.swappiness=10 &>/dev/null && \
+        echo "vm.swappiness=10" >> /etc/sysctl.conf &>/dev/null && \
+        success "已设置swappiness=10，降低系统对swap的使用倾向"
+      fi
     else
       warning "swap空间创建失败，但将继续执行后续步骤"
       # 不再返回错误状态，继续执行
