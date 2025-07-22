@@ -368,7 +368,7 @@ CREATE TABLE `poetize`.`article_translation` (
   KEY `idx_article_id` (`article_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='文章翻译内容表';
 
-INSERT INTO `poetize`.`user`(`id`, `username`, `password`, `phone_number`, `email`, `user_status`, `gender`, `open_id`, `admire`, `subscribe`, `avatar`, `introduction`, `user_type`, `update_by`, `deleted`) VALUES (1, 'Sara', '$12$hxtMwTkpt1FyFrQgRMQ/lenlkYd28MEhQMcafzhnXz7hYgDMM0b/C', '', '', 1, 1, '', '', '', '', '', 0, 'Sara', 0);
+INSERT INTO `poetize`.`user`(`id`, `username`, `password`, `phone_number`, `email`, `user_status`, `gender`, `open_id`, `admire`, `subscribe`, `avatar`, `introduction`, `user_type`, `update_by`, `deleted`) VALUES (1, 'Sara', '$2a$12$hQ2N3HlDqxdVrsJ4SKGY1.D6F/I1/dUBFVkckaq1DnJH693mPZS5S', '', '', 1, 1, '', '', '', '', '', 0, 'Sara', 0);
 
 INSERT INTO `poetize`.`web_info`(`id`, `web_name`, `web_title`, `notices`, `footer`, `background_image`, `avatar`, `random_avatar`, `random_name`, `random_cover`, `waifu_json`, `status`, `api_enabled`, `api_key`, `nav_config`, `minimal_footer`) VALUES (1, 'Sara', 'POETIZE', '[]', '云想衣裳花想容， 春风拂槛露华浓。', '', '', '[]', '[]', '["/static/assets/backgroundPicture.jpg"]', '{
     "waifuPath": "/static/live2d-widget/waifu-tips.json",
