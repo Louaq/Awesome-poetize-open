@@ -59,6 +59,18 @@ public class CacheConstants {
      */
     public static final String ARTICLE_VIEW_PREFIX = CACHE_PREFIX + "article:view:";
 
+    /**
+     * 用户文章列表缓存键前缀
+     * 格式: poetize:user:article:list:{userId}
+     */
+    public static final String USER_ARTICLE_LIST_PREFIX = CACHE_PREFIX + "user:article:list:";
+
+    /**
+     * 文章搜索结果缓存键前缀
+     * 格式: poetize:search:article:{hashCode}
+     */
+    public static final String SEARCH_ARTICLE_PREFIX = CACHE_PREFIX + "search:article:";
+
     // ================================ 评论相关缓存 ================================
     
     /**
@@ -79,7 +91,12 @@ public class CacheConstants {
      * 分类信息缓存键
      */
     public static final String SORT_LIST_KEY = CACHE_PREFIX + "sort:list";
-    
+
+    /**
+     * 分类文章列表缓存键
+     */
+    public static final String SORT_ARTICLE_LIST_KEY = CACHE_PREFIX + "sort:article:list";
+
     /**
      * 标签信息缓存键前缀
      * 格式: poetize:label:list:{sortId}
@@ -92,12 +109,27 @@ public class CacheConstants {
      * 网站信息缓存键
      */
     public static final String WEB_INFO_KEY = CACHE_PREFIX + "webinfo";
-    
+
     /**
      * 系统配置缓存键前缀
      * 格式: poetize:config:{configKey}
      */
     public static final String SYS_CONFIG_PREFIX = CACHE_PREFIX + "config:";
+
+    /**
+     * 管理员用户缓存键
+     */
+    public static final String ADMIN_CACHE_KEY = CACHE_PREFIX + "admin";
+
+    /**
+     * 点赞用户列表缓存键
+     */
+    public static final String ADMIRE_LIST_KEY = CACHE_PREFIX + "admire:list";
+
+    /**
+     * 家庭成员列表缓存键
+     */
+    public static final String FAMILY_LIST_KEY = CACHE_PREFIX + "family:list";
 
     // ================================ 安全相关缓存 ================================
     
@@ -119,6 +151,66 @@ public class CacheConstants {
      */
     public static final String CAPTCHA_PREFIX = CACHE_PREFIX + "captcha:";
 
+    /**
+     * 用户验证码缓存键前缀
+     * 格式: poetize:user:code:{userId}:{place}:{flag}
+     */
+    public static final String USER_CODE_PREFIX = CACHE_PREFIX + "user:code:";
+
+    /**
+     * 邮箱验证码发送次数缓存键前缀
+     * 格式: poetize:code:mail:count:{email}
+     */
+    public static final String CODE_MAIL_COUNT_PREFIX = CACHE_PREFIX + "code:mail:count:";
+
+    /**
+     * 忘记密码验证码缓存键前缀
+     * 格式: poetize:forget:password:{contact}:{flag}
+     */
+    public static final String FORGET_PASSWORD_PREFIX = CACHE_PREFIX + "forget:password:";
+
+    /**
+     * 登录失败尝试缓存键前缀
+     * 格式: poetize:login:attempt:{account}
+     */
+    public static final String LOGIN_ATTEMPT_PREFIX = CACHE_PREFIX + "login:attempt:";
+
+    /**
+     * 用户保存频率限制缓存键前缀
+     * 格式: poetize:save:count:user:{userId}
+     */
+    public static final String SAVE_COUNT_USER_PREFIX = CACHE_PREFIX + "save:count:user:";
+
+    /**
+     * IP保存频率限制缓存键前缀
+     * 格式: poetize:save:count:ip:{ip}
+     */
+    public static final String SAVE_COUNT_IP_PREFIX = CACHE_PREFIX + "save:count:ip:";
+
+    /**
+     * 管理员token缓存键前缀
+     * 格式: poetize:admin:token:{userId}
+     */
+    public static final String ADMIN_TOKEN_PREFIX = CACHE_PREFIX + "admin:token:";
+
+    /**
+     * 用户token缓存键前缀
+     * 格式: poetize:user:token:{userId}
+     */
+    public static final String USER_TOKEN_PREFIX = CACHE_PREFIX + "user:token:";
+
+    /**
+     * 管理员token间隔检查缓存键前缀
+     * 格式: poetize:admin:token:interval:{userId}
+     */
+    public static final String ADMIN_TOKEN_INTERVAL_PREFIX = CACHE_PREFIX + "admin:token:interval:";
+
+    /**
+     * 用户token间隔检查缓存键前缀
+     * 格式: poetize:user:token:interval:{userId}
+     */
+    public static final String USER_TOKEN_INTERVAL_PREFIX = CACHE_PREFIX + "user:token:interval:";
+
     // ================================ 统计相关缓存 ================================
     
     /**
@@ -131,6 +223,16 @@ public class CacheConstants {
      * 在线用户数缓存键
      */
     public static final String ONLINE_USERS_KEY = CACHE_PREFIX + "stats:online";
+
+    /**
+     * IP历史记录缓存键
+     */
+    public static final String IP_HISTORY_KEY = CACHE_PREFIX + "ip:history";
+
+    /**
+     * IP历史统计缓存键
+     */
+    public static final String IP_HISTORY_STATS_KEY = CACHE_PREFIX + "ip:history:statistics";
 
     // ================================ 第三方服务缓存 ================================
     
@@ -265,5 +367,116 @@ public class CacheConstants {
      */
     public static String buildSysConfigKey(String configKey) {
         return SYS_CONFIG_PREFIX + configKey;
+    }
+
+    /**
+     * 构建用户文章列表缓存键
+     * @param userId 用户ID
+     * @return 缓存键
+     */
+    public static String buildUserArticleListKey(Integer userId) {
+        return USER_ARTICLE_LIST_PREFIX + userId;
+    }
+
+    /**
+     * 构建文章搜索缓存键
+     * @param searchText 搜索文本
+     * @return 缓存键
+     */
+    public static String buildSearchArticleKey(String searchText) {
+        return SEARCH_ARTICLE_PREFIX + (searchText != null ? searchText.hashCode() : "empty");
+    }
+
+    /**
+     * 构建用户验证码缓存键
+     * @param userId 用户ID
+     * @param place 位置
+     * @param flag 标志
+     * @return 缓存键
+     */
+    public static String buildUserCodeKey(Integer userId, String place, String flag) {
+        return USER_CODE_PREFIX + userId + ":" + place + ":" + flag;
+    }
+
+    /**
+     * 构建邮箱验证码发送次数缓存键
+     * @param email 邮箱
+     * @return 缓存键
+     */
+    public static String buildCodeMailCountKey(String email) {
+        return CODE_MAIL_COUNT_PREFIX + email;
+    }
+
+    /**
+     * 构建忘记密码验证码缓存键
+     * @param contact 联系方式（邮箱或手机号）
+     * @param flag 标志（1-手机号，2-邮箱）
+     * @return 缓存键
+     */
+    public static String buildForgetPasswordKey(String contact, String flag) {
+        return FORGET_PASSWORD_PREFIX + contact + ":" + flag;
+    }
+
+    /**
+     * 构建登录失败尝试缓存键
+     * @param account 账号
+     * @return 缓存键
+     */
+    public static String buildLoginAttemptKey(String account) {
+        return LOGIN_ATTEMPT_PREFIX + account;
+    }
+
+    /**
+     * 构建用户保存频率限制缓存键
+     * @param userId 用户ID
+     * @return 缓存键
+     */
+    public static String buildSaveCountUserKey(Integer userId) {
+        return SAVE_COUNT_USER_PREFIX + userId;
+    }
+
+    /**
+     * 构建IP保存频率限制缓存键
+     * @param ip IP地址
+     * @return 缓存键
+     */
+    public static String buildSaveCountIpKey(String ip) {
+        return SAVE_COUNT_IP_PREFIX + ip;
+    }
+
+    /**
+     * 构建管理员token缓存键
+     * @param userId 用户ID
+     * @return 缓存键
+     */
+    public static String buildAdminTokenKey(Integer userId) {
+        return ADMIN_TOKEN_PREFIX + userId;
+    }
+
+    /**
+     * 构建用户token缓存键
+     * @param userId 用户ID
+     * @return 缓存键
+     */
+    public static String buildUserTokenKey(Integer userId) {
+        return USER_TOKEN_PREFIX + userId;
+    }
+
+    /**
+     * 构建管理员token间隔检查缓存键
+     * @param userId 用户ID
+     * @return 缓存键
+     */
+    public static String buildAdminTokenIntervalKey(Integer userId) {
+        return ADMIN_TOKEN_INTERVAL_PREFIX + userId;
+    }
+
+    /**
+     * 构建用户token间隔检查缓存键
+     * @param userId 用户ID
+     * @return 缓存键
+     */
+    public static String buildUserTokenIntervalKey(Integer userId) {
+        return USER_TOKEN_INTERVAL_PREFIX + userId;
     }
 }

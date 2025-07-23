@@ -787,7 +787,7 @@ Vue.js具有响应式数据绑定和组件化的特性，这使得开发者可�
     async getApiConfig() {
       try {
         this.loading = true;
-        const res = await this.$http.get(this.$constant.pythonBaseURL + '/api/translation/config');
+        const res = await this.$http.get(this.$constant.pythonBaseURL + '/api/translation/config', {}, true);
         
         console.log('获取到的配置数据:', res); // 添加调试日志
         
@@ -944,7 +944,7 @@ Vue.js具有响应式数据绑定和组件化的特性，这使得开发者可�
           };
         }
         
-        const res = await this.$http.post(this.$constant.pythonBaseURL + '/api/translation/config', config);
+        const res = await this.$http.post(this.$constant.pythonBaseURL + '/api/translation/config', config, true);
         
         if (res && res.code === 200) {
           this.$message.success('配置保存成功');
@@ -1002,7 +1002,7 @@ Vue.js具有响应式数据绑定和组件化的特性，这使得开发者可�
         // 使用Python端的翻译测试接口，后端会自动使用配置中的默认语言
         const response = await this.$http.post(this.$constant.pythonBaseURL + '/api/translation/test', {
           text: this.testTranslationForm.sourceText
-        });
+        }, true);
         
         if (response.code === 200 && response.data) {
           this.testTranslationForm.translatedText = response.data.translated_text;
@@ -1110,9 +1110,7 @@ Vue.js具有响应式数据绑定和组件化的特性，这使得开发者可�
         const timeoutMs = ((this.apiConfig.llmTimeout || 30) + 10) * 1000;
         console.log(`后端配置超时: ${this.apiConfig.llmTimeout}秒，前端超时: ${(this.apiConfig.llmTimeout || 30) + 10}秒`);
         
-        const res = await this.$http.post(this.$constant.pythonBaseURL + '/api/translation/test-summary', testRequest, {
-          timeout: timeoutMs
-        });
+        const res = await this.$http.post(this.$constant.pythonBaseURL + '/api/translation/test-summary', testRequest, true);
         
         if (res && res.code === 200 && res.data) {
           const result = res.data;

@@ -8,6 +8,7 @@ import uuid
 import traceback
 from auth_decorator import admin_required  # 导入管理员权限装饰器
 import httpx
+from cache_constants import CacheConstants  # 导入缓存常量
 
 path_prefix = os.path.dirname(os.path.abspath(__file__))
 ENV = os.environ.get("ENV", "development")
@@ -198,18 +199,40 @@ async def save_web_info(web_info, request: Request = None):
             if data.get("code") == 200:
                 print(f"保存网站信息成功，看板娘状态: {java_web_info.get('enableWaifu', '未设置')}")
 
-                # 使用统一的缓存刷新服务
+                # 立即清理所有相关缓存，确保数据一致性
                 try:
-                    from cache_refresh_service import get_cache_refresh_service
-                    refresh_service = get_cache_refresh_service()
-                    refresh_result = refresh_service.refresh_web_info_caches()
+                    from cache_service import get_cache_service
+                    cache_service = get_cache_service()
 
-                    if refresh_result.get("success", False):
-                        print(f"网站信息更新完成，成功清理 {refresh_result.get('cleared_count', 0)} 个相关缓存")
-                    else:
-                        print(f"网站信息缓存清理部分失败: 成功 {refresh_result.get('cleared_count', 0)}, 失败 {refresh_result.get('failed_count', 0)}")
+                    # 1. 清理基础网站信息缓存
+                    cache_service.delete(CacheConstants.WEB_INFO_KEY)
+                    cache_service.delete(CacheConstants.WEB_INFO_ADMIN_KEY)
+                    cache_service.delete("poetize:webinfo")  # Java端缓存键
+
+                    # 2. 清理所有管理员详细信息缓存（使用SCAN避免阻塞）
+                    cleared_details_count = 0
+                    try:
+                        pattern = f"{CacheConstants.WEB_INFO_DETAILS_PREFIX}*"
+                        cursor = 0
+                        while True:
+                            cursor, keys = cache_service.redis_client.client.scan(cursor, match=pattern, count=100)
+                            if keys:
+                                deleted_count = cache_service.delete(*keys)
+                                cleared_details_count += deleted_count
+                            if cursor == 0:
+                                break
+                    except Exception as scan_e:
+                        print(f"使用SCAN清理详细信息缓存失败，回退到KEYS方法: {scan_e}")
+                        # 回退到原有方法
+                        details_keys = cache_service.redis_client.client.keys(pattern)
+                        if details_keys:
+                            cleared_details_count = cache_service.delete(*details_keys)
+
+                    print(f"网站信息更新完成，成功清理基础缓存3个，详细信息缓存{cleared_details_count}个")
+
                 except Exception as cache_e:
                     print(f"清理网站信息相关缓存失败: {cache_e}")
+                    # 即使缓存清理失败，也不影响数据保存的成功状态
 
                 return True
             else:
@@ -402,12 +425,54 @@ def register_web_admin_api(app: FastAPI):
     @app.options('/admin/webInfo/getAdminWebInfoDetails')
     async def get_admin_web_info_details(request: Request, _: bool = Depends(admin_required)):
         """获取管理员网站详细信息 (包含随机配置)"""
-        web_info = await get_admin_web_info_from_java(request.headers.get('Authorization'))
+        # 检查是否需要强制刷新缓存
+        force_refresh = request.query_params.get('refresh', '').lower() == 'true'
+        web_info = await get_admin_web_info_from_java(request.headers.get('Authorization'), force_refresh)
         return {
             "code": 200,
             "message": "获取成功",
             "data": web_info
         }
+
+    @app.post('/admin/webInfo/refreshAdminWebInfoCache')
+    @app.options('/admin/webInfo/refreshAdminWebInfoCache')
+    async def refresh_admin_web_info_cache(request: Request, _: bool = Depends(admin_required)):
+        """刷新管理员网站信息缓存"""
+        try:
+            from cache_service import get_cache_service
+            cache_service = get_cache_service()
+
+            # 清理所有管理员详细信息缓存
+            cleared_count = 0
+            try:
+                pattern = f"{CacheConstants.WEB_INFO_DETAILS_PREFIX}*"
+                cursor = 0
+                while True:
+                    cursor, keys = cache_service.redis_client.client.scan(cursor, match=pattern, count=100)
+                    if keys:
+                        deleted_count = cache_service.delete(*keys)
+                        cleared_count += deleted_count
+                    if cursor == 0:
+                        break
+            except Exception as e:
+                print(f"刷新管理员缓存失败: {e}")
+                return {
+                    "code": 500,
+                    "message": f"刷新缓存失败: {str(e)}",
+                    "data": None
+                }
+
+            return {
+                "code": 200,
+                "message": f"缓存刷新成功，清理了{cleared_count}个缓存项",
+                "data": {"cleared_count": cleared_count}
+            }
+        except Exception as e:
+            return {
+                "code": 500,
+                "message": f"刷新缓存失败: {str(e)}",
+                "data": None
+            }
     
     @app.get('/webInfo/getThirdLoginConfig')
     @app.options('/webInfo/getThirdLoginConfig')
@@ -747,8 +812,13 @@ if __name__ == '__main__':
     
     uvicorn.run(app, host="0.0.0.0", port=5001, debug=True) 
 
-async def get_admin_web_info_from_java(auth_token: str = None):
-    """从 Java 后端获取包含随机配置的完整网站信息，需要管理员 token（带缓存）"""
+async def get_admin_web_info_from_java(auth_token: str = None, force_refresh: bool = False):
+    """从 Java 后端获取包含随机配置的完整网站信息，需要管理员 token（带缓存）
+
+    Args:
+        auth_token: 管理员认证token
+        force_refresh: 是否强制刷新缓存，跳过缓存检查
+    """
     try:
         from cache_service import get_cache_service
         import hashlib
@@ -756,7 +826,7 @@ async def get_admin_web_info_from_java(auth_token: str = None):
         cache_service = get_cache_service()
 
         # 生成基于token的缓存键
-        if auth_token:
+        if auth_token and not force_refresh:
             token_hash = hashlib.md5(auth_token.encode('utf-8')).hexdigest()
             cached_info = cache_service.get_cached_web_info_details(token_hash)
             if cached_info:

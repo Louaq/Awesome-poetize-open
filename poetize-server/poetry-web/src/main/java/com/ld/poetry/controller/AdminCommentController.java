@@ -56,7 +56,7 @@ public class AdminCommentController {
      * Boss删除评论
      */
     @GetMapping("/comment/boss/deleteComment")
-    @LoginCheck(0)
+    @LoginCheck(1)
     public PoetryResult bossDeleteComment(@RequestParam("id") Integer id) {
         commentService.removeById(id);
         return PoetryResult.success();
@@ -75,7 +75,7 @@ public class AdminCommentController {
      * Boss查询评论
      */
     @PostMapping("/comment/boss/list")
-    @LoginCheck(0)
+    @LoginCheck(1)
     public PoetryResult<Page> listBossComment(@RequestBody BaseRequestVO baseRequestVO) {
         return commentService.listAdminComment(baseRequestVO, true);
     }

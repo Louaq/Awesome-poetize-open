@@ -11,7 +11,6 @@ import com.ld.poetry.service.FamilyService;
 import com.ld.poetry.service.UserService;
 import com.ld.poetry.constants.CommonConst;
 import com.ld.poetry.enums.PoetryEnum;
-import com.ld.poetry.utils.cache.PoetryCache;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -70,11 +69,10 @@ public class PoetryApplicationRunner implements ApplicationRunner {
                 log.info("WebInfo status字段为null，设置为默认值true");
             }
 
-            // 同时更新到Redis缓存和内存缓存
+            // 缓存网站信息到Redis
             cacheService.cacheWebInfo(webInfo);
-            PoetryCache.put(CommonConst.WEB_INFO, webInfo);
 
-            log.info("网站基本信息已加载到缓存 - WebName: {}, EnableWaifu: {}, Status: {}",
+            log.info("网站基本信息已加载到Redis缓存 - WebName: {}, EnableWaifu: {}, Status: {}",
                     webInfo.getWebName(), webInfo.getEnableWaifu(), webInfo.getStatus());
         } else {
             log.warn("未找到网站基本信息，请检查数据库");

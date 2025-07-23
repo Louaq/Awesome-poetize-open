@@ -7,10 +7,7 @@ import com.ld.poetry.entity.User;
 import com.ld.poetry.entity.WebInfo;
 import com.ld.poetry.handle.PoetryRuntimeException;
 import com.ld.poetry.service.CacheService;
-import com.ld.poetry.utils.cache.PoetryCache;
 import com.ld.poetry.utils.cache.UserCacheManager;
-import com.ld.poetry.utils.IpUtil;
-import com.ld.poetry.utils.RetryUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -21,7 +18,6 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.annotation.PostConstruct;
-import java.net.InetAddress;
 import java.util.List;
 
 @Component
@@ -69,9 +65,9 @@ public class PoetryUtil {
             }
         }
 
-        // 最后降级到PoetryCache
+        // 如果所有缓存都无法获取用户信息，记录日志
         if (user == null) {
-            user = (User) PoetryCache.get(token);
+            log.debug("无法从任何缓存中获取用户信息: token={}", token);
         }
 
         if (user != null && !StringUtils.hasText(user.getEmail())) {
@@ -159,18 +155,18 @@ public class PoetryUtil {
                 return asyncUser;
             }
             
-            // 如果异步上下文中没有，尝试通过Token从缓存获取
+            // 如果异步上下文中没有，尝试通过Token从Redis缓存获取
             String token = getTokenWithoutBearer();
             if (StringUtils.hasText(token)) {
-                // 使用用户缓存管理器获取用户信息
+                // 统一使用用户缓存管理器获取用户信息（已重构为Redis缓存）
                 if (staticUserCacheManager != null) {
                     User user = staticUserCacheManager.getUserByToken(token);
                     if (user != null) {
                         return user;
                     }
                 }
-                
-                // 降级到Redis缓存获取
+
+                // 备用方案：直接从Redis缓存获取
                 if (staticCacheService != null) {
                     Integer userId = staticCacheService.getUserIdFromSession(token);
                     if (userId != null) {
@@ -179,12 +175,6 @@ public class PoetryUtil {
                             return user;
                         }
                     }
-                }
-
-                // 最后降级到PoetryCache获取
-                User user = (User) PoetryCache.get(token);
-                if (user != null) {
-                    return user;
                 }
             }
             
@@ -215,9 +205,8 @@ public class PoetryUtil {
             }
         }
 
-        // 降级到PoetryCache获取
-        User admin = (User) PoetryCache.get(CommonConst.ADMIN);
-        return admin;
+        // 如果Redis缓存也没有，返回null
+        return null;
     }
 
     /**
@@ -244,26 +233,20 @@ public class PoetryUtil {
                 // 尝试获取token（不带Bearer前缀）
                 String tokenWithoutBearer = getTokenWithoutBearer();
                 if (StringUtils.hasText(tokenWithoutBearer)) {
-                    // 使用用户缓存管理器获取用户信息
+                    // 统一使用用户缓存管理器获取用户信息（已重构为Redis缓存）
                     if (staticUserCacheManager != null) {
                         User user = staticUserCacheManager.getUserByToken(tokenWithoutBearer);
                         if (user != null) {
                             return user.getId();
                         }
                     }
-                    
-                    // 降级到Redis缓存获取
+
+                    // 备用方案：直接从Redis缓存获取
                     if (staticCacheService != null) {
                         Integer userId = staticCacheService.getUserIdFromSession(tokenWithoutBearer);
                         if (userId != null) {
                             return userId;
                         }
-                    }
-
-                    // 最后降级到PoetryCache获取
-                    User user = (User) PoetryCache.get(tokenWithoutBearer);
-                    if (user != null) {
-                        return user.getId();
                     }
                     
                     // 如果缓存中都没有，尝试直接从安全token中提取用户ID
@@ -354,11 +337,7 @@ public class PoetryUtil {
                     }
                 }
 
-                // 最后降级到PoetryCache获取
-                User user = (User) PoetryCache.get(token);
-                if (user != null && StringUtils.hasText(user.getUsername())) {
-                    return user.getUsername();
-                }
+                // 如果Redis缓存也没有，返回null
             }
             
             return null;
@@ -372,9 +351,9 @@ public class PoetryUtil {
             webInfo = staticCacheService.getCachedWebInfo();
         }
 
-        // 降级到PoetryCache获取
+        // 如果无法获取网站信息，记录日志
         if (webInfo == null) {
-            webInfo = (WebInfo) PoetryCache.get(CommonConst.WEB_INFO);
+            log.debug("无法获取网站信息，随机头像功能将返回null");
         }
         if (webInfo != null) {
             String randomAvatar = webInfo.getRandomAvatar();
@@ -402,9 +381,9 @@ public class PoetryUtil {
             webInfo = staticCacheService.getCachedWebInfo();
         }
 
-        // 降级到PoetryCache获取
+        // 如果无法获取网站信息，记录日志
         if (webInfo == null) {
-            webInfo = (WebInfo) PoetryCache.get(CommonConst.WEB_INFO);
+            log.debug("无法获取网站信息，随机名称功能将返回null");
         }
         if (webInfo != null) {
             String randomName = webInfo.getRandomName();
@@ -432,9 +411,9 @@ public class PoetryUtil {
             webInfo = staticCacheService.getCachedWebInfo();
         }
 
-        // 降级到PoetryCache获取
+        // 如果Redis缓存也没有，使用默认值
         if (webInfo == null) {
-            webInfo = (WebInfo) PoetryCache.get(CommonConst.WEB_INFO);
+            log.warn("无法获取网站信息，使用默认随机封面");
         }
         if (webInfo != null) {
             String randomCover = webInfo.getRandomCover();

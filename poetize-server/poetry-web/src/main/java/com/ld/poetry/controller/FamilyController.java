@@ -4,14 +4,15 @@ package com.ld.poetry.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ld.poetry.aop.LoginCheck;
 import com.ld.poetry.config.PoetryResult;
+import com.ld.poetry.constants.CacheConstants;
 import com.ld.poetry.entity.Family;
+import com.ld.poetry.service.CacheService;
 import com.ld.poetry.service.FamilyService;
-import com.ld.poetry.constants.CommonConst;
 import com.ld.poetry.utils.CommonQuery;
-import com.ld.poetry.utils.cache.PoetryCache;
 import com.ld.poetry.utils.PoetryUtil;
 import com.ld.poetry.vo.BaseRequestVO;
 import com.ld.poetry.vo.FamilyVO;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
@@ -30,6 +31,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/family")
+@Slf4j
 public class FamilyController {
 
     @Autowired
@@ -37,6 +39,9 @@ public class FamilyController {
 
     @Autowired
     private CommonQuery commonQuery;
+
+    @Autowired
+    private CacheService cacheService;
 
     /**
      * 保存
@@ -62,10 +67,21 @@ public class FamilyController {
             family.setId(null);
             familyService.save(family);
         }
-        if (userId.intValue() == PoetryUtil.getAdminUser().getId().intValue()) {
-            PoetryCache.put(CommonConst.ADMIN_FAMILY, family);
+        try {
+            // 如果是管理员，缓存管理员家庭信息
+            if (userId.intValue() == PoetryUtil.getAdminUser().getId().intValue()) {
+                String adminFamilyKey = CacheConstants.CACHE_PREFIX + "admin:family";
+                cacheService.set(adminFamilyKey, family, CacheConstants.LONG_EXPIRE_TIME);
+                log.debug("缓存管理员家庭信息: userId={}", userId);
+            }
+
+            // 清理家庭列表缓存
+            cacheService.deleteKey(CacheConstants.FAMILY_LIST_KEY);
+            log.debug("清理家庭列表缓存: userId={}", userId);
+        } catch (Exception e) {
+            log.error("保存家庭信息后更新缓存失败: userId={}", userId, e);
         }
-        PoetryCache.remove(CommonConst.FAMILY_LIST);
+
         return PoetryResult.success();
     }
 
@@ -76,7 +92,15 @@ public class FamilyController {
     @LoginCheck(0)
     public PoetryResult deleteFamily(@RequestParam("id") Integer id) {
         familyService.removeById(id);
-        PoetryCache.remove(CommonConst.FAMILY_LIST);
+
+        try {
+            // 清理家庭列表缓存
+            cacheService.deleteKey(CacheConstants.FAMILY_LIST_KEY);
+            log.debug("删除家庭信息后清理缓存: id={}", id);
+        } catch (Exception e) {
+            log.error("删除家庭信息后清理缓存失败: id={}", id, e);
+        }
+
         return PoetryResult.success();
     }
 
@@ -102,13 +126,36 @@ public class FamilyController {
      */
     @GetMapping("/getAdminFamily")
     public PoetryResult<FamilyVO> getAdminFamily() {
-        Family family = (Family) PoetryCache.get(CommonConst.ADMIN_FAMILY);
-        if (family == null) {
-            return PoetryResult.fail("请初始化表白墙");
+        try {
+            // 从Redis缓存获取管理员家庭信息
+            String adminFamilyKey = CacheConstants.CACHE_PREFIX + "admin:family";
+            Object cached = cacheService.get(adminFamilyKey);
+            Family family = null;
+
+            if (cached instanceof Family) {
+                family = (Family) cached;
+                log.debug("从缓存获取管理员家庭信息成功");
+            } else {
+                // 如果缓存中没有，从数据库查询管理员的家庭信息
+                Integer adminUserId = PoetryUtil.getAdminUser().getId();
+                family = familyService.lambdaQuery().eq(Family::getUserId, adminUserId).one();
+                if (family != null) {
+                    cacheService.set(adminFamilyKey, family, CacheConstants.LONG_EXPIRE_TIME);
+                    log.debug("从数据库查询并缓存管理员家庭信息");
+                }
+            }
+
+            if (family == null) {
+                return PoetryResult.fail("请初始化表白墙");
+            }
+
+            FamilyVO familyVO = new FamilyVO();
+            BeanUtils.copyProperties(family, familyVO);
+            return PoetryResult.success(familyVO);
+        } catch (Exception e) {
+            log.error("获取管理员家庭信息失败", e);
+            return PoetryResult.fail("获取家庭信息失败");
         }
-        FamilyVO familyVO = new FamilyVO();
-        BeanUtils.copyProperties(family, familyVO);
-        return PoetryResult.success(familyVO);
     }
 
     /**
@@ -144,7 +191,15 @@ public class FamilyController {
     @LoginCheck(0)
     public PoetryResult changeLoveStatus(@RequestParam("id") Integer id, @RequestParam("flag") Boolean flag) {
         familyService.lambdaUpdate().eq(Family::getId, id).set(Family::getStatus, flag).update();
-        PoetryCache.remove(CommonConst.FAMILY_LIST);
+
+        try {
+            // 清理家庭列表缓存
+            cacheService.deleteKey(CacheConstants.FAMILY_LIST_KEY);
+            log.debug("修改表白状态后清理缓存: id={}, flag={}", id, flag);
+        } catch (Exception e) {
+            log.error("修改表白状态后清理缓存失败: id={}, flag={}", id, flag, e);
+        }
+
         return PoetryResult.success();
     }
 }

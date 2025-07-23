@@ -1,18 +1,20 @@
 package com.ld.poetry.aop;
 
 import com.ld.poetry.config.PoetryResult;
+import com.ld.poetry.constants.CacheConstants;
 import com.ld.poetry.constants.CommonConst;
 import com.ld.poetry.entity.User;
 import com.ld.poetry.enums.CodeMsg;
 import com.ld.poetry.enums.PoetryEnum;
 import com.ld.poetry.handle.PoetryLoginException;
 import com.ld.poetry.handle.PoetryRuntimeException;
+import com.ld.poetry.service.CacheService;
 import com.ld.poetry.utils.*;
-import com.ld.poetry.utils.cache.PoetryCache;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
@@ -24,6 +26,9 @@ import jakarta.servlet.http.HttpServletRequest;
 @Order(0)
 @Slf4j
 public class LoginCheckAspect {
+
+    @Autowired
+    private CacheService cacheService;
 
     @Around("@annotation(loginCheck)")
     public Object around(ProceedingJoinPoint joinPoint, LoginCheck loginCheck) throws Throwable {
@@ -64,9 +69,17 @@ public class LoginCheckAspect {
             }
         } else if (TokenValidationUtil.isAdminToken(token)) {
             log.info("管理员请求 - IP: {}, 用户: {}", clientIp, user.getUsername());
-            if (loginCheck.value() == PoetryEnum.USER_TYPE_ADMIN.getCode() && user.getId().intValue() != CommonConst.ADMIN_USER_ID) {
-                log.warn("非超级管理员尝试访问超级管理员接口 - 用户: {}, IP: {}", user.getUsername(), clientIp);
-                return PoetryResult.fail("请输入管理员账号！");
+            // 检查是否为需要超级管理员权限的接口（保留某些特殊接口的限制）
+            if (loginCheck.value() == PoetryEnum.USER_TYPE_ADMIN.getCode()) {
+                // 对于@LoginCheck(0)的接口，检查用户是否为管理员类型
+                if (user.getUserType() != PoetryEnum.USER_TYPE_ADMIN.getCode() &&
+                    user.getUserType() != PoetryEnum.USER_TYPE_DEV.getCode()) {
+                    log.warn("非管理员用户尝试访问管理员接口 - 用户: {}, userType: {}, IP: {}",
+                            user.getUsername(), user.getUserType(), clientIp);
+                    return PoetryResult.fail("请输入管理员账号！");
+                }
+                log.info("管理员用户访问管理员接口 - 用户: {}, userType: {}, IP: {}",
+                        user.getUsername(), user.getUserType(), clientIp);
             }
         } else {
             log.warn("无效的token类型或格式 - IP: {}, token前缀: {}, token长度: {}",
@@ -79,37 +92,58 @@ public class LoginCheckAspect {
             throw new PoetryRuntimeException("权限不足！");
         }
 
-        // 重置过期时间 - 使用安全的token类型检查
-        String userId = user.getId().toString();
-        boolean needRefresh = false;
-        if (TokenValidationUtil.isUserToken(token)) {
-            needRefresh = PoetryCache.get(CommonConst.USER_TOKEN_INTERVAL + userId) == null;
-        } else if (TokenValidationUtil.isAdminToken(token)) {
-            needRefresh = PoetryCache.get(CommonConst.ADMIN_TOKEN_INTERVAL + userId) == null;
-        }
+        // 重置过期时间 - 使用Redis缓存替换PoetryCache
+        try {
+            Integer userId = user.getId();
+            boolean needRefresh = false;
 
-        if (needRefresh) {
-            synchronized (userId.intern()) {
-                boolean shouldRefresh = false;
-                if (TokenValidationUtil.isUserToken(token)) {
-                    shouldRefresh = PoetryCache.get(CommonConst.USER_TOKEN_INTERVAL + userId) == null;
-                } else if (TokenValidationUtil.isAdminToken(token)) {
-                    shouldRefresh = PoetryCache.get(CommonConst.ADMIN_TOKEN_INTERVAL + userId) == null;
-                }
+            // 检查是否需要刷新token间隔
+            if (TokenValidationUtil.isUserToken(token)) {
+                String intervalKey = CacheConstants.buildUserTokenIntervalKey(userId);
+                needRefresh = cacheService.get(intervalKey) == null;
+            } else if (TokenValidationUtil.isAdminToken(token)) {
+                String intervalKey = CacheConstants.buildAdminTokenIntervalKey(userId);
+                needRefresh = cacheService.get(intervalKey) == null;
+            }
 
-                if (shouldRefresh) {
-                    log.info("刷新token过期时间 - 用户: {}, token类型: {}",
-                        user.getUsername(), TokenValidationUtil.getTokenType(token).getDescription());
-                    PoetryCache.put(token, user, CommonConst.TOKEN_EXPIRE);
+            if (needRefresh) {
+                synchronized (userId.toString().intern()) {
+                    boolean shouldRefresh = false;
+
+                    // 双重检查锁定模式
                     if (TokenValidationUtil.isUserToken(token)) {
-                        PoetryCache.put(CommonConst.USER_TOKEN + userId, token, CommonConst.TOKEN_EXPIRE);
-                        PoetryCache.put(CommonConst.USER_TOKEN_INTERVAL + userId, token, CommonConst.TOKEN_INTERVAL);
+                        String intervalKey = CacheConstants.buildUserTokenIntervalKey(userId);
+                        shouldRefresh = cacheService.get(intervalKey) == null;
                     } else if (TokenValidationUtil.isAdminToken(token)) {
-                        PoetryCache.put(CommonConst.ADMIN_TOKEN + userId, token, CommonConst.TOKEN_EXPIRE);
-                        PoetryCache.put(CommonConst.ADMIN_TOKEN_INTERVAL + userId, token, CommonConst.TOKEN_INTERVAL);
+                        String intervalKey = CacheConstants.buildAdminTokenIntervalKey(userId);
+                        shouldRefresh = cacheService.get(intervalKey) == null;
+                    }
+
+                    if (shouldRefresh) {
+                        log.info("刷新token过期时间 - 用户: {}, token类型: {}, userId: {}",
+                            user.getUsername(), TokenValidationUtil.getTokenType(token).getDescription(), userId);
+
+                        // 刷新用户会话缓存
+                        cacheService.cacheUserSession(token, userId);
+                        cacheService.cacheUser(user);
+
+                        if (TokenValidationUtil.isUserToken(token)) {
+                            // 刷新用户token相关缓存
+                            cacheService.cacheUserToken(userId, token);
+                            cacheService.cacheTokenInterval(userId, false);
+                            log.debug("刷新用户token缓存: userId={}", userId);
+                        } else if (TokenValidationUtil.isAdminToken(token)) {
+                            // 刷新管理员token相关缓存
+                            cacheService.cacheAdminToken(userId, token);
+                            cacheService.cacheTokenInterval(userId, true);
+                            log.debug("刷新管理员token缓存: userId={}", userId);
+                        }
                     }
                 }
             }
+        } catch (Exception e) {
+            log.error("刷新token过期时间时发生错误: userId={}, token={}", user.getId(), token, e);
+            // 发生错误时不阻止请求继续执行
         }
         return joinPoint.proceed();
     }

@@ -5,6 +5,7 @@ import qs from "qs";
 
 import store from "../store";
 import router from "../router";
+import { handleTokenExpire } from "./tokenExpireHandler";
 
 // 缓存翻译配置，避免重复请求
 let cachedTranslationConfig = null;
@@ -140,24 +141,16 @@ axios.interceptors.request.use(function (config) {
 axios.interceptors.response.use(function (response) {
   if (response.data !== null && response.data.hasOwnProperty("code") && response.data.code !== 200) {
     if (response.data.code === 300 || response.data.code === 401) {
-      // token失效，清除token并跳转到登录页
-      console.log('Token失效，清除token并跳转到登录页');
-      localStorage.removeItem("userToken");
-      localStorage.removeItem("adminToken");
-      store.commit("loadCurrentUser", {});
-      store.commit("loadCurrentAdmin", {});
-      
-      // 如果是管理员token失效，跳转到管理员登录页
-      if (response.config.isAdmin) {
-        console.log('管理员token失效，跳转到管理员登录页');
-        router.push({
-          path: '/verify',
-          query: { redirect: router.currentRoute.fullPath }
-        });
-      } else {
-        console.log('用户token失效，跳转到首页');
-        router.push('/');
-      }
+      // token失效，使用统一的token过期处理逻辑
+      console.log('检测到token失效响应码:', response.data.code);
+
+      // 判断是否为管理员请求
+      const isAdminRequest = response.config.isAdmin || false;
+
+      // 使用统一的token过期处理
+      handleTokenExpire(isAdminRequest, router.currentRoute.fullPath, {
+        showMessage: true
+      });
     }
     return Promise.reject(new Error(response.data.message || '请求失败'));
   }
@@ -168,12 +161,16 @@ axios.interceptors.response.use(function (response) {
     // 服务器返回错误状态码
     console.error('响应错误:', error.response.status, error.response.data);
     if (error.response.status === 401 || error.response.status === 403) {
-      // token相关错误，清除token并跳转
-      localStorage.removeItem("userToken");
-      localStorage.removeItem("adminToken");
-      store.commit("loadCurrentUser", {});
-      store.commit("loadCurrentAdmin", {});
-      router.push('/');
+      // token相关错误，使用统一的token过期处理逻辑
+      console.log('检测到HTTP状态码token错误:', error.response.status);
+
+      // 判断是否为管理员请求
+      const isAdminRequest = error.config && error.config.isAdmin || false;
+
+      // 使用统一的token过期处理
+      handleTokenExpire(isAdminRequest, router.currentRoute.fullPath, {
+        showMessage: true
+      });
     }
   } else if (error.request) {
     // 请求发出但没有收到响应

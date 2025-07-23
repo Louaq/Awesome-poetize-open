@@ -2,10 +2,11 @@ package com.ld.poetry.config;
 
 import com.ld.poetry.constants.CommonConst;
 import com.ld.poetry.entity.User;
+import com.ld.poetry.service.CacheService;
 import com.ld.poetry.utils.PoetryUtil;
-import com.ld.poetry.utils.cache.PoetryCache;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.aop.interceptor.AsyncUncaughtExceptionHandler;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.TaskDecorator;
@@ -27,6 +28,9 @@ import java.util.concurrent.ThreadPoolExecutor;
 @Configuration
 @Slf4j
 public class ThreadContextConfig implements AsyncConfigurer {
+
+    @Autowired
+    private CacheService cacheService;
 
     /**
      * 上下文传递装饰器
@@ -50,7 +54,18 @@ public class ThreadContextConfig implements AsyncConfigurer {
                             token = null;
                         }
                         if (StringUtils.hasText(token)) {
-                            currentUser = (User) PoetryCache.get(token);
+                            try {
+                                // 使用CacheService获取用户信息
+                                Integer userId = cacheService.getUserIdFromSession(token);
+                                if (userId != null) {
+                                    currentUser = cacheService.getCachedUser(userId);
+                                    log.debug("异步任务中成功获取用户信息: userId={}", userId);
+                                } else {
+                                    log.debug("异步任务中token无效: {}", token);
+                                }
+                            } catch (Exception e) {
+                                log.debug("异步任务中获取用户信息失败: token={}, error={}", token, e.getMessage());
+                            }
                         }
                     }
                 }

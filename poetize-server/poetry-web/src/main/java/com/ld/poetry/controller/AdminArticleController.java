@@ -56,7 +56,7 @@ public class AdminArticleController {
      * Boss查询文章
      */
     @PostMapping("/article/boss/list")
-    @LoginCheck(0)
+    @LoginCheck(1)
     public PoetryResult<Page> listBossArticle(@RequestBody BaseRequestVO baseRequestVO) {
         return articleService.listAdminArticle(baseRequestVO, true);
     }

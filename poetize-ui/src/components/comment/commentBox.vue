@@ -139,22 +139,12 @@
             articleUrl: window.location.href
           };
           localStorage.setItem(`tempComment_${articleId}`, JSON.stringify(tempComment));
-          
-          // 提示用户
-          this.$message({
-            message: "请先登录！评论内容已保存，登录后将自动恢复",
-            type: "info",
-            duration: 3000
-          });
-          
-          // 跳转到登录页面，带上返回URL参数
-          this.$router.push({
-            path: '/user',
-            query: { 
-              redirect: window.location.pathname,
-              hasComment: 'true'
-            }
-          });
+
+          // 使用统一的登录跳转函数
+          this.$common.redirectToLogin(this.$router, {
+            extraQuery: { hasComment: 'true' },
+            message: '请先登录！评论内容已保存，登录后将自动恢复'
+          }, this);
           return;
         }
 

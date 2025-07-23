@@ -3,6 +3,7 @@ import VueRouter from 'vue-router'
 import store from '../store'
 import constant from '../utils/constant'
 import common from '../utils/common'
+import { handleTokenExpire, isLoggedIn, getValidToken } from '../utils/tokenExpireHandler'
 import translationModelManage from "../components/admin/translationModelManage";
 
 const originalPush = VueRouter.prototype.push;
@@ -199,6 +200,42 @@ router.beforeEach((to, from, next) => {
     return;
   }
 
+  // Token过期检查 - 在处理其他逻辑之前先检查token状态
+  // 跳过登录页面和公共页面的token检查
+  const publicPaths = ['/user', '/verify', '/403', '/404', '/', '/about', '/privacy'];
+  const isPublicPath = publicPaths.includes(to.path) || to.path.startsWith('/article/') || to.path.startsWith('/sort/');
+
+  if (!isPublicPath) {
+    // 检查是否需要管理员权限
+    const needsAdminAuth = to.matched.some(record => record.meta.isAdmin);
+
+    if (needsAdminAuth) {
+      // 检查管理员token
+      const adminToken = getValidToken(true);
+      const isAdminLoggedIn = isLoggedIn(true);
+
+      if (!adminToken || !isAdminLoggedIn) {
+        console.log('管理员token无效或过期，重定向到登录页');
+        handleTokenExpire(true, to.fullPath, { showMessage: false });
+        return;
+      }
+    } else {
+      // 检查普通用户token（对于需要登录的页面）
+      const needsAuth = to.matched.some(record => record.meta.requireAuth);
+
+      if (needsAuth) {
+        const userToken = getValidToken(false);
+        const isUserLoggedIn = isLoggedIn(false);
+
+        if (!userToken || !isUserLoggedIn) {
+          console.log('用户token无效或过期，重定向到登录页');
+          handleTokenExpire(false, to.fullPath, { showMessage: false });
+          return;
+        }
+      }
+    }
+  }
+
   // 处理OAuth登录回调token
   if (to.query.userToken) {
     console.log('检测到OAuth回调token，开始处理登录...');
@@ -267,6 +304,10 @@ router.beforeEach((to, from, next) => {
           }
 
           // 正常的OAuth登录流程
+          // 清除旧的缓存数据
+          localStorage.removeItem("currentAdmin");
+          localStorage.removeItem("currentUser");
+
           localStorage.setItem("userToken", result.data.accessToken);
           localStorage.setItem("adminToken", result.data.accessToken);
           store.commit("loadCurrentUser", result.data);
@@ -274,7 +315,6 @@ router.beforeEach((to, from, next) => {
 
           // 清除URL中的token参数并重定向到首页
           const cleanPath = to.path === '/' ? '/' : to.path;
-          console.log('OAuth登录完成，重定向到:', cleanPath);
           next({ path: cleanPath, replace: true });
           return;
         } else {

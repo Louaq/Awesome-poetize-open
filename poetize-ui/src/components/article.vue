@@ -663,12 +663,10 @@
         // 保存订阅意图到localStorage
         localStorage.setItem('pendingSubscribe', JSON.stringify(subscribeIntent));
 
-        // 跳转到登录页面，并设置重定向URL
-        const currentPath = this.$route.fullPath;
-        this.$router.push({
-          path: '/user',
-          query: { redirect: currentPath }
-        });
+        // 使用统一的登录跳转函数
+        this.$common.redirectToLogin(this.$router, {
+          message: '请先登录！'
+        }, this);
       },
 
       // 执行订阅操作

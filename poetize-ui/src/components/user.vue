@@ -239,7 +239,8 @@
   const proButton = () => import( "./common/proButton");
   const uploadPicture = () => import( "./common/uploadPicture");
   const CaptchaWrapper = () => import("./common/CaptchaWrapper");
-  import { checkCaptchaWithCache } from '@/utils/captchaUtil'
+  import { checkCaptchaWithCache } from '@/utils/captchaUtil';
+  import { handleLoginRedirect } from '../utils/tokenExpireHandler';
 
   export default {
     components: {
@@ -437,7 +438,7 @@
         let user = {
           account: this.account.trim(),
           password: this.$common.encrypt(this.password.trim()),
-          isAdmin: true  // 添加isAdmin参数
+          isAdmin: false  // 普通用户登录，设置为false
         };
         
         // 添加验证令牌
@@ -458,20 +459,22 @@
               this.account = "";
               this.password = "";
               
-              // 检查是否有重定向URL
-              const redirect = this.$route.query.redirect;
-              const hasComment = this.$route.query.hasComment;
-              const hasReplyAction = this.$route.query.hasReplyAction;
-
-              if (redirect) {
-                // 保留hasComment和hasReplyAction参数以触发评论/回复状态恢复
-                const query = {};
-                if (hasComment === 'true') query.hasComment = 'true';
-                if (hasReplyAction === 'true') query.hasReplyAction = 'true';
-                this.$router.push({ path: redirect, query: query });
+              // 显示登录成功消息
+              if (this.$route.query.expired === 'true') {
+                this.$message.success('重新登录成功');
               } else {
-                this.$router.push({path: '/'});
+                this.$message.success('登录成功');
               }
+
+              // 使用统一的重定向处理逻辑
+              console.log('🔍 登录成功，准备重定向，当前路由信息:', {
+                path: this.$route.path,
+                fullPath: this.$route.fullPath,
+                query: this.$route.query
+              });
+              handleLoginRedirect(this.$route, this.$router, {
+                defaultPath: '/'
+              });
             }
           })
           .catch((error) => {
@@ -929,68 +932,51 @@
       },
       thirdPartyLogin(provider, verificationToken) {
         if (!provider) return;
-        
-        // 添加检查第三方登录是否启用
-        this.checkThirdPartyLoginEnabled(provider).then(enabled => {
-          if (!enabled) {
-            this.$message({
-              message: `${provider.charAt(0).toUpperCase() + provider.slice(1)}第三方登录未启用，请联系管理员开启此功能`,
-              type: "warning"
-            });
-            return;
-          }
-          
-          const params = {
-            provider: provider
-          };
-          
-          // 添加验证令牌
-          if (verificationToken) {
-            params.verificationToken = verificationToken;
-          }
-          
-          // Python服务配置
-          const pythonServiceConfig = {
-            baseUrl: this.$constant.pythonBaseURL,
-            providers: {
-              github: {
-                icon: 'el-icon-s-platform',
-                name: 'GitHub'
-              },
-              google: {
-                icon: 'el-icon-s-promotion',
-                name: 'Google'
-              },
-              x: {
-                icon: 'el-icon-message',
-                name: 'Twitter'
-              },
-              yandex: {
-                icon: 'el-icon-s-custom',
-                name: 'Yandex'
-              },
-              gitee: {
-                icon: 'el-icon-s-custom',
-                name: 'Gitee'
-              }
+
+        const params = {
+          provider: provider
+        };
+
+        // 添加验证令牌
+        if (verificationToken) {
+          params.verificationToken = verificationToken;
+        }
+
+        // Python服务配置
+        const pythonServiceConfig = {
+          baseUrl: this.$constant.pythonBaseURL,
+          providers: {
+            github: {
+              icon: 'el-icon-s-platform',
+              name: 'GitHub'
+            },
+            google: {
+              icon: 'el-icon-s-promotion',
+              name: 'Google'
+            },
+            x: {
+              icon: 'el-icon-message',
+              name: 'Twitter'
+            },
+            yandex: {
+              icon: 'el-icon-s-custom',
+              name: 'Yandex'
+            },
+            gitee: {
+              icon: 'el-icon-s-custom',
+              name: 'Gitee'
             }
-          };
-          
-          // 构建请求URL
-          const loginUrl = `${pythonServiceConfig.baseUrl}/login/${provider}`;
-          
-          // 记录当前登录方式
-          localStorage.setItem('thirdPartyLoginProvider', provider);
-          
-          // 使用window.open打开第三方登录授权页面
-          window.open(loginUrl, '_self');
-        }).catch(error => {
-          console.error("检查第三方登录状态失败:", error);
-          this.$message({
-            message: "无法验证第三方登录状态，请稍后再试",
-            type: "error"
-          });
-        });
+          }
+        };
+
+        // 构建请求URL
+        const loginUrl = `${pythonServiceConfig.baseUrl}/login/${provider}`;
+
+        // 记录当前登录方式
+        localStorage.setItem('thirdPartyLoginProvider', provider);
+
+        // 使用window.open打开第三方登录授权页面
+        window.open(loginUrl, '_self');
       },
       
       // 处理第三方登录配置变更事件
@@ -1049,31 +1035,7 @@
         });
       },
 
-      // 检查第三方登录是否启用
-      checkThirdPartyLoginEnabled(provider) {
-        return new Promise((resolve, reject) => {
-          this.$http.get(this.$constant.baseURL + "/webInfo/getThirdLoginStatus", {
-            params: { provider: provider }
-          })
-            .then(res => {
-              if (res.code === 200 && res.data) {
-                // 检查整体启用状态及特定提供商状态
-                const enabled = res.data.enable === true &&
-                                res.data[provider] &&
-                                res.data[provider].enabled === true;
-                resolve(enabled);
-              } else {
-                // 如果接口返回错误或没有数据，假设未启用
-                resolve(false);
-              }
-            })
-            .catch(error => {
-              console.error("获取第三方登录状态失败:", error);
-              // 出错时默认允许尝试登录，避免错误阻止用户
-              resolve(false);
-            });
-        });
-      },
+
       testShowCaptcha() {
         this.showCaptchaWrapper = true;
       }

@@ -8,9 +8,8 @@ import com.ld.poetry.im.http.entity.ImChatUserGroupMessage;
 import com.ld.poetry.im.http.entity.ImChatUserMessage;
 import com.ld.poetry.im.http.service.ImChatGroupUserService;
 import com.ld.poetry.im.http.service.ImChatUserMessageService;
-import com.ld.poetry.constants.CommonConst;
+import com.ld.poetry.service.CacheService;
 import com.ld.poetry.utils.CommonQuery;
-import com.ld.poetry.utils.cache.PoetryCache;
 import com.ld.poetry.utils.StringUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,6 +45,9 @@ public class ImWsMsgHandler implements IWsMsgHandler {
     @Autowired
     private CommonQuery commonQuery;
 
+    @Autowired
+    private CacheService cacheService;
+
     /**
      * 握手时走这个方法，业务可以在这里获取cookie，request等
      * 对httpResponse参数进行补充并返回，如果返回null表示不想和对方建立连接
@@ -53,21 +55,33 @@ public class ImWsMsgHandler implements IWsMsgHandler {
      */
     @Override
     public HttpResponse handshake(HttpRequest httpRequest, HttpResponse httpResponse, ChannelContext channelContext) {
-        String token = httpRequest.getParam(CommonConst.TOKEN_HEADER);
+        String token = httpRequest.getParam("token");
 
         if (!StringUtils.hasText(token)) {
+            log.warn("WebSocket握手失败：token为空");
             return null;
         }
 
-        User user = (User) PoetryCache.get(token);
+        try {
+            // 使用CacheService验证用户token
+            Integer userId = cacheService.getUserIdFromSession(token);
+            if (userId == null) {
+                log.warn("WebSocket握手失败：token无效 - {}", token);
+                return null;
+            }
 
-        if (user == null) {
+            User user = cacheService.getCachedUser(userId);
+            if (user == null) {
+                log.warn("WebSocket握手失败：用户信息不存在 - userId: {}", userId);
+                return null;
+            }
+
+            log.info("WebSocket握手成功：用户ID：{}, 用户名：{}", user.getId(), user.getUsername());
+            return httpResponse;
+        } catch (Exception e) {
+            log.error("WebSocket握手时验证用户失败 - token: {}", token, e);
             return null;
         }
-
-        log.info("握手成功：用户ID：{}, 用户名：{}", user.getId(), user.getUsername());
-
-        return httpResponse;
     }
 
     /**
@@ -75,43 +89,75 @@ public class ImWsMsgHandler implements IWsMsgHandler {
      */
     @Override
     public void onAfterHandshaked(HttpRequest httpRequest, HttpResponse httpResponse, ChannelContext channelContext) {
-        String token = httpRequest.getParam(CommonConst.TOKEN_HEADER);
-        User user = (User) PoetryCache.get(token);
-        Tio.closeUser(channelContext.tioConfig, user.getId().toString(), null);
-        Tio.bindUser(channelContext, user.getId().toString());
+        String token = httpRequest.getParam("token");
+        User user = null;
 
-        List<ImChatUserMessage> userMessages = imChatUserMessageService.lambdaQuery().eq(ImChatUserMessage::getToId, user.getId())
-                .eq(ImChatUserMessage::getMessageStatus, ImConfigConst.USER_MESSAGE_STATUS_FALSE)
-                .orderByAsc(ImChatUserMessage::getCreateTime).list();
-
-        if (!CollectionUtils.isEmpty(userMessages)) {
-            List<Long> ids = new ArrayList<>();
-            userMessages.forEach(userMessage -> {
-                ids.add(userMessage.getId());
-                ImMessage imMessage = new ImMessage();
-                imMessage.setContent(userMessage.getContent());
-                imMessage.setFromId(userMessage.getFromId());
-                imMessage.setToId(userMessage.getToId());
-                imMessage.setMessageType(ImEnum.MESSAGE_TYPE_MSG_SINGLE.getCode());
-                User friend = commonQuery.getUser(userMessage.getFromId());
-                if (friend != null) {
-                    imMessage.setAvatar(friend.getAvatar());
+        try {
+            // 使用CacheService获取用户信息
+            Integer userId = cacheService.getUserIdFromSession(token);
+            if (userId != null) {
+                user = cacheService.getCachedUser(userId);
+                if (user != null) {
+                    // 关闭该用户的其他连接，确保单点登录
+                    Tio.closeUser(channelContext.tioConfig, user.getId().toString(), null);
+                    // 绑定用户到当前连接
+                    Tio.bindUser(channelContext, user.getId().toString());
+                    log.info("WebSocket连接绑定成功：用户ID：{}, 用户名：{}", user.getId(), user.getUsername());
+                } else {
+                    log.warn("WebSocket连接绑定失败：用户信息不存在 - userId: {}", userId);
+                    return;
                 }
-                WsResponse wsResponse = WsResponse.fromText(JSON.toJSONString(imMessage), ImConfigConst.CHARSET);
-                Tio.sendToUser(channelContext.tioConfig, userMessage.getToId().toString(), wsResponse);
-            });
-            imChatUserMessageService.lambdaUpdate().in(ImChatUserMessage::getId, ids)
-                    .set(ImChatUserMessage::getMessageStatus, ImConfigConst.USER_MESSAGE_STATUS_TRUE).update();
-
+            } else {
+                log.warn("WebSocket连接绑定失败：token无效 - {}", token);
+                return;
+            }
+        } catch (Exception e) {
+            log.error("WebSocket连接绑定时发生错误 - token: {}", token, e);
+            return;
         }
 
-        LambdaQueryChainWrapper<ImChatGroupUser> lambdaQuery = imChatGroupUserService.lambdaQuery();
-        lambdaQuery.select(ImChatGroupUser::getGroupId);
-        lambdaQuery.eq(ImChatGroupUser::getUserId, user.getId());
-        lambdaQuery.in(ImChatGroupUser::getUserStatus, ImConfigConst.GROUP_USER_STATUS_PASS, ImConfigConst.GROUP_USER_STATUS_SILENCE);
-        List<ImChatGroupUser> groupUsers = lambdaQuery.list();
-        if (!CollectionUtils.isEmpty(groupUsers)) {
-            groupUsers.forEach(groupUser -> Tio.bindGroup(channelContext, groupUser.getGroupId().toString()));
+        // 处理未读的用户消息
+        try {
+            List<ImChatUserMessage> userMessages = imChatUserMessageService.lambdaQuery().eq(ImChatUserMessage::getToId, user.getId())
+                    .eq(ImChatUserMessage::getMessageStatus, ImConfigConst.USER_MESSAGE_STATUS_FALSE)
+                    .orderByAsc(ImChatUserMessage::getCreateTime).list();
+
+            if (!CollectionUtils.isEmpty(userMessages)) {
+                List<Long> ids = new ArrayList<>();
+                userMessages.forEach(userMessage -> {
+                    ids.add(userMessage.getId());
+                    ImMessage imMessage = new ImMessage();
+                    imMessage.setContent(userMessage.getContent());
+                    imMessage.setFromId(userMessage.getFromId());
+                    imMessage.setToId(userMessage.getToId());
+                    imMessage.setMessageType(ImEnum.MESSAGE_TYPE_MSG_SINGLE.getCode());
+                    User friend = commonQuery.getUser(userMessage.getFromId());
+                    if (friend != null) {
+                        imMessage.setAvatar(friend.getAvatar());
+                    }
+                    WsResponse wsResponse = WsResponse.fromText(JSON.toJSONString(imMessage), ImConfigConst.CHARSET);
+                    Tio.sendToUser(channelContext.tioConfig, userMessage.getToId().toString(), wsResponse);
+                });
+                imChatUserMessageService.lambdaUpdate().in(ImChatUserMessage::getId, ids)
+                        .set(ImChatUserMessage::getMessageStatus, ImConfigConst.USER_MESSAGE_STATUS_TRUE).update();
+            }
+        } catch (Exception e) {
+            log.error("处理用户未读消息时发生错误 - userId: {}", user.getId(), e);
+        }
+
+        // 绑定用户所在的群组
+        try {
+            LambdaQueryChainWrapper<ImChatGroupUser> lambdaQuery = imChatGroupUserService.lambdaQuery();
+            lambdaQuery.select(ImChatGroupUser::getGroupId);
+            lambdaQuery.eq(ImChatGroupUser::getUserId, user.getId());
+            lambdaQuery.in(ImChatGroupUser::getUserStatus, ImConfigConst.GROUP_USER_STATUS_PASS, ImConfigConst.GROUP_USER_STATUS_SILENCE);
+            List<ImChatGroupUser> groupUsers = lambdaQuery.list();
+            if (!CollectionUtils.isEmpty(groupUsers)) {
+                groupUsers.forEach(groupUser -> Tio.bindGroup(channelContext, groupUser.getGroupId().toString()));
+                log.debug("绑定用户群组成功 - userId: {}, 群组数量: {}", user.getId(), groupUsers.size());
+            }
+        } catch (Exception e) {
+            log.error("绑定用户群组时发生错误 - userId: {}", user.getId(), e);
         }
     }
 

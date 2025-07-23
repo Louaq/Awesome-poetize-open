@@ -111,10 +111,10 @@ export default {
     // 勾选验证码选项
     checkboxOptions() {
       const options = {
-        trackSensitivity: 0.98,
-        minTrackPoints: 3
+        trackSensitivity: 0.90,  // 降低默认敏感度
+        minTrackPoints: 2        // 降低默认轨迹点要求
       };
-      
+
       // 如果有配置，使用配置中的参数
       if (this.captchaConfig && this.captchaConfig.checkbox) {
         if (this.captchaConfig.checkbox.trackSensitivity) {
@@ -124,7 +124,7 @@ export default {
           options.minTrackPoints = this.captchaConfig.checkbox.minTrackPoints;
         }
       }
-      
+
       return options;
     },
     
@@ -221,7 +221,7 @@ export default {
             screenSizeThreshold: 768,
             forceSlideForMobile: true,
             slide: { accuracy: 5, successThreshold: 0.95 },
-            checkbox: { trackSensitivity: 0.98, minTrackPoints: 3 }
+            checkbox: { trackSensitivity: 0.90, minTrackPoints: 2 }  // 更新默认配置
           };
         });
     },

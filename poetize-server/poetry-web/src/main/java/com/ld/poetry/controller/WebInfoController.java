@@ -18,9 +18,6 @@ import org.springframework.web.client.RestTemplate;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.MediaType;
 
 
 import java.time.LocalDateTime;
@@ -72,10 +69,6 @@ public class WebInfoController {
     @Autowired
     private CacheService cacheService;
 
-    // API配置的缓存键
-    private static final String API_CONFIG_CACHE_KEY = "API_CONFIG";
-
-
     /**
      * 更新网站信息
      */
@@ -87,15 +80,18 @@ public class WebInfoController {
         LambdaQueryChainWrapper<WebInfo> wrapper = new LambdaQueryChainWrapper<>(webInfoService.getBaseMapper());
         List<WebInfo> list = wrapper.list();
         if (!CollectionUtils.isEmpty(list)) {
-            // 使用Redis缓存替换PoetryCache
+            // 清理Redis缓存并重新缓存最新数据
+            cacheService.evictWebInfo();
             cacheService.cacheWebInfo(list.get(0));
-            
+            log.info("网站信息更新成功，已刷新Redis缓存");
+
             // 网站信息更新时，重新渲染首页和百宝箱页面
             try {
                 prerenderClient.renderMainPages();
+                log.debug("网站信息更新后成功触发页面预渲染");
             } catch (Exception e) {
                 // 预渲染失败不影响主流程，只记录日志
-                // 日志已在PrerenderClient中记录
+                log.warn("网站信息更新后页面预渲染失败", e);
             }
         }
         return PoetryResult.success();
@@ -105,55 +101,67 @@ public class WebInfoController {
     /**
      * 获取网站信息
      */
-    // 静态缓存，避免频繁计算访问量
-    private static WebInfo cachedPublicWebInfo = null;
-    private static long lastUpdateTime = 0;
-    private static final long CACHE_TTL = 10000; // 10秒缓存生效期
-
     @GetMapping("/getWebInfo")
     public PoetryResult<WebInfo> getWebInfo() {
-        // 检查本地缓存是否有效（10秒内）
-        long currentTime = System.currentTimeMillis();
-        if (cachedPublicWebInfo != null && (currentTime - lastUpdateTime) < CACHE_TTL) {
-            return PoetryResult.success(cachedPublicWebInfo);
-        }
-        
-        // 缓存过期，重新构建
-        WebInfo webInfo = cacheService.getCachedWebInfo();
-        if (webInfo != null) {
-            WebInfo result = new WebInfo();
-            BeanUtils.copyProperties(webInfo, result);
-            result.setRandomAvatar(null);
-            result.setRandomName(null);
-            result.setWaifuJson(null);
+        try {
+            // 直接从Redis缓存获取网站信息
+            WebInfo webInfo = cacheService.getCachedWebInfo();
+            if (webInfo != null) {
+                WebInfo result = new WebInfo();
+                BeanUtils.copyProperties(webInfo, result);
 
-            try {
-                Map<String, Object> historyStats = (Map<String, Object>) cacheService.getCachedIpHistoryStatistics();
-                if (historyStats != null) {
-                    // 获取访问统计
-                    Long historyCount = (Long) historyStats.get(CommonConst.IP_HISTORY_COUNT);
-                    List<Map<String, Object>> hourStats = (List<Map<String, Object>>) historyStats.get(CommonConst.IP_HISTORY_HOUR);
-                    
-                    if (historyCount != null) {
-                        result.setHistoryAllCount(historyCount.toString());
-                    }
-                    
-                    if (hourStats != null) {
-                        result.setHistoryDayCount(Integer.toString(hourStats.size()));
-                    }
-                }
-            } catch (Exception e) {
-                // 捕获可能的类型转换异常，避免影响正常响应
-                log.warn("获取访问统计时出错", e);
+                // 清理敏感信息，不对外暴露
+                result.setRandomAvatar(null);
+                result.setRandomName(null);
+                result.setWaifuJson(null);
+
+                // 添加访问统计数据
+                addHistoryStatsToWebInfo(result);
+
+                log.debug("成功从Redis缓存获取网站信息");
+                return PoetryResult.success(result);
             }
-            
-            // 更新本地缓存
-            cachedPublicWebInfo = result;
-            lastUpdateTime = currentTime;
-            
-            return PoetryResult.success(result);
+
+            log.warn("Redis缓存中未找到网站信息");
+            return PoetryResult.success();
+
+        } catch (Exception e) {
+            log.error("获取网站信息时发生错误", e);
+            return PoetryResult.success();
         }
-        return PoetryResult.success();
+    }
+
+    /**
+     * 为WebInfo添加访问统计数据
+     */
+    private void addHistoryStatsToWebInfo(WebInfo result) {
+        try {
+            Map<String, Object> historyStats = (Map<String, Object>) cacheService.getCachedIpHistoryStatistics();
+            if (historyStats != null) {
+                // 获取总访问量
+                Long historyCount = (Long) historyStats.get(CommonConst.IP_HISTORY_COUNT);
+                if (historyCount != null) {
+                    result.setHistoryAllCount(historyCount.toString());
+                }
+
+                // 获取24小时内访问统计
+                List<Map<String, Object>> hourStats = (List<Map<String, Object>>) historyStats.get(CommonConst.IP_HISTORY_HOUR);
+                if (hourStats != null) {
+                    result.setHistoryDayCount(Integer.toString(hourStats.size()));
+                }
+
+                log.debug("成功添加访问统计数据到网站信息");
+            } else {
+                log.debug("访问统计缓存为空，使用默认值");
+                result.setHistoryAllCount("0");
+                result.setHistoryDayCount("0");
+            }
+        } catch (Exception e) {
+            // 访问统计获取失败不影响主要功能，使用默认值
+            log.warn("获取访问统计时出错，使用默认值", e);
+            result.setHistoryAllCount("0");
+            result.setHistoryDayCount("0");
+        }
     }
 
     /**
@@ -198,62 +206,144 @@ public class WebInfoController {
     public PoetryResult<Map<String, Object>> getHistoryInfo() {
         Map<String, Object> result = new HashMap<>();
 
-        Map<String, Object> history = (Map<String, Object>) cacheService.getCachedIpHistoryStatistics();
-        List<HistoryInfo> infoList = new LambdaQueryChainWrapper<>(historyInfoMapper)
-                .select(HistoryInfo::getIp, HistoryInfo::getUserId, HistoryInfo::getNation, HistoryInfo::getProvince, HistoryInfo::getCity)
-                .ge(HistoryInfo::getCreateTime, LocalDateTime.now().with(LocalTime.MIN))
-                .list();
+        try {
+            // 使用安全的缓存获取方法，内置了默认值处理
+            Map<String, Object> history = cacheService.getCachedIpHistoryStatisticsSafely();
 
-        result.put(CommonConst.IP_HISTORY_PROVINCE, history.get(CommonConst.IP_HISTORY_PROVINCE));
-        result.put(CommonConst.IP_HISTORY_IP, history.get(CommonConst.IP_HISTORY_IP));
-        result.put(CommonConst.IP_HISTORY_COUNT, history.get(CommonConst.IP_HISTORY_COUNT));
-        List<Map<String, Object>> ipHistoryCount = (List<Map<String, Object>>) history.get(CommonConst.IP_HISTORY_HOUR);
-        result.put("ip_count_yest", ipHistoryCount.stream().map(m -> m.get("ip")).distinct().count());
-        result.put("username_yest", ipHistoryCount.stream().map(m -> {
-            Object userId = m.get("user_id");
-            if (userId != null) {
-                User user = commonQuery.getUser(Integer.valueOf(userId.toString()));
-                if (user != null) {
-                    Map<String, String> userInfo = new HashMap<>();
-                    userInfo.put("avatar", user.getAvatar());
-                    userInfo.put("username", user.getUsername());
-                    return userInfo;
-                }
+            // 获取今日访问信息
+            List<HistoryInfo> infoList = new LambdaQueryChainWrapper<>(historyInfoMapper)
+                    .select(HistoryInfo::getIp, HistoryInfo::getUserId, HistoryInfo::getNation, HistoryInfo::getProvince, HistoryInfo::getCity)
+                    .ge(HistoryInfo::getCreateTime, LocalDateTime.now().with(LocalTime.MIN))
+                    .list();
+
+            // 从缓存中获取数据（getCachedIpHistoryStatisticsSafely已确保非null）
+            result.put(CommonConst.IP_HISTORY_PROVINCE, history.get(CommonConst.IP_HISTORY_PROVINCE));
+            result.put(CommonConst.IP_HISTORY_IP, history.get(CommonConst.IP_HISTORY_IP));
+            result.put(CommonConst.IP_HISTORY_COUNT, history.get(CommonConst.IP_HISTORY_COUNT));
+
+            // 处理24小时数据
+            List<Map<String, Object>> ipHistoryCount = (List<Map<String, Object>>) history.get(CommonConst.IP_HISTORY_HOUR);
+
+            if (ipHistoryCount != null && !ipHistoryCount.isEmpty()) {
+                result.put("ip_count_yest", ipHistoryCount.stream()
+                    .map(m -> m != null ? m.get("ip") : null)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .count());
+            } else {
+                result.put("ip_count_yest", 0L);
             }
-            return null;
-        }).filter(Objects::nonNull).collect(Collectors.toList()));
-        result.put("ip_count_today", infoList.stream().map(HistoryInfo::getIp).distinct().count());
-        result.put("username_today", infoList.stream().map(m -> {
-            Integer userId = m.getUserId();
-            if (userId != null) {
-                User user = commonQuery.getUser(userId);
-                if (user != null) {
-                    Map<String, String> userInfo = new HashMap<>();
-                    userInfo.put("avatar", user.getAvatar());
-                    userInfo.put("username", user.getUsername());
-                    return userInfo;
-                }
+            // 安全地处理昨日用户信息
+            if (ipHistoryCount != null && !ipHistoryCount.isEmpty()) {
+                result.put("username_yest", ipHistoryCount.stream()
+                    .filter(Objects::nonNull)
+                    .map(m -> {
+                        try {
+                            Object userId = m.get("user_id");
+                            if (userId != null) {
+                                User user = commonQuery.getUser(Integer.valueOf(userId.toString()));
+                                if (user != null) {
+                                    Map<String, String> userInfo = new HashMap<>();
+                                    userInfo.put("avatar", user.getAvatar());
+                                    userInfo.put("username", user.getUsername());
+                                    return userInfo;
+                                }
+                            }
+                        } catch (Exception e) {
+                            log.warn("处理昨日用户信息时出错: {}", e.getMessage());
+                        }
+                        return null;
+                    })
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList()));
+            } else {
+                result.put("username_yest", new ArrayList<>());
             }
-            return null;
-        }).filter(Objects::nonNull).collect(Collectors.toList()));
 
-        List<Map<String, Object>> list = infoList.stream()
-                .map(HistoryInfo::getProvince).filter(Objects::nonNull)
-                .collect(Collectors.groupingBy(m -> m, Collectors.counting()))
-                .entrySet().stream()
-                .map(entry -> {
-                    HashMap<String, Object> map = new HashMap<>();
-                    map.put("province", entry.getKey());
-                    map.put("num", entry.getValue());
-                    return map;
-                })
-                .sorted((o1, o2) -> Long.valueOf(o2.get("num").toString()).compareTo(Long.valueOf(o1.get("num").toString())))
-                .collect(Collectors.toList());
+            // 处理今日访问统计
+            if (infoList != null) {
+                result.put("ip_count_today", infoList.stream()
+                    .map(HistoryInfo::getIp)
+                    .filter(Objects::nonNull)
+                    .distinct()
+                    .count());
 
-        result.put("province_today", list);
+                result.put("username_today", infoList.stream()
+                    .filter(Objects::nonNull)
+                    .map(m -> {
+                        try {
+                            Integer userId = m.getUserId();
+                            if (userId != null) {
+                                User user = commonQuery.getUser(userId);
+                                if (user != null) {
+                                    Map<String, String> userInfo = new HashMap<>();
+                                    userInfo.put("avatar", user.getAvatar());
+                                    userInfo.put("username", user.getUsername());
+                                    return userInfo;
+                                }
+                            }
+                        } catch (Exception e) {
+                            log.warn("处理今日用户信息时出错: {}", e.getMessage());
+                        }
+                        return null;
+                    })
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList()));
 
-        return PoetryResult.success(result);
+                // 处理今日省份统计
+                List<Map<String, Object>> list = infoList.stream()
+                        .map(HistoryInfo::getProvince)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.groupingBy(m -> m, Collectors.counting()))
+                        .entrySet().stream()
+                        .map(entry -> {
+                            HashMap<String, Object> map = new HashMap<>();
+                            map.put("province", entry.getKey());
+                            map.put("num", entry.getValue());
+                            return map;
+                        })
+                        .sorted((o1, o2) -> Long.valueOf(o2.get("num").toString())
+                            .compareTo(Long.valueOf(o1.get("num").toString())))
+                        .collect(Collectors.toList());
+
+                result.put("province_today", list);
+            } else {
+                result.put("ip_count_today", 0L);
+                result.put("username_today", new ArrayList<>());
+                result.put("province_today", new ArrayList<>());
+            }
+
+            return PoetryResult.success(result);
+
+        } catch (Exception e) {
+            log.error("获取历史统计信息时发生错误", e);
+            // 返回默认的空数据，避免前端报错
+            Map<String, Object> defaultResult = createDefaultHistoryResult();
+            return PoetryResult.success(defaultResult);
+        }
     }
+
+
+
+    /**
+     * 创建默认的历史结果数据
+     */
+    private Map<String, Object> createDefaultHistoryResult() {
+        Map<String, Object> defaultResult = new HashMap<>();
+        defaultResult.put(CommonConst.IP_HISTORY_PROVINCE, new ArrayList<>());
+        defaultResult.put(CommonConst.IP_HISTORY_IP, new ArrayList<>());
+        defaultResult.put(CommonConst.IP_HISTORY_COUNT, 0L);
+        defaultResult.put("ip_count_yest", 0L);
+        defaultResult.put("username_yest", new ArrayList<>());
+        defaultResult.put("ip_count_today", 0L);
+        defaultResult.put("username_today", new ArrayList<>());
+        defaultResult.put("province_today", new ArrayList<>());
+
+        log.info("返回默认历史统计结果");
+        return defaultResult;
+    }
+
+
 
     /**
      * 获取赞赏
@@ -340,12 +430,14 @@ public class WebInfoController {
         updateInfo.setApiEnabled(enabled);
         updateInfo.setApiKey(apiKey);
         webInfoService.updateById(updateInfo);
-        
-        // 更新缓存
+
+        // 清理Redis缓存并重新缓存最新数据
+        cacheService.evictWebInfo();
         webInfo.setApiEnabled(enabled);
         webInfo.setApiKey(apiKey);
         cacheService.cacheWebInfo(webInfo);
-        
+        log.info("API配置更新成功，已刷新Redis缓存");
+
         return PoetryResult.success();
     }
 

@@ -1605,7 +1605,7 @@ export default {
     getSeoConfig() {
       console.log('开始获取SEO配置...');
       try {
-        this.$http.get(this.$constant.pythonBaseURL + '/seo/getSeoConfig', {}, false)
+        this.$http.get(this.$constant.pythonBaseURL + '/seo/getSeoConfig', {}, true)
           .then((res) => {
             console.log('获取SEO配置响应数据:', res);
             

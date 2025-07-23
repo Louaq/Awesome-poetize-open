@@ -1,6 +1,7 @@
 package com.ld.poetry.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ld.poetry.config.PoetryResult;
 import com.ld.poetry.constants.CommonConst;
@@ -18,12 +19,13 @@ import com.ld.poetry.service.LabelService;
 import com.ld.poetry.service.SeoService;
 import com.ld.poetry.service.SortService;
 import com.ld.poetry.service.TranslationService;
+import com.ld.poetry.service.WebInfoService;
 import com.ld.poetry.utils.PoetryUtil;
-import com.ld.poetry.utils.cache.PoetryCache;
 import com.ld.poetry.vo.ArticleVO;
 import com.ld.poetry.vo.BaseRequestVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
 
@@ -60,6 +62,8 @@ public class ApiController {
 
     private final CacheService cacheService;
 
+    private final WebInfoService webInfoService;
+
     public ApiController(ArticleService articleService,
                         LabelMapper labelMapper,
                         SortMapper sortMapper,
@@ -67,7 +71,8 @@ public class ApiController {
                         LabelService labelService,
                         SeoService seoService,
                         TranslationService translationService,
-                        CacheService cacheService) {
+                        CacheService cacheService,
+                        WebInfoService webInfoService) {
         this.articleService = articleService;
         this.labelMapper = labelMapper;
         this.sortMapper = sortMapper;
@@ -76,6 +81,7 @@ public class ApiController {
         this.seoService = seoService;
         this.translationService = translationService;
         this.cacheService = cacheService;
+        this.webInfoService = webInfoService;
     }
 
     /**
@@ -85,10 +91,22 @@ public class ApiController {
         // 使用Redis缓存获取网站信息
         WebInfo webInfo = cacheService.getCachedWebInfo();
 
-        // 降级到PoetryCache获取
+        // 如果Redis缓存为空，从数据库重新加载并缓存
         if (webInfo == null) {
-            webInfo = (WebInfo) PoetryCache.get(CommonConst.WEB_INFO);
+            try {
+                LambdaQueryChainWrapper<WebInfo> wrapper = new LambdaQueryChainWrapper<>(webInfoService.getBaseMapper());
+                List<WebInfo> list = wrapper.list();
+                if (!CollectionUtils.isEmpty(list)) {
+                    webInfo = list.get(0);
+                    // 重新缓存到Redis
+                    cacheService.cacheWebInfo(webInfo);
+                    log.info("API验证时从数据库重新加载网站信息并缓存");
+                }
+            } catch (Exception e) {
+                log.error("API验证时从数据库加载网站信息失败", e);
+            }
         }
+
         if (webInfo == null || webInfo.getApiEnabled() == null || !webInfo.getApiEnabled()) {
             log.warn("API请求被拒绝：API未启用");
             throw new PoetryRuntimeException("API未启用");
@@ -100,7 +118,7 @@ public class ApiController {
             log.warn("API请求被拒绝：无效的API密钥");
             throw new PoetryRuntimeException("无效的API密钥");
         }
-        
+
         return webInfo;
     }
 

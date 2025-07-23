@@ -314,6 +314,7 @@ async def admin_required(
             'Authorization': java_token,  # 添加Bearer前缀，确保Java后端能正确识别token
             'X-Forwarded-For': client_ip,  # 将客户端IP传递给Java后端
             'X-Internal-Service': 'poetize-python',
+            'X-Admin-Request': 'true',  # 标识为内部管理员请求，跳过额外的权限检查
             'User-Agent': 'poetize-python/1.0.0'
         }
         logger.info(f"正在调用Java后端验证API: {JAVA_AUTH_URL}")

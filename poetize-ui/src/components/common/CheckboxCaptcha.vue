@@ -69,12 +69,12 @@ export default {
     // 轨迹敏感度阈值
     trackSensitivity: {
       type: Number,
-      default: 0.95  // 降低敏感度，从0.98改为0.95
+      default: 0.90  // 进一步降低敏感度到0.90
     },
     // 最少轨迹点数
     minTrackPoints: {
       type: Number,
-      default: 2  // 降低最少轨迹点要求，从3改为2
+      default: 2  // 保持较低的轨迹点要求
     },
     // 是否为回复评论场景（更宽松的验证）
     isReplyComment: {
@@ -271,9 +271,9 @@ export default {
      */
     getMinTrackPoints() {
       if (this.isReplyComment) {
-        return Math.max(1, this.minTrackPoints - 1);  // 回复评论场景进一步降低要求
+        return 1;  // 回复评论场景只需要1个轨迹点
       }
-      return this.minTrackPoints;
+      return Math.max(1, this.minTrackPoints);  // 确保至少为1
     },
 
     /**
@@ -282,16 +282,18 @@ export default {
     getTrackSensitivity() {
       let sensitivity = this.trackSensitivity;
 
-      // 回复评论场景降低敏感度
+      // 回复评论场景大幅降低敏感度
       if (this.isReplyComment) {
-        sensitivity = Math.max(0.85, sensitivity - 0.05);
+        sensitivity = Math.max(0.75, sensitivity - 0.10);  // 回复评论场景更宽松
       }
 
-      // 重试次数越多，要求越宽松
+      // 重试次数越多，要求越宽松，递减幅度更大
       if (this.retryCount > 0) {
-        sensitivity = Math.max(0.80, sensitivity - (this.retryCount * 0.03));
+        const decrement = this.retryCount * 0.04;  // 每次重试降低0.04
+        sensitivity = Math.max(0.70, sensitivity - decrement);  // 最低降到0.70
       }
 
+      console.log(`动态敏感度计算: 基础=${this.trackSensitivity}, 回复评论=${this.isReplyComment}, 重试=${this.retryCount}, 最终=${sensitivity.toFixed(3)}`);
       return sensitivity;
     },
     

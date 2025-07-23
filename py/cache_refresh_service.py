@@ -117,13 +117,14 @@ class CacheRefreshService:
         try:
             cleared_keys = []
             failed_keys = []
-            
-            # 网站信息直接缓存键
+
+            # 网站信息直接缓存键（包含Java端和Python端的缓存键）
             web_info_keys = [
-                CacheConstants.WEB_INFO_KEY,
-                CacheConstants.WEB_INFO_ADMIN_KEY
+                CacheConstants.WEB_INFO_KEY,           # Python端: poetize:web:info
+                CacheConstants.WEB_INFO_ADMIN_KEY,     # Python端: poetize:web:info:admin
+                "poetize:webinfo"                      # Java端: poetize:webinfo
             ]
-            
+
             # 清理直接缓存键
             for cache_key in web_info_keys:
                 try:
@@ -134,7 +135,7 @@ class CacheRefreshService:
                 except Exception as e:
                     failed_keys.append(cache_key)
                     logger.error(f"清理网站信息缓存失败: {cache_key} - {e}")
-            
+
             # 清理网站详细信息缓存（模式匹配）
             try:
                 details_pattern = f"{CacheConstants.WEB_INFO_DETAILS_PREFIX}*"
@@ -146,9 +147,9 @@ class CacheRefreshService:
             except Exception as e:
                 failed_keys.append("WEB_INFO_DETAILS_PATTERN")
                 logger.error(f"清理网站详细信息缓存失败: {e}")
-            
+
             return self._log_refresh_result("WEB_INFO", cleared_keys, failed_keys)
-            
+
         except Exception as e:
             logger.error(f"刷新网站信息缓存失败: {e}")
             return self._log_refresh_result("WEB_INFO", [], [f"GENERAL_ERROR: {str(e)}"])

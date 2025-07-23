@@ -1,14 +1,19 @@
 package com.ld.poetry.config;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Component
 public class WebInfoConfigurer implements WebMvcConfigurer {
+
+    @Autowired
+    private WebInfoHandlerInterceptor webInfoHandlerInterceptor;
+
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(new WebInfoHandlerInterceptor())
+        registry.addInterceptor(webInfoHandlerInterceptor)
                 .addPathPatterns("/**")
                 .excludePathPatterns(
                     "/",

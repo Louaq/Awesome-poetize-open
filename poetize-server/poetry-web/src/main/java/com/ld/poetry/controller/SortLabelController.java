@@ -3,14 +3,14 @@ package com.ld.poetry.controller;
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.ld.poetry.aop.LoginCheck;
 import com.ld.poetry.config.PoetryResult;
-import com.ld.poetry.constants.CommonConst;
 import com.ld.poetry.dao.LabelMapper;
 import com.ld.poetry.dao.SortMapper;
 import com.ld.poetry.entity.Label;
 import com.ld.poetry.entity.Sort;
+import com.ld.poetry.service.CacheService;
 import com.ld.poetry.utils.CommonQuery;
 import com.ld.poetry.utils.PrerenderClient;
-import com.ld.poetry.utils.cache.PoetryCache;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
@@ -27,6 +27,7 @@ import java.util.Map;
  * @author sara
  * @since 2021-09-14
  */
+@Slf4j
 @RestController
 @RequestMapping("/webInfo")
 public class SortLabelController {
@@ -42,6 +43,9 @@ public class SortLabelController {
 
     @Autowired
     private PrerenderClient prerenderClient;
+
+    @Autowired
+    private CacheService cacheService;
 
     /**
      * 获取分类标签信息
@@ -66,14 +70,19 @@ public class SortLabelController {
         }
 
         sortMapper.insert(sort);
-        PoetryCache.remove(CommonConst.SORT_INFO);
-        
+
+        // 清理分类信息缓存，与其他地方的分类缓存清理保持一致
+        cacheService.evictSortList();
+        log.info("分类新增成功，已清理Redis缓存，分类名称: {}", sort.getSortName());
+
         // 分类新增后，重新渲染首页和分类索引页面
         try {
             prerenderClient.renderHomePage();
             prerenderClient.renderSortIndexPage();
+            log.debug("分类新增后成功触发页面预渲染");
         } catch (Exception e) {
             // 预渲染失败不影响主流程
+            log.warn("分类新增后页面预渲染失败", e);
         }
         
         return PoetryResult.success();
@@ -87,17 +96,22 @@ public class SortLabelController {
     @LoginCheck(0)
     public PoetryResult deleteSort(@RequestParam("id") Integer id) {
         sortMapper.deleteById(id);
-        PoetryCache.remove(CommonConst.SORT_INFO);
-        
+
+        // 清理分类信息缓存，与其他地方的分类缓存清理保持一致
+        cacheService.evictSortList();
+        log.info("分类删除成功，已清理Redis缓存，分类ID: {}", id);
+
         // 分类删除后，删除对应分类页面的预渲染文件，并重新渲染首页和分类索引页面
         try {
             prerenderClient.deleteCategoryPage(id);
             prerenderClient.renderHomePage();
             prerenderClient.renderSortIndexPage();
+            log.debug("分类删除后成功触发页面预渲染");
         } catch (Exception e) {
             // 预渲染失败不影响主流程
+            log.warn("分类删除后页面预渲染失败", e);
         }
-        
+
         return PoetryResult.success();
     }
 
@@ -109,8 +123,11 @@ public class SortLabelController {
     @LoginCheck(0)
     public PoetryResult updateSort(@RequestBody Sort sort) {
         sortMapper.updateById(sort);
-        PoetryCache.remove(CommonConst.SORT_INFO);
-        
+
+        // 清理分类信息缓存，与其他地方的分类缓存清理保持一致
+        cacheService.evictSortList();
+        log.info("分类更新成功，已清理Redis缓存，分类ID: {}", sort.getId());
+
         // 分类更新后，重新渲染对应分类页面、首页和分类索引页面
         try {
             if (sort.getId() != null) {
@@ -118,10 +135,12 @@ public class SortLabelController {
             }
             prerenderClient.renderHomePage();
             prerenderClient.renderSortIndexPage();
+            log.debug("分类更新后成功触发页面预渲染");
         } catch (Exception e) {
             // 预渲染失败不影响主流程
+            log.warn("分类更新后页面预渲染失败", e);
         }
-        
+
         return PoetryResult.success();
     }
 
@@ -145,13 +164,18 @@ public class SortLabelController {
             return PoetryResult.fail("标签名称和标签描述和分类Id不能为空！");
         }
         labelMapper.insert(label);
-        PoetryCache.remove(CommonConst.SORT_INFO);
-        
+
+        // 清理分类信息缓存，与其他地方的分类缓存清理保持一致
+        cacheService.evictSortList();
+        log.info("标签新增成功，已清理Redis缓存，标签名称: {}", label.getLabelName());
+
         // 标签新增后，重新渲染对应分类页面
         try {
             prerenderClient.renderCategoryPage(label.getSortId());
+            log.debug("标签新增后成功触发页面预渲染");
         } catch (Exception e) {
             // 预渲染失败不影响主流程
+            log.warn("标签新增后页面预渲染失败", e);
         }
         
         return PoetryResult.success();
@@ -168,14 +192,19 @@ public class SortLabelController {
         Label label = labelMapper.selectById(id);
         
         labelMapper.deleteById(id);
-        PoetryCache.remove(CommonConst.SORT_INFO);
-        
+
+        // 清理分类信息缓存，与其他地方的分类缓存清理保持一致
+        cacheService.evictSortList();
+        log.info("标签删除成功，已清理Redis缓存，标签ID: {}", id);
+
         // 标签删除后，重新渲染对应分类页面
         if (label != null && label.getSortId() != null) {
             try {
                 prerenderClient.renderCategoryPage(label.getSortId());
+                log.debug("标签删除后成功触发页面预渲染");
             } catch (Exception e) {
                 // 预渲染失败不影响主流程
+                log.warn("标签删除后页面预渲染失败", e);
             }
         }
         
@@ -190,17 +219,22 @@ public class SortLabelController {
     @LoginCheck(0)
     public PoetryResult updateLabel(@RequestBody Label label) {
         labelMapper.updateById(label);
-        PoetryCache.remove(CommonConst.SORT_INFO);
-        
+
+        // 清理分类信息缓存，与其他地方的分类缓存清理保持一致
+        cacheService.evictSortList();
+        log.info("标签更新成功，已清理Redis缓存，标签ID: {}", label.getId());
+
         // 标签更新后，重新渲染对应分类页面
         try {
             if (label.getSortId() != null) {
                 prerenderClient.renderCategoryPage(label.getSortId());
+                log.debug("标签更新后成功触发页面预渲染");
             }
         } catch (Exception e) {
             // 预渲染失败不影响主流程
+            log.warn("标签更新后页面预渲染失败", e);
         }
-        
+
         return PoetryResult.success();
     }
 

@@ -71,7 +71,7 @@ public class AdminController {
      * Boss查询树洞
      */
     @PostMapping("/treeHole/boss/list")
-    @LoginCheck(0)
+    @LoginCheck(1)
     public PoetryResult<Page> listBossTreeHole(@RequestBody BaseRequestVO baseRequestVO) {
         LambdaQueryChainWrapper<TreeHole> wrapper = new LambdaQueryChainWrapper<>(treeHoleMapper);
         Page<TreeHole> page = new Page<>(baseRequestVO.getCurrent(), baseRequestVO.getSize());

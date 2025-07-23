@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapp
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ld.poetry.config.PoetryResult;
+import com.ld.poetry.constants.CacheConstants;
 import com.ld.poetry.constants.CommonConst;
 import com.ld.poetry.dao.UserMapper;
 import com.ld.poetry.entity.ThirdPartyOauthConfig;
@@ -28,7 +29,6 @@ import com.ld.poetry.service.ThirdPartyOauthConfigService;
 import com.ld.poetry.service.UserService;
 import com.ld.poetry.service.WeiYanService;
 import com.ld.poetry.utils.*;
-import com.ld.poetry.utils.cache.PoetryCache;
 import com.ld.poetry.utils.mail.MailUtil;
 import com.ld.poetry.vo.BaseRequestVO;
 import com.ld.poetry.vo.UserVO;
@@ -36,18 +36,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cache.annotation.CacheEvict;
-import org.springframework.cache.annotation.Cacheable;
-import org.springframework.cache.annotation.CachePut;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
-import org.springframework.util.DigestUtils;
 import org.springframework.util.StringUtils;
 import org.tio.core.Tio;
-
-import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -55,9 +48,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Collectors;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * <p>
@@ -113,12 +104,21 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
      * @return 是否在白名单中
      */
     private boolean isIpInAdminWhitelist(String ip) {
-        Set<String> whitelistedIps = (Set<String>) PoetryCache.get(CommonConst.ADMIN_IP_WHITELIST);
-        if (whitelistedIps == null || whitelistedIps.isEmpty()) {
-            // 初始化时没有白名单，允许第一次登录设置
-            return true;
+        try {
+            String whitelistKey = CacheConstants.CACHE_PREFIX + "admin:ip:whitelist";
+            Object cached = cacheService.get(whitelistKey);
+            @SuppressWarnings("unchecked")
+            Set<String> whitelistedIps = cached instanceof Set ? (Set<String>) cached : null;
+
+            if (whitelistedIps == null || whitelistedIps.isEmpty()) {
+                // 初始化时没有白名单，允许第一次登录设置
+                return true;
+            }
+            return whitelistedIps.contains(ip);
+        } catch (Exception e) {
+            log.error("检查管理员IP白名单时发生错误: ip={}", ip, e);
+            return true; // 发生错误时允许登录
         }
-        return whitelistedIps.contains(ip);
     }
 
     /**
@@ -126,12 +126,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
      * @param ip 客户端IP
      */
     private void recordAdminLoginIp(String ip) {
-        Set<String> whitelistedIps = (Set<String>) PoetryCache.get(CommonConst.ADMIN_IP_WHITELIST);
-        if (whitelistedIps == null) {
-            whitelistedIps = new HashSet<>();
+        try {
+            String whitelistKey = CacheConstants.CACHE_PREFIX + "admin:ip:whitelist";
+            Object cached = cacheService.get(whitelistKey);
+            @SuppressWarnings("unchecked")
+            Set<String> whitelistedIps = cached instanceof Set ? (Set<String>) cached : new HashSet<>();
+
+            whitelistedIps.add(ip);
+            cacheService.set(whitelistKey, whitelistedIps, CacheConstants.VERY_LONG_EXPIRE_TIME);
+            log.debug("记录管理员登录IP: {}", ip);
+        } catch (Exception e) {
+            log.error("记录管理员登录IP时发生错误: ip={}", ip, e);
         }
-        whitelistedIps.add(ip);
-        PoetryCache.put(CommonConst.ADMIN_IP_WHITELIST, whitelistedIps);
     }
 
     /**
@@ -140,8 +146,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
      * @return 是否被锁定
      */
     private boolean isAccountLocked(String account) {
-        String lockKey = "login_lock_" + account;
-        return PoetryCache.get(lockKey) != null;
+        try {
+            String lockKey = CacheConstants.CACHE_PREFIX + "login:lock:" + account;
+            return cacheService.get(lockKey) != null;
+        } catch (Exception e) {
+            log.error("检查账号锁定状态时发生错误: account={}", account, e);
+            return false; // 发生错误时不阻止登录
+        }
     }
 
     /**
@@ -150,25 +161,27 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
      * @return 当前尝试次数
      */
     private int recordFailedLoginAttempt(String account) {
-        String attemptKey = "login_attempt_" + account;
-        Integer attempts = (Integer) PoetryCache.get(attemptKey);
-        if (attempts == null) {
-            attempts = 1;
-        } else {
+        try {
+            String attemptKey = CacheConstants.buildLoginAttemptKey(account);
+            Object attemptsObj = cacheService.get(attemptKey);
+            Integer attempts = attemptsObj != null ? (Integer) attemptsObj : 0;
             attempts++;
+
+            // 设置失败尝试记录，过期时间1小时
+            cacheService.set(attemptKey, attempts, 3600);
+
+            // 如果失败次数超过阈值，锁定账号
+            if (attempts >= CommonConst.MAX_LOGIN_ATTEMPTS) {
+                String lockKey = CacheConstants.CACHE_PREFIX + "login:lock:" + account;
+                cacheService.set(lockKey, true, CommonConst.LOGIN_LOCKOUT_TIME);
+                log.warn("账号 {} 因多次登录失败被锁定 {} 秒", account, CommonConst.LOGIN_LOCKOUT_TIME);
+            }
+
+            return attempts;
+        } catch (Exception e) {
+            log.error("记录登录失败尝试时发生错误: account={}", account, e);
+            return 0;
         }
-
-        // 设置失败尝试记录，过期时间1小时
-        PoetryCache.put(attemptKey, attempts, 3600);
-
-        // 如果失败次数超过阈值，锁定账号
-        if (attempts >= CommonConst.MAX_LOGIN_ATTEMPTS) {
-            String lockKey = "login_lock_" + account;
-            PoetryCache.put(lockKey, true, CommonConst.LOGIN_LOCKOUT_TIME);
-            log.warn("账号 {} 因多次登录失败被锁定 {} 秒", account, CommonConst.LOGIN_LOCKOUT_TIME);
-        }
-
-        return attempts;
     }
 
     /**
@@ -176,8 +189,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
      * @param account 账号
      */
     private void clearFailedLoginAttempts(String account) {
-        String attemptKey = "login_attempt_" + account;
-        PoetryCache.remove(attemptKey);
+        try {
+            String attemptKey = CacheConstants.buildLoginAttemptKey(account);
+            cacheService.deleteKey(attemptKey);
+            log.debug("清除登录失败尝试记录: {}", account);
+        } catch (Exception e) {
+            log.error("清除登录失败尝试记录失败: {}", account, e);
+        }
     }
 
     @Override
@@ -187,8 +205,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         log.info("用户登录尝试 - 用户名: {}, IP: {}, 是否管理员: {}", account, clientIp, isAdmin);
 
         // 检查账号是否被锁定
-        String lockKey = "login_lock_" + account;
-        if (PoetryCache.get(lockKey) != null) {
+        if (isAccountLocked(account)) {
             log.warn("账号已被锁定 - 用户名: {}, IP: {}", account, clientIp);
             return PoetryResult.fail("账号已被锁定，请稍后再试");
         }
@@ -239,65 +256,85 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             }
         }
 
-        // 检查管理员权限
-        if (isAdmin && (one.getUserType() == PoetryEnum.USER_TYPE_ADMIN.getCode() || one.getUserType() == PoetryEnum.USER_TYPE_DEV.getCode())) {
+        // 根据用户实际权限判断是否为管理员（而不是依赖前端传递的isAdmin参数）
+        boolean isActualAdmin = (one.getUserType() == PoetryEnum.USER_TYPE_ADMIN.getCode() ||
+                                one.getUserType() == PoetryEnum.USER_TYPE_DEV.getCode());
+
+        // 如果前端请求管理员登录，但用户不是管理员，则拒绝
+        if (isAdmin && !isActualAdmin) {
+            log.warn("非管理员尝试管理员登录 - 用户名: {}, IP: {}, 用户类型: {}", account, clientIp, one.getUserType());
+            return PoetryResult.fail("请输入管理员账号！");
+        }
+
+        // 记录管理员登录
+        if (isActualAdmin) {
             recordAdminLoginIp(clientIp);
-            log.info("管理员登录成功 - 用户名: {}, IP: {}", account, clientIp);
+            log.info("管理员登录成功 - 用户名: {}, IP: {}, 用户类型: {}", account, clientIp, one.getUserType());
+        } else {
+            log.info("普通用户登录成功 - 用户名: {}, IP: {}, 用户类型: {}", account, clientIp, one.getUserType());
         }
 
         String adminToken = "";
         String userToken = "";
 
-        // 清除旧token
-        if (isAdmin) {
-            if (one.getUserType() != PoetryEnum.USER_TYPE_ADMIN.getCode() && one.getUserType() != PoetryEnum.USER_TYPE_DEV.getCode()) {
-                log.warn("非管理员尝试管理员登录 - 用户名: {}, IP: {}", account, clientIp);
-                return PoetryResult.fail("请输入管理员账号！");
-            }
-            // 清除可能存在的旧token
-            if (PoetryCache.get(CommonConst.ADMIN_TOKEN + one.getId()) != null) {
-                String oldToken = (String) PoetryCache.get(CommonConst.ADMIN_TOKEN + one.getId());
-                log.info("清除旧的管理员token - 用户: {}, 旧token: {}", account, oldToken);
-                PoetryCache.remove(oldToken);
-                PoetryCache.remove(CommonConst.ADMIN_TOKEN + one.getId());
-                PoetryCache.remove(CommonConst.ADMIN_TOKEN_INTERVAL + one.getId());
+        // 根据用户实际权限清除旧token（而不是依赖前端传递的isAdmin参数）
+        if (isActualAdmin) {
+            // 清除可能存在的旧管理员token（使用Redis缓存）
+            try {
+                String oldToken = cacheService.getAdminToken(one.getId());
+                if (oldToken != null) {
+                    log.info("清除旧的管理员token - 用户: {}, 旧token: {}", account, oldToken);
+                    // 清除旧token的会话
+                    cacheService.evictUserSession(oldToken);
+                    // 清除token映射
+                    cacheService.evictAdminToken(one.getId());
+                    cacheService.evictTokenInterval(one.getId(), true);
+                }
+            } catch (Exception e) {
+                log.error("清除旧管理员token时发生错误: account={}", account, e);
             }
         } else {
-            // 清除可能存在的旧token
-            if (PoetryCache.get(CommonConst.USER_TOKEN + one.getId()) != null) {
-                String oldToken = (String) PoetryCache.get(CommonConst.USER_TOKEN + one.getId());
-                log.info("清除旧的用户token - 用户: {}, 旧token: {}", account, oldToken);
-                PoetryCache.remove(oldToken);
-                PoetryCache.remove(CommonConst.USER_TOKEN + one.getId());
-                PoetryCache.remove(CommonConst.USER_TOKEN_INTERVAL + one.getId());
+            // 清除可能存在的旧用户token（使用Redis缓存）
+            try {
+                String oldToken = cacheService.getUserToken(one.getId());
+                if (oldToken != null) {
+                    log.info("清除旧的用户token - 用户: {}, 旧token: {}", account, oldToken);
+                    // 清除旧token的会话
+                    cacheService.evictUserSession(oldToken);
+                    // 清除token映射
+                    cacheService.evictUserToken(one.getId());
+                    cacheService.evictTokenInterval(one.getId(), false);
+                }
+            } catch (Exception e) {
+                log.error("清除旧用户token时发生错误: account={}", account, e);
             }
         }
 
-        // 生成新的安全token（使用HMAC签名）
-        if (isAdmin && !StringUtils.hasText(adminToken)) {
+        // 根据用户实际权限生成对应的token（而不是依赖前端传递的isAdmin参数）
+        if (isActualAdmin && !StringUtils.hasText(adminToken)) {
             adminToken = SecureTokenGenerator.generateAdminToken(one.getId());
-            log.info("生成新的安全管理员token - 用户: {}, 用户ID: {}", account, one.getId());
+            log.info("生成新的安全管理员token - 用户: {}, 用户ID: {}, 用户类型: {}", account, one.getId(), one.getUserType());
 
-            // 使用Redis缓存替换PoetryCache
+            // 使用Redis缓存管理token
             cacheService.cacheUserSession(adminToken, one.getId());
-            cacheService.cacheUserTokenMapping(one.getId(), adminToken);
+            cacheService.cacheAdminToken(one.getId(), adminToken);
             cacheService.cacheUser(one);
+            cacheService.cacheTokenInterval(one.getId(), true);
 
             // 保持UserCacheManager兼容性
             userCacheManager.cacheUserByToken(adminToken, one);
-            userCacheManager.cacheUserById(one.getId(), one);
-        } else if (!isAdmin && !StringUtils.hasText(userToken)) {
+        } else if (!isActualAdmin && !StringUtils.hasText(userToken)) {
             userToken = SecureTokenGenerator.generateUserToken(one.getId());
-            log.info("生成新的安全用户token - 用户: {}, 用户ID: {}", account, one.getId());
+            log.info("生成新的安全用户token - 用户: {}, 用户ID: {}, 用户类型: {}", account, one.getId(), one.getUserType());
 
-            // 使用Redis缓存替换PoetryCache
+            // 使用Redis缓存管理token
             cacheService.cacheUserSession(userToken, one.getId());
-            cacheService.cacheUserTokenMapping(one.getId(), userToken);
+            cacheService.cacheUserToken(one.getId(), userToken);
             cacheService.cacheUser(one);
+            cacheService.cacheTokenInterval(one.getId(), false);
 
             // 保持UserCacheManager兼容性
             userCacheManager.cacheUserByToken(userToken, one);
-            userCacheManager.cacheUserById(one.getId(), one);
         }
 
         // 构建返回数据
@@ -305,41 +342,74 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         BeanUtils.copyProperties(one, userVO);
         userVO.setPassword(null);
         userVO.setUserType(one.getUserType());
-        if (isAdmin && one.getUserType() == PoetryEnum.USER_TYPE_ADMIN.getCode()) {
+
+        // 根据用户实际权限设置isBoss标志（所有管理员都设置为Boss）
+        if (isActualAdmin) {
             userVO.setIsBoss(true);
+            log.info("设置管理员Boss标志 - 用户: {}, userType: {}, isBoss: true", one.getUsername(), one.getUserType());
         }
 
-        if (isAdmin) {
+        // 根据用户实际权限返回对应的token
+        if (isActualAdmin) {
             userVO.setAccessToken(adminToken);
+            log.info("返回管理员token - 用户: {}, token前缀: admin_access_token_", account);
         } else {
             userVO.setAccessToken(userToken);
+            log.info("返回用户token - 用户: {}, token前缀: user_access_token_", account);
         }
         return PoetryResult.success(userVO);
     }
 
     @Override
     public PoetryResult exit() {
-        String token = PoetryUtil.getToken();
-        Integer userId = PoetryUtil.getUserId();
-        log.info("用户退出登录 - 用户ID: {}, token: {}", userId, token);
+        try {
+            String token = PoetryUtil.getToken();
+            Integer userId = PoetryUtil.getUserId();
+            log.info("用户退出登录 - 用户ID: {}, token: {}", userId, token);
 
-        // 使用Redis缓存清理替换PoetryCache
-        cacheService.evictUserSession(token);
-        cacheService.evictUserTokenMapping(userId);
-        cacheService.evictUser(userId);
+            if (userId != null && token != null) {
+                // 判断是管理员还是普通用户token
+                boolean isAdminToken = token.contains(CommonConst.ADMIN_ACCESS_TOKEN);
 
-        if (token.contains(CommonConst.USER_ACCESS_TOKEN)) {
-            TioWebsocketStarter tioWebsocketStarter = TioUtil.getTio();
-            if (tioWebsocketStarter != null) {
-                Tio.removeUser(tioWebsocketStarter.getServerTioConfig(), String.valueOf(userId), "用户退出登录");
+                // 清理用户会话
+                cacheService.evictUserSession(token);
+
+                // 清理token映射和间隔检查
+                if (isAdminToken) {
+                    cacheService.evictAdminToken(userId);
+                    cacheService.evictTokenInterval(userId, true);
+                    log.debug("清理管理员token缓存: userId={}", userId);
+                } else {
+                    cacheService.evictUserToken(userId);
+                    cacheService.evictTokenInterval(userId, false);
+                    log.debug("清理用户token缓存: userId={}", userId);
+                }
+
+                // 清理用户信息缓存
+                cacheService.evictUser(userId);
+
+                // 如果是普通用户，断开WebSocket连接
+                if (token.contains(CommonConst.USER_ACCESS_TOKEN)) {
+                    TioWebsocketStarter tioWebsocketStarter = TioUtil.getTio();
+                    if (tioWebsocketStarter != null) {
+                        Tio.removeUser(tioWebsocketStarter.getServerTioConfig(), String.valueOf(userId), "用户退出登录");
+                    }
+                }
+
+                // 清除UserCacheManager中的用户缓存
+                userCacheManager.removeUserByToken(token);
+                userCacheManager.removeUserById(userId);
+
+                log.info("用户退出登录成功 - 用户ID: {}", userId);
+            } else {
+                log.warn("退出登录时无法获取用户信息");
             }
+
+            return PoetryResult.success();
+        } catch (Exception e) {
+            log.error("用户退出登录时发生错误", e);
+            return PoetryResult.fail("退出登录失败");
         }
-
-        // 清除UserCacheManager中的用户缓存
-        userCacheManager.removeUserByToken(token);
-        userCacheManager.removeUserById(userId);
-
-        return PoetryResult.success();
     }
 
     @Override
@@ -358,17 +428,21 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
 
         if (StringUtils.hasText(user.getPhoneNumber())) {
-            Integer codeCache = (Integer) PoetryCache.get(CommonConst.FORGET_PASSWORD + user.getPhoneNumber() + "_1");
-            if (codeCache == null || codeCache != Integer.parseInt(user.getCode())) {
+            String cacheKey = CacheConstants.buildForgetPasswordKey(user.getPhoneNumber(), "1");
+            Object cachedCode = cacheService.get(cacheKey);
+            if (cachedCode == null || !cachedCode.toString().equals(user.getCode())) {
                 return PoetryResult.fail("验证码错误！");
             }
-            PoetryCache.remove(CommonConst.FORGET_PASSWORD + user.getPhoneNumber() + "_1");
+            cacheService.deleteKey(cacheKey);
+            log.debug("手机号验证码验证成功: {}", user.getPhoneNumber());
         } else if (StringUtils.hasText(user.getEmail())) {
-            Integer codeCache = (Integer) PoetryCache.get(CommonConst.FORGET_PASSWORD + user.getEmail() + "_2");
-            if (codeCache == null || codeCache != Integer.parseInt(user.getCode())) {
+            String cacheKey = CacheConstants.buildForgetPasswordKey(user.getEmail(), "2");
+            Object cachedCode = cacheService.get(cacheKey);
+            if (cachedCode == null || !cachedCode.toString().equals(user.getCode())) {
                 return PoetryResult.fail("验证码错误！");
             }
-            PoetryCache.remove(CommonConst.FORGET_PASSWORD + user.getEmail() + "_2");
+            cacheService.deleteKey(cacheKey);
+            log.debug("邮箱验证码验证成功: {}", user.getEmail());
         } else {
             return PoetryResult.fail("请输入邮箱或手机号！");
         }
@@ -525,26 +599,29 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             List<String> mail = new ArrayList<>();
             mail.add(user.getEmail());
             String text = getCodeMail(i);
-            WebInfo webInfo = (WebInfo) PoetryCache.get(CommonConst.WEB_INFO);
+            WebInfo webInfo = cacheService.getCachedWebInfo();
 
             // 检查邮箱配置是否存在
             if (mailUtil == null || !mailUtil.isEmailConfigured()) {
                 return PoetryResult.fail("邮箱服务未配置，请联系管理员在后台设置邮箱配置");
             }
 
-            AtomicInteger count = (AtomicInteger) PoetryCache.get(CommonConst.CODE_MAIL + mail.get(0));
-            if (count == null || count.get() < CommonConst.CODE_MAIL_COUNT) {
+            String countKey = CacheConstants.buildCodeMailCountKey(mail.get(0));
+            Object countObj = cacheService.get(countKey);
+            Integer count = countObj != null ? (Integer) countObj : 0;
+
+            if (count < CommonConst.CODE_MAIL_COUNT) {
                 mailUtil.sendMailMessage(mail, "您有一封来自" + (webInfo == null ? "POETIZE" : webInfo.getWebName()) + "的回执！", text);
-                if (count == null) {
-                    PoetryCache.put(CommonConst.CODE_MAIL + mail.get(0), new AtomicInteger(1), CommonConst.CODE_EXPIRE);
-                } else {
-                    count.incrementAndGet();
-                }
+                cacheService.set(countKey, count + 1, CommonConst.CODE_EXPIRE);
+                log.debug("发送邮箱验证码成功: {}, 当前发送次数: {}", mail.get(0), count + 1);
             } else {
                 return PoetryResult.fail("验证码发送次数过多，请明天再试！");
             }
         }
-        PoetryCache.put(CommonConst.USER_CODE + PoetryUtil.getUserId() + "_" + flag, Integer.valueOf(i), 300);
+
+        String userCodeKey = CacheConstants.buildUserCodeKey(PoetryUtil.getUserId(), String.valueOf(flag), String.valueOf(flag));
+        cacheService.set(userCodeKey, i, 300);
+        log.debug("验证码已缓存: userId={}, flag={}", PoetryUtil.getUserId(), flag);
         return PoetryResult.success();
     }
 
@@ -558,26 +635,29 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             List<String> mail = new ArrayList<>();
             mail.add(place);
             String text = getCodeMail(i);
-            WebInfo webInfo = (WebInfo) PoetryCache.get(CommonConst.WEB_INFO);
+            WebInfo webInfo = cacheService.getCachedWebInfo();
 
             // 检查邮箱配置是否存在
             if (mailUtil == null || !mailUtil.isEmailConfigured()) {
                 return PoetryResult.fail("邮箱服务未配置，请联系管理员在后台设置邮箱配置");
             }
 
-            AtomicInteger count = (AtomicInteger) PoetryCache.get(CommonConst.CODE_MAIL + mail.get(0));
-            if (count == null || count.get() < CommonConst.CODE_MAIL_COUNT) {
+            String countKey = CacheConstants.buildCodeMailCountKey(mail.get(0));
+            Object countObj = cacheService.get(countKey);
+            Integer count = countObj != null ? (Integer) countObj : 0;
+
+            if (count < CommonConst.CODE_MAIL_COUNT) {
                 mailUtil.sendMailMessage(mail, "您有一封来自" + (webInfo == null ? "POETIZE" : webInfo.getWebName()) + "的回执！", text);
-                if (count == null) {
-                    PoetryCache.put(CommonConst.CODE_MAIL + mail.get(0), new AtomicInteger(1), CommonConst.CODE_EXPIRE);
-                } else {
-                    count.incrementAndGet();
-                }
+                cacheService.set(countKey, count + 1, CommonConst.CODE_EXPIRE);
+                log.debug("发送邮箱验证码成功: {}, 当前发送次数: {}", mail.get(0), count + 1);
             } else {
                 return PoetryResult.fail("验证码发送次数过多，请明天再试！");
             }
         }
-        PoetryCache.put(CommonConst.USER_CODE + PoetryUtil.getUserId() + "_" + place + "_" + flag, Integer.valueOf(i), 300);
+
+        String userCodeKey = CacheConstants.buildUserCodeKey(PoetryUtil.getUserId(), place, String.valueOf(flag));
+        cacheService.set(userCodeKey, i, 300);
+        log.debug("验证码已缓存: userId={}, place={}, flag={}", PoetryUtil.getUserId(), place, flag);
         return PoetryResult.success();
     }
 
@@ -607,12 +687,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             if (count != 0) {
                 return PoetryResult.fail("手机号重复！");
             }
-            Integer codeCache = (Integer) PoetryCache.get(CommonConst.USER_CODE + PoetryUtil.getUserId() + "_" + place + "_" + flag);
-            if (codeCache != null && codeCache.intValue() == Integer.parseInt(code)) {
-
-                PoetryCache.remove(CommonConst.USER_CODE + PoetryUtil.getUserId() + "_" + place + "_" + flag);
-
+            String cacheKey = CacheConstants.buildUserCodeKey(PoetryUtil.getUserId(), place, String.valueOf(flag));
+            Object cachedCode = cacheService.get(cacheKey);
+            if (cachedCode != null && cachedCode.toString().equals(code)) {
+                cacheService.deleteKey(cacheKey);
                 updateUser.setPhoneNumber(place);
+                log.debug("手机号绑定验证码验证成功: userId={}, phone={}", PoetryUtil.getUserId(), place);
             } else {
                 return PoetryResult.fail("验证码错误！");
             }
@@ -622,12 +702,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             if (count != 0) {
                 return PoetryResult.fail("邮箱重复！");
             }
-            Integer codeCache = (Integer) PoetryCache.get(CommonConst.USER_CODE + PoetryUtil.getUserId() + "_" + place + "_" + flag);
-            if (codeCache != null && codeCache.intValue() == Integer.parseInt(code)) {
-
-                PoetryCache.remove(CommonConst.USER_CODE + PoetryUtil.getUserId() + "_" + place + "_" + flag);
-
+            String cacheKey = CacheConstants.buildUserCodeKey(PoetryUtil.getUserId(), place, String.valueOf(flag));
+            Object cachedCode = cacheService.get(cacheKey);
+            if (cachedCode != null && cachedCode.toString().equals(code)) {
+                cacheService.deleteKey(cacheKey);
                 updateUser.setEmail(place);
+                log.debug("邮箱绑定验证码验证成功: userId={}, email={}", PoetryUtil.getUserId(), place);
             } else {
                 return PoetryResult.fail("验证码错误！");
             }
@@ -658,8 +738,22 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         updateById(updateUser);
 
         User one = lambdaQuery().eq(User::getId, user.getId()).one();
-        PoetryCache.put(PoetryUtil.getToken(), one, CommonConst.TOKEN_EXPIRE);
-        PoetryCache.put(CommonConst.USER_TOKEN + one.getId(), PoetryUtil.getToken(), CommonConst.TOKEN_EXPIRE);
+
+        // 更新用户缓存信息
+        String currentToken = PoetryUtil.getToken();
+        if (currentToken != null) {
+            cacheService.cacheUserSession(currentToken, one.getId());
+            cacheService.cacheUser(one);
+
+            // 判断是管理员还是普通用户token并更新相应缓存
+            if (currentToken.contains(CommonConst.ADMIN_ACCESS_TOKEN)) {
+                cacheService.cacheAdminToken(one.getId(), currentToken);
+            } else {
+                cacheService.cacheUserToken(one.getId(), currentToken);
+            }
+
+            log.debug("更新用户信息后刷新缓存: userId={}", one.getId());
+        }
 
         UserVO userVO = new UserVO();
         BeanUtils.copyProperties(one, userVO);
@@ -678,26 +772,29 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             List<String> mail = new ArrayList<>();
             mail.add(place);
             String text = getCodeMail(i);
-            WebInfo webInfo = (WebInfo) PoetryCache.get(CommonConst.WEB_INFO);
+            WebInfo webInfo = cacheService.getCachedWebInfo();
 
             // 检查邮箱配置是否存在
             if (mailUtil == null || !mailUtil.isEmailConfigured()) {
                 return PoetryResult.fail("邮箱服务未配置，请联系管理员在后台设置邮箱配置");
             }
 
-            AtomicInteger count = (AtomicInteger) PoetryCache.get(CommonConst.CODE_MAIL + mail.get(0));
-            if (count == null || count.get() < CommonConst.CODE_MAIL_COUNT) {
+            String countKey = CacheConstants.buildCodeMailCountKey(mail.get(0));
+            Object countObj = cacheService.get(countKey);
+            Integer count = countObj != null ? (Integer) countObj : 0;
+
+            if (count < CommonConst.CODE_MAIL_COUNT) {
                 mailUtil.sendMailMessage(mail, "您有一封来自" + (webInfo == null ? "POETIZE" : webInfo.getWebName()) + "的回执！", text);
-                if (count == null) {
-                    PoetryCache.put(CommonConst.CODE_MAIL + mail.get(0), new AtomicInteger(1), CommonConst.CODE_EXPIRE);
-                } else {
-                    count.incrementAndGet();
-                }
+                cacheService.set(countKey, count + 1, CommonConst.CODE_EXPIRE);
+                log.debug("发送忘记密码邮箱验证码成功: {}, 当前发送次数: {}", mail.get(0), count + 1);
             } else {
                 return PoetryResult.fail("验证码发送次数过多，请明天再试！");
             }
         }
-        PoetryCache.put(CommonConst.FORGET_PASSWORD + place + "_" + flag, Integer.valueOf(i), 300);
+
+        String forgetPasswordKey = CacheConstants.buildForgetPasswordKey(place, String.valueOf(flag));
+        cacheService.set(forgetPasswordKey, i, 300);
+        log.debug("忘记密码验证码已缓存: place={}, flag={}", place, flag);
         return PoetryResult.success();
     }
 
@@ -717,12 +814,13 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             return PoetryResult.fail("密码不能为空！");
         }
 
-        Integer codeCache = (Integer) PoetryCache.get(CommonConst.FORGET_PASSWORD + place + "_" + flag);
-        if (codeCache == null || codeCache != Integer.parseInt(code)) {
+        String forgetPasswordKey = CacheConstants.buildForgetPasswordKey(place, String.valueOf(flag));
+        Object cachedCode = cacheService.get(forgetPasswordKey);
+        if (cachedCode == null || !cachedCode.toString().equals(code)) {
             return PoetryResult.fail("验证码错误！");
         }
 
-        PoetryCache.remove(CommonConst.FORGET_PASSWORD + place + "_" + flag);
+        cacheService.deleteKey(forgetPasswordKey);
 
         // 使用BCrypt加密新密码
         String encodedPassword = passwordService.encodeBCrypt(decryptedPassword);
@@ -738,7 +836,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             }
 
             lambdaUpdate().eq(User::getPhoneNumber, place).set(User::getPassword, encodedPassword).update();
-            PoetryCache.remove(CommonConst.USER_CACHE + user.getId().toString());
+            cacheService.evictUser(user.getId());
+            cacheService.evictAllUserTokens(user.getId()); // 清理所有token，强制重新登录
             log.info("用户通过手机号重置密码成功 - 手机号: {}", place);
         } else if (flag == 2) {
             User user = lambdaQuery().eq(User::getEmail, place).one();
@@ -751,7 +850,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             }
 
             lambdaUpdate().eq(User::getEmail, place).set(User::getPassword, encodedPassword).update();
-            PoetryCache.remove(CommonConst.USER_CACHE + user.getId().toString());
+            cacheService.evictUser(user.getId());
+            cacheService.evictAllUserTokens(user.getId()); // 清理所有token，强制重新登录
             log.info("用户通过邮箱重置密码成功 - 邮箱: {}", place);
         }
 
@@ -858,20 +958,15 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         // 使用多级缓存策略获取用户信息
         User user = null;
 
-        // 优先从UserCacheManager获取
+        // 优先从UserCacheManager获取（已重构为Redis缓存）
         user = userCacheManager.getUserByToken(userToken);
 
-        // 降级到Redis缓存获取
+        // 备用方案：直接从Redis缓存获取
         if (user == null) {
             Integer userId = cacheService.getUserIdFromSession(userToken);
             if (userId != null) {
                 user = cacheService.getCachedUser(userId);
             }
-        }
-
-        // 最后降级到PoetryCache获取
-        if (user == null) {
-            user = (User) PoetryCache.get(userToken);
         }
 
         // 如果缓存中都没有，尝试从token中提取用户ID并从数据库获取
@@ -893,11 +988,22 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new PoetryRuntimeException("登录已过期，请重新登陆！");
         }
 
+        // 根据用户实际权限判断是否为管理员
+        boolean isActualAdmin = (user.getUserType() == PoetryEnum.USER_TYPE_ADMIN.getCode() ||
+                                user.getUserType() == PoetryEnum.USER_TYPE_DEV.getCode());
+
         UserVO userVO = new UserVO();
         BeanUtils.copyProperties(user, userVO);
         userVO.setPassword(null);
         userVO.setUserType(user.getUserType());
         userVO.setAccessToken(userToken);
+
+        // 根据用户实际权限设置isBoss标志（与登录逻辑保持一致）
+        if (isActualAdmin) {
+            userVO.setIsBoss(true);
+        } else {
+            userVO.setIsBoss(false);
+        }
 
         return PoetryResult.success(userVO);
     }
@@ -1031,29 +1137,76 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             }
         }
 
-        String userToken = "";
-        if (PoetryCache.get(CommonConst.USER_TOKEN + existUser.getId()) != null) {
-            userToken = (String) PoetryCache.get(CommonConst.USER_TOKEN + existUser.getId());
-        }
+        // 根据用户实际权限判断是否为管理员
+        boolean isActualAdmin = (existUser.getUserType() == PoetryEnum.USER_TYPE_ADMIN.getCode() ||
+                                existUser.getUserType() == PoetryEnum.USER_TYPE_DEV.getCode());
 
-        if (!StringUtils.hasText(userToken)) {
-            userToken = SecureTokenGenerator.generateUserToken(existUser.getId());
-            PoetryCache.put(userToken, existUser, CommonConst.TOKEN_EXPIRE);
-            PoetryCache.put(CommonConst.USER_TOKEN + existUser.getId(), userToken, CommonConst.TOKEN_EXPIRE);
+        String adminToken = "";
+        String userToken = "";
+
+        // 根据用户实际权限生成对应的token
+        if (isActualAdmin) {
+            // 管理员用户：生成管理员token
+            adminToken = cacheService.getAdminToken(existUser.getId());
+
+            if (!StringUtils.hasText(adminToken)) {
+                adminToken = SecureTokenGenerator.generateAdminToken(existUser.getId());
+
+                // 使用Redis缓存管理管理员token
+                cacheService.cacheUserSession(adminToken, existUser.getId());
+                cacheService.cacheAdminToken(existUser.getId(), adminToken);
+                cacheService.cacheUser(existUser);
+                cacheService.cacheTokenInterval(existUser.getId(), true);
+
+                // 保持UserCacheManager兼容性
+                userCacheManager.cacheUserByToken(adminToken, existUser);
+
+                log.info("OAuth登录生成新的管理员token: userId={}, userType={}", existUser.getId(), existUser.getUserType());
+            }
+        } else {
+            // 普通用户：生成用户token
+            userToken = cacheService.getUserToken(existUser.getId());
+
+            if (!StringUtils.hasText(userToken)) {
+                userToken = SecureTokenGenerator.generateUserToken(existUser.getId());
+
+                // 使用Redis缓存管理用户token
+                cacheService.cacheUserSession(userToken, existUser.getId());
+                cacheService.cacheUserToken(existUser.getId(), userToken);
+                cacheService.cacheUser(existUser);
+                cacheService.cacheTokenInterval(existUser.getId(), false);
+
+                // 保持UserCacheManager兼容性
+                userCacheManager.cacheUserByToken(userToken, existUser);
+
+                log.info("OAuth登录生成新的用户token: userId={}, userType={}", existUser.getId(), existUser.getUserType());
+            }
         }
 
         UserVO userVO = new UserVO();
         BeanUtils.copyProperties(existUser, userVO);
         userVO.setPassword(null);
-        userVO.setAccessToken(userToken);
+        userVO.setUserType(existUser.getUserType());
 
-        log.info("OAuth登录成功，用户: {} (ID: {})", existUser.getUsername(), existUser.getId());
+        // 根据用户实际权限设置isBoss标志（所有管理员都设置为Boss）
+        if (isActualAdmin) {
+            userVO.setIsBoss(true);
+        } else {
+            userVO.setIsBoss(false);
+        }
+
+        // 根据用户实际权限返回对应的token
+        if (isActualAdmin) {
+            userVO.setAccessToken(adminToken);
+        } else {
+            userVO.setAccessToken(userToken);
+        }
 
         return PoetryResult.success(userVO);
     }
 
     private String getCodeMail(int i) {
-        WebInfo webInfo = (WebInfo) PoetryCache.get(CommonConst.WEB_INFO);
+        WebInfo webInfo = cacheService.getCachedWebInfo();
         String webName = (webInfo == null ? "POETIZE" : webInfo.getWebName());
         return String.format(mailUtil.getMailText(),
                 webName,

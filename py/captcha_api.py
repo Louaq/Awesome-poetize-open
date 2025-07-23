@@ -26,8 +26,11 @@ DEFAULT_CAPTCHA_CONFIG = {
         "successThreshold": 0.95  # 成功阈值，达到最大距离的95%即视为成功
     },
     "checkbox": {  # 勾选验证码参数
-        "trackSensitivity": 0.98,  # 轨迹敏感度阈值
-        "minTrackPoints": 3  # 最少轨迹点数
+        "trackSensitivity": 0.90,  # 轨迹敏感度阈值（降低到0.90，更宽松）
+        "minTrackPoints": 2,  # 最少轨迹点数（降低到2）
+        "replyCommentSensitivity": 0.85,  # 回复评论场景的特殊敏感度
+        "maxRetryCount": 5,  # 最大重试次数
+        "retryDecrement": 0.02  # 每次重试降低的敏感度
     }
 }
 

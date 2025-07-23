@@ -94,7 +94,6 @@
   export default {
     data() {
       return {
-        isBoss: this.$store.state.currentAdmin.isBoss,
         pagination: {
           current: 1,
           size: 10,
@@ -111,7 +110,12 @@
       }
     },
 
-    computed: {},
+    computed: {
+      // 使用computed属性确保isBoss值能响应Store变化
+      isBoss() {
+        return this.$store.state.currentAdmin.isBoss;
+      }
+    },
 
     watch: {
       'pagination.sortId'(newVal) {
@@ -119,6 +123,16 @@
         if (!this.$common.isEmpty(newVal) && !this.$common.isEmpty(this.labels)) {
           this.labelsTemp = this.labels.filter(l => l.sortId === newVal);
         }
+      },
+      // 监听Store中currentAdmin的变化
+      '$store.state.currentAdmin': {
+        handler(newAdmin, oldAdmin) {
+          // 当管理员信息更新时，重新获取文章数据
+          if (newAdmin && newAdmin.isBoss !== oldAdmin?.isBoss) {
+            this.getArticles();
+          }
+        },
+        deep: true
       }
     },
 

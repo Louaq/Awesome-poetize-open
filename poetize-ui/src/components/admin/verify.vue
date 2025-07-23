@@ -28,13 +28,15 @@
 <script>
   const proButton = () => import( "../common/proButton");
 
+  import { handleLoginRedirect } from '../../utils/tokenExpireHandler';
+
   export default {
     components: {
       proButton
     },
     data() {
       return {
-        redirect: this.$route.query.redirect,
+        redirect: this.$route.query.redirect || '/welcome',
         account: "",
         password: ""
       }
@@ -62,14 +64,37 @@
         this.$http.post(this.$constant.baseURL + "/user/login", user, true, false)
           .then((res) => {
             if (!this.$common.isEmpty(res.data)) {
-              console.log('登录返回的用户信息:', res.data);
+              // 清除旧的缓存数据
+              localStorage.removeItem("currentAdmin");
+              localStorage.removeItem("currentUser");
+
+              // 设置新的token
               localStorage.setItem("userToken", res.data.accessToken);
               localStorage.setItem("adminToken", res.data.accessToken);
+
+              // 更新Store状态
               this.$store.commit("loadCurrentUser", res.data);
               this.$store.commit("loadCurrentAdmin", res.data);
+
               this.account = "";
               this.password = "";
-              this.$router.push({path: this.redirect});
+
+              // 显示登录成功消息
+              if (this.$route.query.expired === 'true') {
+                this.$message.success('重新登录成功');
+              } else {
+                this.$message.success('登录成功');
+              }
+
+              // 使用统一的重定向处理逻辑
+              console.log('🔍 管理员登录成功，准备重定向，当前路由信息:', {
+                path: this.$route.path,
+                fullPath: this.$route.fullPath,
+                query: this.$route.query
+              });
+              handleLoginRedirect(this.$route, this.$router, {
+                defaultPath: '/welcome'
+              });
             }
           })
           .catch((error) => {

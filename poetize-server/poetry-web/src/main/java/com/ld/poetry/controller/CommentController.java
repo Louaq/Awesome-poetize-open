@@ -5,12 +5,12 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ld.poetry.aop.LoginCheck;
 import com.ld.poetry.config.PoetryResult;
 import com.ld.poetry.aop.SaveCheck;
+import com.ld.poetry.constants.CacheConstants;
+import com.ld.poetry.service.CacheService;
 import com.ld.poetry.service.CaptchaVerificationService;
 import com.ld.poetry.service.CommentService;
 import com.ld.poetry.service.LocationService;
-import com.ld.poetry.constants.CommonConst;
 import com.ld.poetry.utils.CommonQuery;
-import com.ld.poetry.utils.cache.PoetryCache;
 import com.ld.poetry.utils.StringUtil;
 import com.ld.poetry.vo.BaseRequestVO;
 import com.ld.poetry.vo.CommentVO;
@@ -48,6 +48,9 @@ public class CommentController {
     private LocationService locationService;
 
     @Autowired
+    private CacheService cacheService;
+
+    @Autowired
     private CaptchaVerificationService captchaVerificationService;
 
 
@@ -82,7 +85,13 @@ public class CommentController {
         }
 
         // 清除评论计数缓存
-        PoetryCache.remove(CommonConst.COMMENT_COUNT_CACHE + commentVO.getSource().toString() + "_" + commentVO.getType());
+        try {
+            String commentCountKey = CacheConstants.COMMENT_COUNT_PREFIX + commentVO.getSource().toString() + "_" + commentVO.getType();
+            cacheService.deleteKey(commentCountKey);
+            log.debug("清除评论计数缓存: source={}, type={}", commentVO.getSource(), commentVO.getType());
+        } catch (Exception e) {
+            log.error("清除评论计数缓存失败: source={}, type={}", commentVO.getSource(), commentVO.getType(), e);
+        }
 
         // 保存评论
         return commentService.saveComment(commentVO);

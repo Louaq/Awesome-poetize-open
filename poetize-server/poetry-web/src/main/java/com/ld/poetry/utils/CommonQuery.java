@@ -249,7 +249,7 @@ public class CommonQuery {
         }
         
         // 使用Redis缓存替换PoetryCache
-        String cacheKey = CacheConstants.CACHE_PREFIX + "search:article:" + (searchText != null ? searchText.hashCode() : "empty");
+        String cacheKey = CacheConstants.buildSearchArticleKey(searchText);
 
         @SuppressWarnings("unchecked")
         List<List<Integer>> cachedIds = (List<List<Integer>>) cacheService.get(cacheKey);

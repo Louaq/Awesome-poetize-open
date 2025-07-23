@@ -1,6 +1,7 @@
 import constant from "./constant";
 import CryptoJS from 'crypto-js';
 import store from '../store';
+import { redirectToLogin } from './tokenExpireHandler';
 
 export default {
   pushNotification(notices, isNotification) {
@@ -412,5 +413,25 @@ export default {
       m,
       s
     }
+  },
+
+  /**
+   * 统一的登录跳转处理函数
+   * 封装redirectToLogin函数，方便在组件中使用
+   * @param {Object} router - Vue Router实例
+   * @param {Object} options - 配置选项
+   * @param {Object} vueInstance - Vue组件实例，用于显示消息
+   */
+  redirectToLogin(router, options = {}, vueInstance = null) {
+    // 确保传入当前路径
+    if (!options.currentPath && vueInstance && vueInstance.$route) {
+      options.currentPath = vueInstance.$route.fullPath;
+    }
+
+    // 将Vue实例传递给原始函数
+    return redirectToLogin(router, {
+      ...options,
+      vueInstance: vueInstance
+    });
   }
 }

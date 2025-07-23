@@ -4,17 +4,19 @@ import com.baomidou.mybatisplus.extension.conditions.update.LambdaUpdateChainWra
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ld.poetry.aop.LoginCheck;
 import com.ld.poetry.config.PoetryResult;
+import com.ld.poetry.constants.CacheConstants;
 import com.ld.poetry.constants.CommonConst;
 import com.ld.poetry.entity.*;
 import com.ld.poetry.enums.CodeMsg;
 import com.ld.poetry.enums.PoetryEnum;
 import com.ld.poetry.im.websocket.TioUtil;
 import com.ld.poetry.im.websocket.TioWebsocketStarter;
+import com.ld.poetry.service.CacheService;
 import com.ld.poetry.service.UserService;
 import com.ld.poetry.utils.PoetryUtil;
-import com.ld.poetry.utils.cache.PoetryCache;
 import com.ld.poetry.vo.BaseRequestVO;
 import com.ld.poetry.vo.UserVO;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import org.tio.core.Tio;
@@ -29,10 +31,14 @@ import org.tio.core.Tio;
  */
 @RestController
 @RequestMapping("/admin")
+@Slf4j
 public class AdminUserController {
 
     @Autowired
     private UserService userService;
+
+    @Autowired
+    private CacheService cacheService;
 
     /**
      * 查询用户
@@ -76,7 +82,15 @@ public class AdminUserController {
                 .eq(User::getId, userId)
                 .set(User::getAdmire, admire)
                 .update();
-        PoetryCache.remove(CommonConst.ADMIRE);
+
+        // 使用CacheService清理点赞缓存
+        try {
+            cacheService.deleteKey(CacheConstants.ADMIRE_LIST_KEY);
+            log.debug("清理点赞缓存成功: userId={}", userId);
+        } catch (Exception e) {
+            log.error("清理点赞缓存失败: userId={}", userId, e);
+        }
+
         return PoetryResult.success();
     }
 
@@ -100,21 +114,22 @@ public class AdminUserController {
     }
 
     private void logout(Integer userId) {
-        if (PoetryCache.get(CommonConst.ADMIN_TOKEN + userId) != null) {
-            String token = (String) PoetryCache.get(CommonConst.ADMIN_TOKEN + userId);
-            PoetryCache.remove(CommonConst.ADMIN_TOKEN + userId);
-            PoetryCache.remove(token);
-        }
+        try {
+            log.info("管理员强制用户下线: userId={}", userId);
 
-        if (PoetryCache.get(CommonConst.USER_TOKEN + userId) != null) {
-            String token = (String) PoetryCache.get(CommonConst.USER_TOKEN + userId);
-            PoetryCache.remove(CommonConst.USER_TOKEN + userId);
-            PoetryCache.remove(token);
-        }
-        TioWebsocketStarter tioWebsocketStarter = TioUtil.getTio();
-        if (tioWebsocketStarter != null) {
-            Tio.removeUser(tioWebsocketStarter.getServerTioConfig(), String.valueOf(userId), "remove user");
-        }
+            // 使用CacheService统一清理所有用户token相关缓存
+            cacheService.evictAllUserTokens(userId);
 
+            // 断开WebSocket连接
+            TioWebsocketStarter tioWebsocketStarter = TioUtil.getTio();
+            if (tioWebsocketStarter != null) {
+                Tio.removeUser(tioWebsocketStarter.getServerTioConfig(), String.valueOf(userId), "管理员强制下线");
+                log.debug("断开用户WebSocket连接: userId={}", userId);
+            }
+
+            log.info("用户强制下线完成: userId={}", userId);
+        } catch (Exception e) {
+            log.error("强制用户下线时发生错误: userId={}", userId, e);
+        }
     }
 }

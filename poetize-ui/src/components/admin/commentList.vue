@@ -44,7 +44,6 @@
   export default {
     data() {
       return {
-        isBoss: this.$store.state.currentAdmin.isBoss,
         pagination: {
           current: 1,
           size: 10,
@@ -56,7 +55,12 @@
       }
     },
 
-    computed: {},
+    computed: {
+      // 使用computed属性确保isBoss值能响应Store变化
+      isBoss() {
+        return this.$store.state.currentAdmin.isBoss;
+      }
+    },
 
     watch: {},
 

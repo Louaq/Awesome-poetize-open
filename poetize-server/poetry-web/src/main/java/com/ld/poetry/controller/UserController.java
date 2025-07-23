@@ -4,11 +4,10 @@ package com.ld.poetry.controller;
 import com.ld.poetry.aop.LoginCheck;
 import com.ld.poetry.config.PoetryResult;
 import com.ld.poetry.aop.SaveCheck;
+import com.ld.poetry.entity.User;
+import com.ld.poetry.service.CacheService;
 import com.ld.poetry.service.MailService;
 import com.ld.poetry.service.UserService;
-import com.ld.poetry.constants.CommonConst;
-import com.ld.poetry.entity.User;
-import com.ld.poetry.utils.cache.PoetryCache;
 import com.ld.poetry.utils.PoetryUtil;
 import com.ld.poetry.vo.UserVO;
 import lombok.extern.slf4j.Slf4j;
@@ -17,10 +16,6 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Set;
-import java.util.Random;
-import java.util.UUID;
-import java.util.Collections;
 
 /**
  * <p>
@@ -40,6 +35,9 @@ public class UserController {
 
     @Autowired
     private MailService mailService;
+
+    @Autowired
+    private CacheService cacheService;
 
     /**
      * 用户名/密码注册
@@ -94,16 +92,29 @@ public class UserController {
             return PoetryResult.fail("权限不足");
         }
         
-        // 检查token是否过期 - 修复：使用getTokenWithoutBearer()方法
+        // 检查token是否过期 - 使用Redis缓存验证
         String token = PoetryUtil.getTokenWithoutBearer();
         if (token == null || token.isEmpty()) {
             return PoetryResult.fail("未登录或token无效");
         }
-        
-        // 检查token是否在缓存中 - 使用不带Bearer前缀的token进行缓存查找
-        User cachedUser = (User) PoetryCache.get(token);
-        if (cachedUser == null) {
-            return PoetryResult.fail("登录已过期，请重新登录");
+
+        try {
+            // 使用CacheService检查token是否在Redis缓存中
+            Integer userId = cacheService.getUserIdFromSession(token);
+            if (userId == null) {
+                return PoetryResult.fail("登录已过期，请重新登录");
+            }
+
+            // 验证用户信息是否存在
+            User cachedUser = cacheService.getCachedUser(userId);
+            if (cachedUser == null) {
+                return PoetryResult.fail("用户信息已过期，请重新登录");
+            }
+
+            log.debug("Token验证成功: userId={}, token={}", userId, token);
+        } catch (Exception e) {
+            log.error("Token验证时发生错误: token={}", token, e);
+            return PoetryResult.fail("Token验证失败，请重新登录");
         }
         
         return PoetryResult.success(true);
@@ -116,7 +127,14 @@ public class UserController {
     @PostMapping("/updateUserInfo")
     @LoginCheck
     public PoetryResult<UserVO> updateUserInfo(@RequestBody UserVO user) {
-        PoetryCache.remove(CommonConst.USER_CACHE + PoetryUtil.getUserId().toString());
+        try {
+            Integer userId = PoetryUtil.getUserId();
+            // 使用CacheService清理用户缓存
+            cacheService.evictUser(userId);
+            log.debug("清理用户信息缓存: userId={}", userId);
+        } catch (Exception e) {
+            log.error("清理用户信息缓存时发生错误: userId={}", PoetryUtil.getUserId(), e);
+        }
         return userService.updateUserInfo(user);
     }
 
@@ -156,7 +174,14 @@ public class UserController {
     @PostMapping("/updateSecretInfo")
     @LoginCheck
     public PoetryResult<UserVO> updateSecretInfo(@RequestParam("place") String place, @RequestParam("flag") Integer flag, @RequestParam(value = "code", required = false) String code, @RequestParam("password") String password) {
-        PoetryCache.remove(CommonConst.USER_CACHE + PoetryUtil.getUserId().toString());
+        try {
+            Integer userId = PoetryUtil.getUserId();
+            // 使用CacheService清理用户缓存
+            cacheService.evictUser(userId);
+            log.debug("清理用户密钥信息缓存: userId={}", userId);
+        } catch (Exception e) {
+            log.error("清理用户密钥信息缓存时发生错误: userId={}", PoetryUtil.getUserId(), e);
+        }
         return userService.updateSecretInfo(place, flag, code, password);
     }
 
@@ -201,8 +226,32 @@ public class UserController {
     @GetMapping("/subscribe")
     @LoginCheck
     public PoetryResult<UserVO> subscribe(@RequestParam("labelId") Integer labelId, @RequestParam("flag") Boolean flag) {
-        PoetryCache.remove(CommonConst.USER_CACHE + PoetryUtil.getUserId().toString());
-        return userService.subscribe(labelId, flag);
+        // 先执行订阅操作
+        PoetryResult<UserVO> result = userService.subscribe(labelId, flag);
+
+        // 订阅操作成功后更新缓存中的用户信息
+        if (result.getCode() == 200 && result.getData() != null) {
+            try {
+                Integer userId = PoetryUtil.getUserId();
+
+                // 从数据库重新获取最新的用户信息
+                User updatedUser = userService.getById(userId);
+                if (updatedUser != null) {
+                    // 重新缓存更新后的用户信息，而不是简单删除缓存
+                    cacheService.cacheUser(updatedUser);
+                    log.debug("订阅操作成功，更新用户缓存: userId={}, labelId={}, flag={}", userId, labelId, flag);
+                } else {
+                    // 如果获取不到用户信息，则清除缓存
+                    cacheService.evictUser(userId);
+                    log.warn("无法获取更新后的用户信息，清除缓存: userId={}", userId);
+                }
+            } catch (Exception e) {
+                log.error("更新用户订阅信息缓存时发生错误: userId={}, labelId={}, flag={}", PoetryUtil.getUserId(), labelId, flag, e);
+                // 缓存更新失败不影响订阅操作的结果
+            }
+        }
+
+        return result;
     }
 
     /**

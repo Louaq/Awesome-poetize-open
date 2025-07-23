@@ -3,6 +3,7 @@ package com.ld.poetry.controller;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ld.poetry.aop.LoginCheck;
 import com.ld.poetry.config.PoetryResult;
+import com.ld.poetry.constants.CacheConstants;
 import com.ld.poetry.service.ArticleService;
 import com.ld.poetry.service.CacheService;
 import com.ld.poetry.utils.PoetryUtil;
@@ -112,9 +113,10 @@ public class ArticleController {
             
             // 使用Redis缓存清理替换PoetryCache
             if (articleVO.getUserId() != null) {
-                // 清理用户文章列表缓存
-                String userArticleKey = "poetry:cache:user:article:list:" + articleVO.getUserId();
+                // 清理用户文章列表缓存，使用统一的缓存键常量
+                String userArticleKey = CacheConstants.buildUserArticleListKey(articleVO.getUserId());
                 cacheService.deleteKey(userArticleKey);
+                log.debug("清理用户文章列表缓存，用户ID: {}", articleVO.getUserId());
             }
             // 清理文章相关缓存
             cacheService.evictSortArticleList();

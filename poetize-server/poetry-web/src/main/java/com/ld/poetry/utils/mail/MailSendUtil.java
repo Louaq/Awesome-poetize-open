@@ -1,5 +1,6 @@
 package com.ld.poetry.utils.mail;
 
+import com.ld.poetry.constants.CacheConstants;
 import com.ld.poetry.constants.CommonConst;
 import com.ld.poetry.entity.Article;
 import com.ld.poetry.entity.Comment;
@@ -7,10 +8,10 @@ import com.ld.poetry.entity.User;
 import com.ld.poetry.entity.WebInfo;
 import com.ld.poetry.enums.CommentTypeEnum;
 import com.ld.poetry.im.http.entity.ImChatUserMessage;
+import com.ld.poetry.service.CacheService;
 import com.ld.poetry.service.CommentService;
 import com.ld.poetry.utils.CommonQuery;
 import com.ld.poetry.utils.PoetryUtil;
-import com.ld.poetry.utils.cache.PoetryCache;
 import com.ld.poetry.utils.cache.UserCacheManager;
 import com.ld.poetry.utils.RetryUtil;
 import com.ld.poetry.vo.CommentVO;
@@ -37,6 +38,9 @@ public class MailSendUtil {
 
     @Autowired
     private UserCacheManager userCacheManager;
+
+    @Autowired
+    private CacheService cacheService;
 
     public void sendCommentMail(CommentVO commentVO, Article one, CommentService commentService) {
         RetryUtil.executeWithRetryVoid(() -> {
@@ -104,15 +108,37 @@ public class MailSendUtil {
                     toName,
                     commentVO.getParentCommentId(), commentService);
 
-            AtomicInteger count = (AtomicInteger) PoetryCache.get(CommonConst.COMMENT_IM_MAIL + mail.get(0));
-            if (count == null || count.get() < CommonConst.COMMENT_IM_MAIL_COUNT) {
-                WebInfo webInfo = (WebInfo) PoetryCache.get(CommonConst.WEB_INFO);
-                mailUtil.sendMailMessage(mail, "您有一封来自" + (webInfo == null ? "POETIZE" : webInfo.getWebName()) + "的回执！", commentMail);
-                if (count == null) {
-                    PoetryCache.put(CommonConst.COMMENT_IM_MAIL + mail.get(0), new AtomicInteger(1), CommonConst.CODE_EXPIRE);
-                } else {
-                    count.incrementAndGet();
+            // 使用Redis缓存管理邮件发送频率控制
+            String mailCountKey = CacheConstants.CACHE_PREFIX + "comment:mail:" + mail.get(0);
+            try {
+                Object cached = cacheService.get(mailCountKey);
+                AtomicInteger count = null;
+                if (cached instanceof AtomicInteger) {
+                    count = (AtomicInteger) cached;
+                } else if (cached instanceof Integer) {
+                    count = new AtomicInteger((Integer) cached);
                 }
+
+                if (count == null || count.get() < CommonConst.COMMENT_IM_MAIL_COUNT) {
+                    // 获取网站信息
+                    WebInfo webInfo = cacheService.getCachedWebInfo();
+                    String webName = (webInfo == null ? "POETIZE" : webInfo.getWebName());
+
+                    mailUtil.sendMailMessage(mail, "您有一封来自" + webName + "的回执！", commentMail);
+
+                    if (count == null) {
+                        cacheService.set(mailCountKey, new AtomicInteger(1), CommonConst.CODE_EXPIRE);
+                        log.debug("初始化评论邮件发送计数: email={}", mail.get(0));
+                    } else {
+                        count.incrementAndGet();
+                        cacheService.set(mailCountKey, count, CommonConst.CODE_EXPIRE);
+                        log.debug("更新评论邮件发送计数: email={}, count={}", mail.get(0), count.get());
+                    }
+                } else {
+                    log.debug("评论邮件发送已达上限: email={}, count={}", mail.get(0), count.get());
+                }
+            } catch (Exception e) {
+                log.error("处理评论邮件发送频率控制时发生错误: email={}", mail.get(0), e);
             }
         }
     }
@@ -123,7 +149,8 @@ public class MailSendUtil {
      * toName：被评论人
      */
     private String getCommentMail(String commentType, String source, String fromName, String fromContent, String toName, Integer toCommentId, CommentService commentService) {
-        WebInfo webInfo = (WebInfo) PoetryCache.get(CommonConst.WEB_INFO);
+        // 使用CacheService获取网站信息
+        WebInfo webInfo = cacheService.getCachedWebInfo();
         String webName = (webInfo == null ? "POETIZE" : webInfo.getWebName());
 
         String mailType = "";
@@ -180,22 +207,45 @@ public class MailSendUtil {
             if (!CollectionUtils.isEmpty(mail)) {
                 String commentMail = getImMail(username, message.getContent());
 
-                AtomicInteger count = (AtomicInteger) PoetryCache.get(CommonConst.COMMENT_IM_MAIL + mail.get(0));
-                if (count == null || count.get() < CommonConst.COMMENT_IM_MAIL_COUNT) {
-                    WebInfo webInfo = (WebInfo) PoetryCache.get(CommonConst.WEB_INFO);
-                    mailUtil.sendMailMessage(mail, "您有一封来自" + (webInfo == null ? "POETIZE" : webInfo.getWebName()) + "的回执！", commentMail);
-                    if (count == null) {
-                        PoetryCache.put(CommonConst.COMMENT_IM_MAIL + mail.get(0), new AtomicInteger(1), CommonConst.CODE_EXPIRE);
-                    } else {
-                        count.incrementAndGet();
+                // 使用Redis缓存管理IM邮件发送频率控制
+                String mailCountKey = CacheConstants.CACHE_PREFIX + "im:mail:" + mail.get(0);
+                try {
+                    Object cached = cacheService.get(mailCountKey);
+                    AtomicInteger count = null;
+                    if (cached instanceof AtomicInteger) {
+                        count = (AtomicInteger) cached;
+                    } else if (cached instanceof Integer) {
+                        count = new AtomicInteger((Integer) cached);
                     }
+
+                    if (count == null || count.get() < CommonConst.COMMENT_IM_MAIL_COUNT) {
+                        // 获取网站信息
+                        WebInfo webInfo = cacheService.getCachedWebInfo();
+                        String webName = (webInfo == null ? "POETIZE" : webInfo.getWebName());
+
+                        mailUtil.sendMailMessage(mail, "您有一封来自" + webName + "的回执！", commentMail);
+
+                        if (count == null) {
+                            cacheService.set(mailCountKey, new AtomicInteger(1), CommonConst.CODE_EXPIRE);
+                            log.debug("初始化IM邮件发送计数: email={}", mail.get(0));
+                        } else {
+                            count.incrementAndGet();
+                            cacheService.set(mailCountKey, count, CommonConst.CODE_EXPIRE);
+                            log.debug("更新IM邮件发送计数: email={}, count={}", mail.get(0), count.get());
+                        }
+                    } else {
+                        log.debug("IM邮件发送已达上限: email={}, count={}", mail.get(0), count.get());
+                    }
+                } catch (Exception e) {
+                    log.error("处理IM邮件发送频率控制时发生错误: email={}", mail.get(0), e);
                 }
             }
         }
     }
 
     private String getImMail(String fromName, String fromContent) {
-        WebInfo webInfo = (WebInfo) PoetryCache.get(CommonConst.WEB_INFO);
+        // 使用CacheService获取网站信息
+        WebInfo webInfo = cacheService.getCachedWebInfo();
         String webName = (webInfo == null ? "POETIZE" : webInfo.getWebName());
 
         return String.format(mailUtil.getMailText(),

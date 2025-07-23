@@ -41,12 +41,10 @@ public class CacheManagerService {
         log.info("开始清理所有用户相关缓存");
         
         // 清理管理员缓存
-        String adminCacheKey = CacheConstants.CACHE_PREFIX + "admin";
-        cacheService.deleteKey(adminCacheKey);
-        
+        cacheService.deleteKey(CacheConstants.ADMIN_CACHE_KEY);
+
         // 清理点赞用户列表缓存
-        String admireCacheKey = CacheConstants.CACHE_PREFIX + "admire:list";
-        cacheService.deleteKey(admireCacheKey);
+        cacheService.deleteKey(CacheConstants.ADMIRE_LIST_KEY);
         
         log.info("用户相关缓存清理完成");
     }
@@ -104,9 +102,9 @@ public class CacheManagerService {
         try {
             // 检查关键缓存是否存在
             boolean hasSortList = cacheService.hasKey(CacheConstants.SORT_LIST_KEY);
-            boolean hasSortArticles = cacheService.hasKey(CacheConstants.CACHE_PREFIX + "sort:article:list");
-            boolean hasAdmireList = cacheService.hasKey(CacheConstants.CACHE_PREFIX + "admire:list");
-            boolean hasFamilyList = cacheService.hasKey(CacheConstants.CACHE_PREFIX + "family:list");
+            boolean hasSortArticles = cacheService.hasKey(CacheConstants.SORT_ARTICLE_LIST_KEY);
+            boolean hasAdmireList = cacheService.hasKey(CacheConstants.ADMIRE_LIST_KEY);
+            boolean hasFamilyList = cacheService.hasKey(CacheConstants.FAMILY_LIST_KEY);
 
             stats.put("type", "Redis");
             stats.put("sortListCache", hasSortList);

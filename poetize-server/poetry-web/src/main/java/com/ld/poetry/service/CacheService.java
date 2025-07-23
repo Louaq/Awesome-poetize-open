@@ -10,6 +10,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -391,8 +392,7 @@ public class CacheService {
      */
     public void cacheIpHistory(Object ipHistorySet) {
         if (ipHistorySet != null) {
-            String key = CacheConstants.CACHE_PREFIX + "ip:history";
-            redisUtil.set(key, ipHistorySet, CacheConstants.DEFAULT_EXPIRE_TIME);
+            redisUtil.set(CacheConstants.IP_HISTORY_KEY, ipHistorySet, CacheConstants.DEFAULT_EXPIRE_TIME);
             log.debug("缓存IP历史记录集合");
         }
     }
@@ -401,8 +401,7 @@ public class CacheService {
      * 获取缓存的IP历史记录集合
      */
     public Object getCachedIpHistory() {
-        String key = CacheConstants.CACHE_PREFIX + "ip:history";
-        Object cached = redisUtil.get(key);
+        Object cached = redisUtil.get(CacheConstants.IP_HISTORY_KEY);
         if (cached != null) {
             log.debug("从缓存获取IP历史记录集合");
             return cached;
@@ -414,8 +413,7 @@ public class CacheService {
      * 删除IP历史记录缓存
      */
     public void evictIpHistory() {
-        String key = CacheConstants.CACHE_PREFIX + "ip:history";
-        redisUtil.del(key);
+        redisUtil.del(CacheConstants.IP_HISTORY_KEY);
         log.debug("删除IP历史记录缓存");
     }
 
@@ -424,8 +422,7 @@ public class CacheService {
      */
     public void cacheIpHistoryStatistics(Object statistics) {
         if (statistics != null) {
-            String key = CacheConstants.CACHE_PREFIX + "ip:history:statistics";
-            redisUtil.set(key, statistics, CacheConstants.LONG_EXPIRE_TIME);
+            redisUtil.set(CacheConstants.IP_HISTORY_STATS_KEY, statistics, CacheConstants.LONG_EXPIRE_TIME);
             log.debug("缓存IP历史统计信息");
         }
     }
@@ -434,21 +431,50 @@ public class CacheService {
      * 获取缓存的IP历史统计信息
      */
     public Object getCachedIpHistoryStatistics() {
-        String key = CacheConstants.CACHE_PREFIX + "ip:history:statistics";
-        Object cached = redisUtil.get(key);
-        if (cached != null) {
-            log.debug("从缓存获取IP历史统计信息");
-            return cached;
+        try {
+            Object cached = redisUtil.get(CacheConstants.IP_HISTORY_STATS_KEY);
+            if (cached != null) {
+                log.debug("从缓存获取IP历史统计信息");
+                return cached;
+            } else {
+                log.warn("IP历史统计信息缓存为空");
+            }
+        } catch (Exception e) {
+            log.error("获取IP历史统计信息缓存时出错", e);
         }
         return null;
+    }
+
+    /**
+     * 安全地获取缓存的IP历史统计信息，如果缓存为空则返回默认值
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getCachedIpHistoryStatisticsSafely() {
+        try {
+            Object cached = getCachedIpHistoryStatistics();
+            if (cached instanceof Map) {
+                return (Map<String, Object>) cached;
+            }
+        } catch (Exception e) {
+            log.error("安全获取IP历史统计信息时出错", e);
+        }
+
+        // 返回默认值
+        Map<String, Object> defaultStats = new HashMap<>();
+        defaultStats.put(CommonConst.IP_HISTORY_PROVINCE, new ArrayList<>());
+        defaultStats.put(CommonConst.IP_HISTORY_IP, new ArrayList<>());
+        defaultStats.put(CommonConst.IP_HISTORY_HOUR, new ArrayList<>());
+        defaultStats.put(CommonConst.IP_HISTORY_COUNT, 0L);
+
+        log.info("返回默认IP历史统计信息");
+        return defaultStats;
     }
 
     /**
      * 删除IP历史统计信息缓存
      */
     public void evictIpHistoryStatistics() {
-        String key = CacheConstants.CACHE_PREFIX + "ip:history:statistics";
-        redisUtil.del(key);
+        redisUtil.del(CacheConstants.IP_HISTORY_STATS_KEY);
         log.debug("删除IP历史统计信息缓存");
     }
 
@@ -476,20 +502,113 @@ public class CacheService {
         return null;
     }
 
-    // ================================ 网站信息缓存 ================================
+    // ================================ Token管理缓存 ================================
 
     /**
-     * 缓存网站信息
+     * 缓存管理员token
      */
-    public void cacheWebInfo(Object webInfo) {
-        if (webInfo != null) {
-            String key = CacheConstants.CACHE_PREFIX + "webinfo";
-            redisUtil.set(key, webInfo, CacheConstants.VERY_LONG_EXPIRE_TIME);
-            log.debug("缓存网站信息");
+    public void cacheAdminToken(Integer userId, String token) {
+        if (userId != null && token != null) {
+            String key = CacheConstants.buildAdminTokenKey(userId);
+            redisUtil.set(key, token, CacheConstants.LONG_EXPIRE_TIME);
+            log.debug("缓存管理员token: userId={}", userId);
         }
     }
 
+    /**
+     * 获取管理员token
+     */
+    public String getAdminToken(Integer userId) {
+        if (userId == null) return null;
 
+        String key = CacheConstants.buildAdminTokenKey(userId);
+        Object cached = redisUtil.get(key);
+        if (cached instanceof String) {
+            log.debug("获取管理员token: userId={}", userId);
+            return (String) cached;
+        }
+        return null;
+    }
+
+    /**
+     * 删除管理员token
+     */
+    public void evictAdminToken(Integer userId) {
+        if (userId != null) {
+            String key = CacheConstants.buildAdminTokenKey(userId);
+            redisUtil.del(key);
+            log.debug("删除管理员token: userId={}", userId);
+        }
+    }
+
+    /**
+     * 缓存用户token
+     */
+    public void cacheUserToken(Integer userId, String token) {
+        if (userId != null && token != null) {
+            String key = CacheConstants.buildUserTokenKey(userId);
+            redisUtil.set(key, token, CacheConstants.LONG_EXPIRE_TIME);
+            log.debug("缓存用户token: userId={}", userId);
+        }
+    }
+
+    /**
+     * 删除用户token
+     */
+    public void evictUserToken(Integer userId) {
+        if (userId != null) {
+            String key = CacheConstants.buildUserTokenKey(userId);
+            redisUtil.del(key);
+            log.debug("删除用户token: userId={}", userId);
+        }
+    }
+
+    /**
+     * 缓存token间隔检查
+     */
+    public void cacheTokenInterval(Integer userId, boolean isAdmin) {
+        if (userId != null) {
+            String key = isAdmin ?
+                CacheConstants.buildAdminTokenIntervalKey(userId) :
+                CacheConstants.buildUserTokenIntervalKey(userId);
+            redisUtil.set(key, System.currentTimeMillis(), CacheConstants.DEFAULT_EXPIRE_TIME);
+            log.debug("缓存token间隔检查: userId={}, isAdmin={}", userId, isAdmin);
+        }
+    }
+
+    /**
+     * 删除token间隔检查
+     */
+    public void evictTokenInterval(Integer userId, boolean isAdmin) {
+        if (userId != null) {
+            String key = isAdmin ?
+                CacheConstants.buildAdminTokenIntervalKey(userId) :
+                CacheConstants.buildUserTokenIntervalKey(userId);
+            redisUtil.del(key);
+            log.debug("删除token间隔检查: userId={}, isAdmin={}", userId, isAdmin);
+        }
+    }
+
+    /**
+     * 清理用户的所有token相关缓存
+     */
+    public void evictAllUserTokens(Integer userId) {
+        if (userId != null) {
+            // 清理管理员token
+            evictAdminToken(userId);
+            evictTokenInterval(userId, true);
+
+            // 清理用户token
+            evictUserToken(userId);
+            evictTokenInterval(userId, false);
+
+            // 清理用户会话
+            // 注意：这里需要根据token清理会话，但我们没有反向映射
+            // 建议在实际使用中维护userId到token的映射
+
+            log.debug("清理用户所有token相关缓存: userId={}", userId);
+        }
+    }
 
     // ================================ 安全相关缓存 ================================
 
@@ -498,10 +617,10 @@ public class CacheService {
      */
     public boolean unblacklistIP(String ip) {
         if (ip == null) return false;
-        
+
         String blacklistKey = CacheConstants.buildIpBlacklistKey(ip);
         String attackKey = CacheConstants.buildIpAttackKey(ip);
-        
+
         redisUtil.del(blacklistKey, attackKey);
         log.info("管理员手动解除IP拉黑: {}", ip);
         return true;
@@ -550,7 +669,7 @@ public class CacheService {
     public String getUserToken(Integer userId) {
         if (userId == null) return null;
 
-        String key = CacheConstants.CACHE_PREFIX + "user:token:" + userId;
+        String key = CacheConstants.buildUserTokenKey(userId);
         Object cached = redisUtil.get(key);
         if (cached instanceof String) {
             log.debug("从缓存获取用户Token: userId={}", userId);

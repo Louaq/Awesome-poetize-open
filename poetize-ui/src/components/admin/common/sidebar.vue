@@ -12,7 +12,7 @@
              :default-active="$router.currentRoute.path"
              router>
       <template v-for="item in items">
-        <template v-if="isBoss || !item.isBoss">
+        <template v-if="hasPermission(item)">
           <template v-if="item.subs">
             <el-submenu :index="item.index" :key="item.index">
               <template slot="title">
@@ -51,72 +51,71 @@
     data() {
       return {
         isCollapse: true,
-        isBoss: this.$store.state.currentAdmin.isBoss,
         items: [{
           icon: "el-icon-s-home",
           index: "/main",
           title: "系统首页",
-          isBoss: true
+          requiredUserType: 0  // 仅站长可访问
         }, {
           icon: "el-icon-s-tools",
           index: "/webEdit",
           title: "网站设置",
-          isBoss: true
+          requiredUserType: 0  // 仅站长可访问
         }, {
           icon: "el-icon-user-solid",
           index: "/userList",
           title: "用户管理",
-          isBoss: true
+          requiredUserType: 0  // 仅站长可访问
         }, {
           icon: "el-icon-postcard",
           index: "/postList",
           title: "文章管理",
-          isBoss: false
+          requiredUserType: 1  // 管理员及以上可访问
         }, {
           icon: "el-icon-s-unfold",
           index: "/admin/translationModel",
           title: "文章AI助手",
-          isBoss: true
+          requiredUserType: 0  // 仅站长可访问
         }, {
           icon: "el-icon-notebook-2",
           index: "/sortList",
           title: "分类管理",
-          isBoss: true
+          requiredUserType: 1  // 管理员及以上可访问
         }, {
           icon: "el-icon-notebook-1",
           index: "/configList",
           title: "配置管理",
-          isBoss: true
+          requiredUserType: 0  // 仅站长可访问
         }, {
           icon: "el-icon-edit-outline",
           index: "/commentList",
           title: "评论管理",
-          isBoss: false
+          requiredUserType: 1  // 管理员及以上可访问
         }, {
           icon: "el-icon-s-comment",
           index: "/treeHoleList",
           title: "留言管理",
-          isBoss: true
+          requiredUserType: 1  // 管理员及以上可访问
         }, {
           icon: "el-icon-paperclip",
           index: "/resourceList",
           title: "资源管理",
-          isBoss: true
+          requiredUserType: 0  // 仅站长可访问
         }, {
           icon: "el-icon-bank-card",
           index: "/resourcePathList",
           title: "资源聚合",
-          isBoss: true
+          requiredUserType: 0  // 仅站长可访问
         }, {
           icon: "el-icon-sugar",
           index: "/loveList",
           title: "表白墙",
-          isBoss: true
+          requiredUserType: 0  // 仅站长可访问
         }, {
           icon: "el-icon-search",
           index: "/seoConfig",
           title: "SEO优化",
-          isBoss: true,
+          requiredUserType: 0,  // 仅站长可访问
           click: function() {
             console.log('SEO配置点击，通过click属性');
             this.goToSeoConfig();
@@ -125,9 +124,32 @@
       }
     },
 
-    computed: {},
+    computed: {
+      // 响应式获取当前管理员信息
+      currentAdmin() {
+        return this.$store.state.currentAdmin;
+      },
 
-    watch: {},
+      // 响应式获取isBoss状态
+      isBoss() {
+        return this.currentAdmin.isBoss;
+      },
+
+      // 响应式获取用户类型
+      userType() {
+        return this.currentAdmin.userType;
+      }
+    },
+
+    watch: {
+      // 监听管理员信息变化，确保权限实时更新
+      currentAdmin: {
+        handler(newAdmin) {
+          console.log('侧边栏检测到管理员信息变化:', newAdmin);
+        },
+        deep: true
+      }
+    },
 
     created() {
 
@@ -138,6 +160,22 @@
     },
 
     methods: {
+      // 权限判断方法
+      hasPermission(item) {
+        // 如果没有设置权限要求，默认允许访问
+        if (item.requiredUserType === undefined) {
+          return true;
+        }
+
+        // 基于userType的权限验证
+        // userType越小权限越高：0(站长) > 1(管理员) > 2(普通用户)
+        const hasUserTypePermission = this.userType <= item.requiredUserType;
+
+        console.log(`权限检查 - 菜单: ${item.title}, 要求userType: ${item.requiredUserType}, 当前userType: ${this.userType}, 结果: ${hasUserTypePermission}`);
+
+        return hasUserTypePermission;
+      },
+
       collapse() {
         if (this.isCollapse) {
           $(".sidebar").css("width", "45px");
