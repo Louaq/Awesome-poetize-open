@@ -262,6 +262,7 @@ public class ThirdPartyOauthConfigServiceImpl extends ServiceImpl<ThirdPartyOaut
             case "twitter": return "Twitter";
             case "yandex": return "Yandex";
             case "gitee": return "Gitee";
+            case "qq": return "QQ";
             default: return platformType;
         }
     }
@@ -276,6 +277,7 @@ public class ThirdPartyOauthConfigServiceImpl extends ServiceImpl<ThirdPartyOaut
             case "twitter": return 3;
             case "yandex": return 4;
             case "gitee": return 5;
+            case "qq": return 6;
             default: return 99;
         }
     }
@@ -449,6 +451,11 @@ public class ThirdPartyOauthConfigServiceImpl extends ServiceImpl<ThirdPartyOaut
         ThirdPartyOauthConfig gitee = createDefaultConfig("gitee");
         gitee.setScope("user_info emails");
         configs.add(gitee);
+        
+        // QQ配置
+        ThirdPartyOauthConfig qq = createDefaultConfig("qq");
+        qq.setScope("get_user_info");
+        configs.add(qq);
 
         return configs;
     }

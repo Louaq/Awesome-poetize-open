@@ -422,7 +422,9 @@ INSERT INTO `poetize`.`third_party_oauth_config` (`platform_type`, `platform_nam
 ('google', 'Google', 'openid email profile', 0, 0, 2, 'Google OAuth登录配置，需要在Google Cloud Console中创建OAuth客户端', 0),
 ('twitter', 'Twitter', 'tweet.read users.read', 0, 0, 3, 'Twitter OAuth登录配置，需要在Twitter Developer Portal中创建应用', 0),
 ('yandex', 'Yandex', 'login:email login:info', 0, 0, 4, 'Yandex OAuth登录配置，需要在Yandex OAuth中创建应用', 0),
-('gitee', 'Gitee', 'user_info emails', 0, 0, 5, 'Gitee OAuth登录配置，需要在Gitee第三方应用中创建应用', 0);
+('gitee', 'Gitee', 'user_info emails', 0, 0, 5, 'Gitee OAuth登录配置，需要在Gitee第三方应用中创建应用', 0),
+('qq', 'QQ', 'get_user_info', 0, 0, 6, 'QQ OAuth登录配置，需要在QQ互联平台中创建应用', 0);
+
 INSERT INTO `poetize`.`resource_path` (`title`, `cover`, `introduction`, `type`, `status`,  `remark`) VALUES ('POETIZE', 'https://s1.ax1x.com/2022/11/10/z9E7X4.jpg', '这是一个 Vue2 Vue3 与 SpringBoot 结合的产物～', 'siteInfo', 1, 'https://s1.ax1x.com/2022/11/10/z9VlHs.png');
 
 -- ========== 导入静态资源到resource表 ==========

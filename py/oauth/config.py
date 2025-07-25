@@ -44,6 +44,13 @@ class OAuthConfigManager:
             "user_info_url": "https://gitee.com/api/v5/user",
             "emails_url": "https://gitee.com/api/v5/emails",
             "scope": "user_info emails"
+        },
+        "qq": {
+            "auth_url": "https://graph.qq.com/oauth2.0/authorize",
+            "token_url": "https://graph.qq.com/oauth2.0/token",
+            "openid_url": "https://graph.qq.com/oauth2.0/me",
+            "user_info_url": "https://graph.qq.com/user/get_user_info",
+            "scope": "get_user_info"
         }
     }
     

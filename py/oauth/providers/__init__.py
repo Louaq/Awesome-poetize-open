@@ -8,11 +8,13 @@ from .google import GoogleProvider
 from .twitter import TwitterProvider
 from .yandex import YandexProvider
 from .gitee import GiteeProvider
+from .qq import QQProvider
 
 __all__ = [
     'GitHubProvider',
     'GoogleProvider', 
     'TwitterProvider',
     'YandexProvider',
-    'GiteeProvider'
+    'GiteeProvider',
+    'QQProvider'
 ]

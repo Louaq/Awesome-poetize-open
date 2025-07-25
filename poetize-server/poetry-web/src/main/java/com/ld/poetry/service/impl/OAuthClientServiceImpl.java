@@ -371,6 +371,8 @@ public class OAuthClientServiceImpl implements OAuthClientService {
                 return "https://oauth.yandex.com/authorize";
             case "gitee":
                 return "https://gitee.com/oauth/authorize";
+            case "qq":
+                return "https://graph.qq.com/oauth2.0/authorize";
             default:
                 throw new RuntimeException("不支持的平台: " + platformType);
         }
@@ -389,6 +391,8 @@ public class OAuthClientServiceImpl implements OAuthClientService {
                 return "https://oauth.yandex.com/token";
             case "gitee":
                 return "https://gitee.com/oauth/token";
+            case "qq":
+                return "https://graph.qq.com/oauth2.0/token";
             default:
                 throw new RuntimeException("不支持的平台: " + platformType);
         }
@@ -407,6 +411,8 @@ public class OAuthClientServiceImpl implements OAuthClientService {
                 return "https://login.yandex.ru/info";
             case "gitee":
                 return "https://gitee.com/api/v5/user";
+            case "qq":
+                return "https://graph.qq.com/user/get_user_info";
             default:
                 throw new RuntimeException("不支持的平台: " + platformType);
         }
@@ -432,6 +438,9 @@ public class OAuthClientServiceImpl implements OAuthClientService {
                 break;
             case "gitee":
                 builder.queryParam("scope", "user_info emails");
+                break;
+            case "qq":
+                builder.queryParam("scope", "get_user_info");
                 break;
         }
     }
@@ -474,6 +483,12 @@ public class OAuthClientServiceImpl implements OAuthClientService {
                 userInfo.put("username", rawUserInfo.get("login"));
                 userInfo.put("email", rawUserInfo.get("email"));
                 userInfo.put("avatar", rawUserInfo.get("avatar_url"));
+                break;
+            case "qq":
+                userInfo.put("uid", rawUserInfo.get("openid"));
+                userInfo.put("username", rawUserInfo.get("nickname"));
+                userInfo.put("email", null); // QQ API不直接提供邮箱
+                userInfo.put("avatar", rawUserInfo.get("figureurl_qq_2")); // 使用高清头像
                 break;
             default:
                 // 默认处理

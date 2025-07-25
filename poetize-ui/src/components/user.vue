@@ -965,6 +965,10 @@
             gitee: {
               icon: 'el-icon-s-custom',
               name: 'Gitee'
+            },
+            qq: {
+              icon: 'el-icon-s-custom',
+              name: 'QQ'
             }
           }
         };
@@ -999,7 +1003,8 @@
               { key: 'google', name: 'Google', icon: '/static/svg/google.svg', title: 'Google登录' },
               { key: 'x', name: 'Twitter', icon: '/static/svg/x.svg', title: 'Twitter登录', configKey: 'twitter' },
               { key: 'yandex', name: 'Yandex', icon: '/static/svg/yandex.svg', title: 'Yandex登录' },
-              { key: 'gitee', name: 'Gitee', icon: '/static/svg/gitee.png', title: 'Gitee登录' }
+              { key: 'gitee', name: 'Gitee', icon: '/static/svg/gitee.svg', title: 'Gitee登录' },
+              { key: 'qq', name: 'QQ', icon: '/static/svg/qq.svg', title: 'QQ登录' }
             ];
 
             // 检查每个平台是否启用

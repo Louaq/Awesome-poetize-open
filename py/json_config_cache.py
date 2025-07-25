@@ -201,18 +201,9 @@ class JsonConfigCache:
                     skipped_count += 1
                     continue
                 
-                # 检查是否已经有缓存
+                # 删除现有缓存
                 cache_key = self._get_cache_key(config_name)
-                existing_cache = self.cache_service.get(cache_key)
-                
-                if existing_cache:
-                    logger.debug(f"配置已存在于缓存中，无需预热: {config_name}")
-                    results[config_name] = {
-                        'status': 'already_cached',
-                        'size': len(str(existing_cache))
-                    }
-                    skipped_count += 1
-                    continue
+                self.cache_service.delete(cache_key)
                 
                 # 执行预热
                 logger.info(f"预热配置: {config_name} (路径: {file_path})")

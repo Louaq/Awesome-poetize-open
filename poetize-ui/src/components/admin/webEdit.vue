@@ -738,16 +738,21 @@
         </el-row>
 
         <div class="platform-cards">
-          <!-- GitHub -->
-          <el-card shadow="never" class="platform-card github-card" style="border: none;">
+          <!-- 使用v-for循环渲染平台卡片，提高代码扩展性 -->
+          <el-card 
+            v-for="platform in platformsConfig" 
+            :key="platform.type" 
+            shadow="never" 
+            :class="['platform-card', `${platform.type}-card`]" 
+            style="border: none;">
             <div class="platform-header">
               <div class="platform-logo">
-                <img :src="getPlatformIcon('github')" width="28" height="28" alt="GitHub">
-                <span class="platform-name">GitHub</span>
+                <img :src="getPlatformIcon(platform.type)" width="28" height="28" :alt="platform.name">
+                <span class="platform-name">{{ platform.name }}</span>
               </div>
               <el-switch
-                v-model="thirdLoginConfig.github.enabled"
-                @change="handlePlatformToggle('github', $event)"
+                v-model="thirdLoginConfig[platform.type].enabled"
+                @change="handlePlatformToggle(platform.type, $event)"
                 active-color="#13ce66"
                 inactive-color="#ff4949"
                 :disabled="!thirdLoginConfig.enable">
@@ -755,77 +760,28 @@
             </div>
             
             <div class="platform-form">
-              <el-form label-position="top" :disabled="!thirdLoginConfig.enable || !thirdLoginConfig.github.enabled">
-                <el-form-item label="Client ID">
-                  <el-input 
-                    v-model="thirdLoginConfig.github.client_id" 
-                    placeholder="请输入Client ID">
-                  </el-input>
-        </el-form-item>
+              <el-form label-position="top" :disabled="!thirdLoginConfig.enable || !thirdLoginConfig[platform.type].enabled">
+                <!-- 根据平台类型显示不同输入字段 -->
+                <template v-if="platform.type === 'twitter'">
+                  <el-form-item label="Client Key">
+                    <el-input 
+                      v-model="thirdLoginConfig.twitter.client_key" 
+                      placeholder="请输入Client Key">
+                    </el-input>
+                  </el-form-item>
+                </template>
+                <template v-else>
+                  <el-form-item label="Client ID">
+                    <el-input 
+                      v-model="thirdLoginConfig[platform.type].client_id" 
+                      placeholder="请输入Client ID">
+                    </el-input>
+                  </el-form-item>
+                </template>
                 
                 <el-form-item label="Client Secret">
                   <el-input 
-                    v-model="thirdLoginConfig.github.client_secret" 
-                    placeholder="请输入Client Secret"
-                    show-password>
-                  </el-input>
-        </el-form-item>
-                
-                <el-form-item label="回调地址">
-                  <el-input 
-                    v-model="thirdLoginConfig.github.redirect_uri" 
-                    placeholder="请输入回调地址">
-                  </el-input>
-        </el-form-item>
-              </el-form>
-            </div>
-            
-            <div class="platform-actions">
-              <el-button 
-                type="text" 
-                icon="el-icon-link"
-                :disabled="!thirdLoginConfig.enable || !thirdLoginConfig.github.enabled"
-                @click="openDeveloperCenter('https://github.com/settings/developers')">
-                开发者中心
-              </el-button>
-              <el-button 
-                type="text" 
-                icon="el-icon-check"
-                :disabled="!thirdLoginConfig.enable || !thirdLoginConfig.github.enabled"
-                @click="testLogin('github')">
-                测试
-              </el-button>
-            </div>
-          </el-card>
-          
-          <!-- Google -->
-          <el-card shadow="never" class="platform-card google-card" style="border: none;">
-            <div class="platform-header">
-              <div class="platform-logo">
-                <img :src="getPlatformIcon('google')" width="28" height="28" alt="Google">
-                <span class="platform-name">Google</span>
-              </div>
-              <el-switch
-                v-model="thirdLoginConfig.google.enabled"
-                @change="handlePlatformToggle('google', $event)"
-                active-color="#13ce66"
-                inactive-color="#ff4949"
-                :disabled="!thirdLoginConfig.enable">
-              </el-switch>
-            </div>
-            
-            <div class="platform-form">
-              <el-form label-position="top" :disabled="!thirdLoginConfig.enable || !thirdLoginConfig.google.enabled">
-                <el-form-item label="Client ID">
-                  <el-input 
-                    v-model="thirdLoginConfig.google.client_id" 
-                    placeholder="请输入Client ID">
-                  </el-input>
-                </el-form-item>
-                
-                <el-form-item label="Client Secret">
-                  <el-input 
-                    v-model="thirdLoginConfig.google.client_secret" 
+                    v-model="thirdLoginConfig[platform.type].client_secret" 
                     placeholder="请输入Client Secret"
                     show-password>
                   </el-input>
@@ -833,67 +789,7 @@
                 
                 <el-form-item label="回调地址">
                   <el-input 
-                    v-model="thirdLoginConfig.google.redirect_uri" 
-                    placeholder="请输入回调地址">
-                  </el-input>
-        </el-form-item>
-      </el-form>
-            </div>
-            
-            <div class="platform-actions">
-              <el-button 
-                type="text" 
-                icon="el-icon-link"
-                :disabled="!thirdLoginConfig.enable || !thirdLoginConfig.google.enabled"
-                @click="openDeveloperCenter('https://console.cloud.google.com/apis/credentials')">
-                开发者中心
-              </el-button>
-              <el-button 
-                type="text" 
-                icon="el-icon-check"
-                :disabled="!thirdLoginConfig.enable || !thirdLoginConfig.google.enabled"
-                @click="testLogin('google')">
-                测试
-              </el-button>
-            </div>
-          </el-card>
-          
-          <!-- Twitter -->
-          <el-card shadow="never" class="platform-card twitter-card" style="border: none;">
-            <div class="platform-header">
-              <div class="platform-logo">
-                <img :src="getPlatformIcon('twitter')" width="28" height="28" alt="Twitter">
-                <span class="platform-name">Twitter</span>
-              </div>
-              <el-switch
-                v-model="thirdLoginConfig.twitter.enabled"
-                @change="handlePlatformToggle('twitter', $event)"
-                active-color="#13ce66"
-                inactive-color="#ff4949"
-                :disabled="!thirdLoginConfig.enable">
-              </el-switch>
-            </div>
-            
-            <div class="platform-form">
-              <el-form label-position="top" :disabled="!thirdLoginConfig.enable || !thirdLoginConfig.twitter.enabled">
-                <el-form-item label="API Key">
-                  <el-input 
-                    v-model="thirdLoginConfig.twitter.client_key" 
-                    placeholder="请输入Twitter API Key">
-                  </el-input>
-                </el-form-item>
-                
-                <el-form-item label="API Secret">
-                  <el-input 
-                    v-model="thirdLoginConfig.twitter.client_secret" 
-                    placeholder="请输入Client Secret"
-                    show-password>
-                  </el-input>
-                </el-form-item>
-                
-                <el-form-item label="回调地址">
-                  <el-input 
-                    v-model="thirdLoginConfig.twitter.redirect_uri" 
+                    v-model="thirdLoginConfig[platform.type].redirect_uri" 
                     placeholder="请输入回调地址">
                   </el-input>
                 </el-form-item>
@@ -904,135 +800,15 @@
               <el-button 
                 type="text" 
                 icon="el-icon-link"
-                :disabled="!thirdLoginConfig.enable || !thirdLoginConfig.twitter.enabled"
-                @click="openDeveloperCenter('https://developer.twitter.com/en/portal/dashboard')">
+                :disabled="!thirdLoginConfig.enable || !thirdLoginConfig[platform.type].enabled"
+                @click="openDeveloperCenter(platform.developerUrl)">
                 开发者中心
               </el-button>
               <el-button 
                 type="text" 
                 icon="el-icon-check"
-                :disabled="!thirdLoginConfig.enable || !thirdLoginConfig.twitter.enabled"
-                @click="testLogin('twitter')">
-                测试
-              </el-button>
-            </div>
-          </el-card>
-          
-          <!-- Yandex -->
-          <el-card shadow="never" class="platform-card yandex-card" style="border: none;">
-            <div class="platform-header">
-              <div class="platform-logo">
-                <img :src="getPlatformIcon('yandex')" width="28" height="28" alt="Yandex">
-                <span class="platform-name">Yandex</span>
-              </div>
-              <el-switch
-                v-model="thirdLoginConfig.yandex.enabled"
-                @change="handlePlatformToggle('yandex', $event)"
-                active-color="#13ce66"
-                inactive-color="#ff4949"
-                :disabled="!thirdLoginConfig.enable">
-              </el-switch>
-            </div>
-            
-            <div class="platform-form">
-              <el-form label-position="top" :disabled="!thirdLoginConfig.enable || !thirdLoginConfig.yandex.enabled">
-                <el-form-item label="Client ID">
-                  <el-input 
-                    v-model="thirdLoginConfig.yandex.client_id" 
-                    placeholder="请输入Client ID">
-                  </el-input>
-                </el-form-item>
-                
-                <el-form-item label="Client Secret">
-                  <el-input 
-                    v-model="thirdLoginConfig.yandex.client_secret" 
-                    placeholder="请输入Client Secret"
-                    show-password>
-                  </el-input>
-                </el-form-item>
-                
-                <el-form-item label="回调地址">
-                  <el-input 
-                    v-model="thirdLoginConfig.yandex.redirect_uri" 
-                    placeholder="请输入回调地址">
-                  </el-input>
-                </el-form-item>
-              </el-form>
-            </div>
-            
-            <div class="platform-actions">
-              <el-button 
-                type="text" 
-                icon="el-icon-link"
-                :disabled="!thirdLoginConfig.enable || !thirdLoginConfig.yandex.enabled"
-                @click="openDeveloperCenter('https://oauth.yandex.com/')">
-                开发者中心
-              </el-button>
-              <el-button 
-                type="text" 
-                icon="el-icon-check"
-                :disabled="!thirdLoginConfig.enable || !thirdLoginConfig.yandex.enabled"
-                @click="testLogin('yandex')">
-                测试
-              </el-button>
-            </div>
-          </el-card>
-          
-          <!-- Gitee -->
-          <el-card shadow="never" class="platform-card gitee-card" style="border: none;">
-            <div class="platform-header">
-              <div class="platform-logo">
-                <img :src="getPlatformIcon('gitee')" width="28" height="28" alt="Gitee">
-                <span class="platform-name">Gitee</span>
-              </div>
-              <el-switch
-                v-model="thirdLoginConfig.gitee.enabled"
-                @change="handlePlatformToggle('gitee', $event)"
-                active-color="#13ce66"
-                inactive-color="#ff4949"
-                :disabled="!thirdLoginConfig.enable">
-              </el-switch>
-            </div>
-            
-            <div class="platform-form">
-              <el-form label-position="top" :disabled="!thirdLoginConfig.enable || !thirdLoginConfig.gitee.enabled">
-                <el-form-item label="Client ID">
-                  <el-input 
-                    v-model="thirdLoginConfig.gitee.client_id" 
-                    placeholder="请输入Client ID">
-                  </el-input>
-                </el-form-item>
-                
-                <el-form-item label="Client Secret">
-                  <el-input 
-                    v-model="thirdLoginConfig.gitee.client_secret" 
-                    placeholder="请输入Client Secret"
-                    show-password>
-                  </el-input>
-                </el-form-item>
-                
-                <el-form-item label="回调地址">
-                  <el-input 
-                    v-model="thirdLoginConfig.gitee.redirect_uri" 
-                    placeholder="请输入回调地址">
-                  </el-input>
-                </el-form-item>
-              </el-form>
-            </div>
-            
-            <div class="platform-actions">
-              <el-button 
-                type="text" 
-                icon="el-icon-link"
-                :disabled="!thirdLoginConfig.enable || !thirdLoginConfig.gitee.enabled"
-                @click="openDeveloperCenter('https://gitee.com/oauth/applications')">
-                开发者中心
-              </el-button>
-              <el-button 
-                type="text" 
-                icon="el-icon-check"
-                :disabled="!thirdLoginConfig.enable || !thirdLoginConfig.gitee.enabled"
-                @click="testLogin('gitee')">
+                :disabled="!thirdLoginConfig.enable || !thirdLoginConfig[platform.type].enabled"
+                @click="testLogin(platform.type)">
                 测试
               </el-button>
             </div>
@@ -1744,6 +1520,12 @@ X-API-KEY: {{apiConfig.apiKey}}
             client_secret: '',
             redirect_uri: this.$constant.pythonBaseURL + '/callback/gitee',
             enabled: true
+          },
+          qq: {
+            client_id: '',
+            client_secret: '',
+            redirect_uri: this.$constant.pythonBaseURL + '/callback/qq',
+            enabled: true
           }
         },
         rules: {
@@ -1880,44 +1662,57 @@ X-API-KEY: {{apiConfig.apiKey}}
     },
 
     computed: {
-      thirdLoginTableData() {
+      // 平台配置数据源
+      platformsConfig() {
         return [
           {
-            platform: 'GitHub',
+            name: 'GitHub',
             type: 'github',
-            config: this.thirdLoginConfig.github,
-            enabled: this.thirdLoginConfig.github.enabled,
-            developerUrl: 'https://github.com/settings/developers'
+            developerUrl: 'https://github.com/settings/developers',
+            useClientId: true
           },
           {
-            platform: 'Google',
+            name: 'Google',
             type: 'google',
-            config: this.thirdLoginConfig.google,
-            enabled: this.thirdLoginConfig.google.enabled,
-            developerUrl: 'https://console.cloud.google.com/apis/credentials'
+            developerUrl: 'https://console.cloud.google.com/apis/credentials',
+            useClientId: true
           },
           {
-            platform: 'Twitter',
+            name: 'Twitter',
             type: 'twitter',
-            config: this.thirdLoginConfig.twitter,
-            enabled: this.thirdLoginConfig.twitter.enabled,
-            developerUrl: 'https://developer.twitter.com/en/portal/dashboard'
+            developerUrl: 'https://developer.twitter.com/en/portal/dashboard',
+            useClientId: false
           },
           {
-            platform: 'Yandex',
+            name: 'Yandex',
             type: 'yandex',
-            config: this.thirdLoginConfig.yandex,
-            enabled: this.thirdLoginConfig.yandex.enabled,
-            developerUrl: 'https://oauth.yandex.com/'
+            developerUrl: 'https://oauth.yandex.com/',
+            useClientId: true
           },
           {
-            platform: 'Gitee',
+            name: 'Gitee',
             type: 'gitee',
-            config: this.thirdLoginConfig.gitee,
-            enabled: this.thirdLoginConfig.gitee.enabled,
-            developerUrl: 'https://gitee.com/oauth/applications'
+            developerUrl: 'https://gitee.com/oauth/applications',
+            useClientId: true
+          },
+          {
+            name: 'QQ',
+            type: 'qq',
+            developerUrl: 'https://connect.qq.com/manage.html',
+            useClientId: true
           }
+          // 要添加新平台，只需在这里添加配置项即可
         ];
+      },
+      
+      thirdLoginTableData() {
+        return this.platformsConfig.map(platform => ({
+          platform: platform.name,
+          type: platform.type,
+          config: this.thirdLoginConfig[platform.type] || { enabled: false },
+          enabled: this.thirdLoginConfig[platform.type]?.enabled || false,
+          developerUrl: platform.developerUrl
+        }));
       },
       parsedNavItems() {
         // 处理空字符串情况
@@ -2765,6 +2560,12 @@ X-API-KEY: {{apiConfig.apiKey}}
               client_secret: '',
               redirect_uri: this.$constant.pythonBaseURL + '/callback/gitee',
               enabled: false
+            },
+            qq: {
+              client_id: '',
+              client_secret: '',
+              redirect_uri: this.$constant.pythonBaseURL + '/callback/qq',
+              enabled: false
             }
           };
           
@@ -2792,6 +2593,10 @@ X-API-KEY: {{apiConfig.apiKey}}
               gitee: {
                 ...defaultConfig.gitee,
                 ...(res.data.gitee || {})
+              },
+              qq: {
+                ...defaultConfig.qq,
+                ...(res.data.qq || {})
               }
             };
             console.log("合并后的第三方登录配置:", this.thirdLoginConfig);
@@ -2834,6 +2639,12 @@ X-API-KEY: {{apiConfig.apiKey}}
               client_id: '',
               client_secret: '',
               redirect_uri: this.$constant.pythonBaseURL + '/callback/gitee',
+              enabled: false
+            },
+            qq: {
+              client_id: '',
+              client_secret: '',
+              redirect_uri: this.$constant.pythonBaseURL + '/callback/qq',
               enabled: false
             }
           };
@@ -3022,7 +2833,8 @@ X-API-KEY: {{apiConfig.apiKey}}
           google: './static/svg/google.svg',
           twitter: './static/svg/x.svg',
           yandex: './static/svg/yandex.svg',
-          gitee: './static/svg/gitee.png'
+          gitee: './static/svg/gitee.svg',
+          qq: './static/svg/qq.svg'
         };
         return iconMapping[type] || '';
       },
