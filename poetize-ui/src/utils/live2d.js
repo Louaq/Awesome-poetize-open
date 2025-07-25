@@ -302,8 +302,8 @@ function loadExternalResource(url, type) {
 // 添加一个函数用于检查是否启用看板娘
 async function checkWaifuEnabled() {
   try {
-    // 首先从后端获取状态
-    const response = await fetch(constant.pythonBaseURL + "/webInfo/getWaifuStatus");
+    // 首先从后端获取状态（统一使用Java API）
+    const response = await fetch(constant.baseURL + "/webInfo/getWaifuStatus");
     const result = await response.json();
     
     if (result.code === 200) {
@@ -4152,8 +4152,8 @@ document.addEventListener('checkWaifu', function() {
   // 检查看板娘是否启用
   const checkEnabled = async () => {
     try {
-      // 尝试从后端获取
-      const response = await fetch(constant.pythonBaseURL + "/webInfo/getWaifuStatus");
+      // 尝试从后端获取（统一使用Java API）
+      const response = await fetch(constant.baseURL + "/webInfo/getWaifuStatus");
       const result = await response.json();
       
       if (result.code === 200) {

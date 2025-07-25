@@ -149,39 +149,18 @@ DEFAULT_AI_CHAT_CONFIG = {
 }
 
 def get_ai_chat_config():
-    """获取AI聊天配置（带缓存）"""
+    """获取AI聊天配置（统一JSON缓存）"""
     try:
-        from cache_service import get_cache_service
-        cache_service = get_cache_service()
+        from json_config_cache import get_json_config_cache
+        json_cache = get_json_config_cache()
 
-        # 先尝试从缓存获取
-        cached_config = cache_service.get_cached_ai_chat_config()
-        if cached_config:
-            logger.debug("从缓存获取AI聊天配置")
-            # 返回解密配置和显示配置
-            decrypted_config = cached_config.get('decrypted', {})
-            display_config = cached_config.get('display', {})
-            return decrypted_config, display_config
+        # 使用统一的JSON配置缓存
+        encrypted_config = json_cache.get_json_config('ai_chat_config', AI_CHAT_CONFIG_FILE)
 
-        if not os.path.exists(AI_CHAT_CONFIG_FILE):
+        if not encrypted_config:
             logger.info("AI聊天配置文件不存在，使用默认配置")
             default_config = DEFAULT_AI_CHAT_CONFIG.copy()
-
-            # 缓存默认配置
-            try:
-                cache_data = {
-                    'decrypted': default_config,
-                    'display': default_config
-                }
-                cache_service.cache_ai_chat_config(cache_data)
-                logger.debug("默认AI聊天配置已缓存")
-            except Exception as cache_e:
-                logger.warning(f"缓存默认AI聊天配置失败: {cache_e}")
-
             return default_config, default_config
-
-        with open(AI_CHAT_CONFIG_FILE, 'r', encoding='utf-8') as f:
-            encrypted_config = json.load(f)
         
         # 解密配置用于内部使用
         decrypted_config = encrypted_config.copy()
@@ -209,17 +188,7 @@ def get_ai_chat_config():
             decrypted_config.get('model')
         )
 
-        # 缓存配置
-        try:
-            cache_data = {
-                'decrypted': decrypted_config,
-                'display': display_config
-            }
-            cache_service.cache_ai_chat_config(cache_data)
-            logger.debug("AI聊天配置已缓存")
-        except Exception as cache_e:
-            logger.warning(f"缓存AI聊天配置失败: {cache_e}")
-
+        logger.debug("从统一缓存获取AI聊天配置")
         return decrypted_config, display_config
         
     except Exception as e:
@@ -273,18 +242,14 @@ def save_ai_chat_config(config):
         with open(AI_CHAT_CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump(processed_config, f, ensure_ascii=False, indent=2)
 
-        # 使用统一的缓存刷新服务
+        # 使用统一JSON缓存管理器刷新缓存
         try:
-            from cache_refresh_service import get_cache_refresh_service
-            refresh_service = get_cache_refresh_service()
-            refresh_result = refresh_service.refresh_ai_chat_caches()
-
-            if refresh_result.get("success", False):
-                logger.info(f"AI聊天配置更新完成，成功清理 {refresh_result.get('cleared_count', 0)} 个相关缓存")
-            else:
-                logger.warning(f"AI聊天缓存清理部分失败: 成功 {refresh_result.get('cleared_count', 0)}, 失败 {refresh_result.get('failed_count', 0)}")
+            from json_config_cache import get_json_config_cache
+            json_cache = get_json_config_cache()
+            json_cache.invalidate_json_cache('ai_chat_config')
+            logger.info("AI聊天配置缓存已刷新")
         except Exception as cache_e:
-            logger.warning(f"清理AI聊天相关缓存失败: {cache_e}")
+            logger.warning(f"刷新AI聊天配置缓存失败: {cache_e}")
 
         logger.info("AI聊天配置保存成功")
         return True

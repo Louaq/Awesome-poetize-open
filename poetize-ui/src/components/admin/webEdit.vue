@@ -1025,7 +1025,7 @@
                 type="text" 
                 icon="el-icon-link"
                 :disabled="!thirdLoginConfig.enable || !thirdLoginConfig.gitee.enabled"
-                @click="openDeveloperCenter('https://gitee.com/settings/applications')">
+                @click="openDeveloperCenter('https://gitee.com/oauth/applications')">
                 开发者中心
               </el-button>
               <el-button 
@@ -1915,7 +1915,7 @@ X-API-KEY: {{apiConfig.apiKey}}
             type: 'gitee',
             config: this.thirdLoginConfig.gitee,
             enabled: this.thirdLoginConfig.gitee.enabled,
-            developerUrl: 'https://gitee.com/settings/applications'
+            developerUrl: 'https://gitee.com/oauth/applications'
           }
         ];
       },
@@ -2016,7 +2016,7 @@ X-API-KEY: {{apiConfig.apiKey}}
       // 优化：将getWebInfo改为异步方法
       async getWebInfo() {
         try {
-          const res = await this.$http.get(this.$constant.pythonBaseURL + "/admin/webInfo/getAdminWebInfoDetails", {}, true);
+          const res = await this.$http.get(this.$constant.baseURL + "/admin/webInfo/getAdminWebInfoDetails", {}, true);
             if (!this.$common.isEmpty(res.data)) {
               this.webInfo.id = res.data.id;
               this.webInfo.webName = res.data.webName;
@@ -2209,27 +2209,16 @@ X-API-KEY: {{apiConfig.apiKey}}
           type: 'success',
           center: true
         }).then(() => {
-          // 创建一个副本，去除看板娘字段
-          const javaValue = { ...value };
-          if ('enableWaifu' in javaValue) {
-            delete javaValue.enableWaifu;
-          }
+          // 统一更新逻辑：将看板娘状态包含在主更新请求中
+          // 这样可以避免并发更新导致的缓存竞态条件
+          const updateData = { ...value };
 
-          // 构建请求数组，始终更新 Java 端基础信息
+          console.log('准备更新网站信息:', updateData);
+
+          // 使用单一请求更新所有信息，避免并发问题
           const promises = [
-            this.$http.post(this.$constant.baseURL + "/webInfo/updateWebInfo", javaValue, true)
+            this.$http.post(this.$constant.baseURL + "/webInfo/updateWebInfo", updateData, true)
           ];
-
-          // 如果本次变更包含看板娘状态，则同步到 Python 端
-          if ('enableWaifu' in value) {
-            const waifuData = {
-              id: value.id,
-              enableWaifu: value.enableWaifu
-            };
-            promises.push(
-              this.$http.post(this.$constant.pythonBaseURL + "/webInfo/updateWaifuStatus", waifuData, true)
-            );
-          }
 
           // 处理所有请求完成
           Promise.all(promises)
@@ -2598,8 +2587,8 @@ X-API-KEY: {{apiConfig.apiKey}}
         this.advancedConfigVisible = false;
       },
       updateEnableWaifu() {
-        // 获取实际状态（通过请求确认当前状态）
-        this.$http.get(this.$constant.pythonBaseURL + "/webInfo/getWaifuStatus", true)
+        // 获取实际状态（通过请求确认当前状态，统一使用Java API）
+        this.$http.get(this.$constant.baseURL + "/webInfo/getWaifuStatus", true)
           .then((res) => {
             if (res.code === 200 && res.data) {
               // 使用后端返回的实际状态
@@ -2626,12 +2615,8 @@ X-API-KEY: {{apiConfig.apiKey}}
                   enableWaifu: newStatus
                 };
                 
-                // 调用Python后端API更新状态
-                this.$http.post(this.$constant.pythonBaseURL + "/webInfo/updateWaifuStatus", param, true, {
-                  headers: {
-                    'Authorization': localStorage.getItem('adminToken')
-                  }
-                })
+                // 调用Java后端API更新状态
+                this.$http.post(this.$constant.baseURL + "/admin/webInfo/updateWaifuStatus", param, true)
                 .then((res) => {
                   if (res.code === 200) {
                     // 更新本地存储 - 使用与前端一致的格式

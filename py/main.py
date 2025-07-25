@@ -5,9 +5,8 @@ POETIZE博客系统 - FastAPI后端服务
 主要功能模块：
 - SEO优化和搜索引擎推送
 - 第三方OAuth登录 (GitHub, Google, Twitter, Yandex, Gitee)
-- 邮件发送服务
-- 网站管理API
-- 访问统计
+- 邮件配置管理和发送服务
+- 智能验证码服务
 - 多语言翻译
 - AI聊天配置
 """
@@ -19,9 +18,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from config import SECRET_KEY, JAVA_BACKEND_URL, FRONTEND_URL, JAVA_CONFIG_URL, PYTHON_SERVICE_PORT
-from web_admin_api import register_web_admin_api
 from py_three_login import oauth_login, oauth_callback
 from redis_oauth_state_manager import oauth_state_manager
+from json_config_cache import get_json_config_cache
 
 from email_api import register_email_api  # 仅处理邮箱配置和测试功能，实际邮件发送由Java后端处理
 from captcha_api import register_captcha_api  # 处理滑动验证码配置功能
@@ -29,7 +28,7 @@ from seo_api import register_seo_api  # 处理SEO优化相关功能
 from ai_chat_api import register_ai_chat_api  # 处理AI聊天配置功能
 from translation_api import register_translation_api  # 处理翻译管理功能
 from auth_decorator import admin_required  # 导入管理员权限验证装饰器
-from cache_warmup_service import get_cache_warmup_service  # 导入缓存预热服务
+# 缓存预热服务已删除 - Java后端自动处理缓存
 import logging
 import asyncio
 
@@ -38,12 +37,14 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # 创建FastAPI应用实例
+# 安全配置：禁用自动文档功能，避免在生产环境暴露API结构
 app = FastAPI(
     title="POETIZE博客系统API",
     description="基于FastAPI的博客系统后端服务，提供SEO优化、第三方登录等功能",
     version="2.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc"
+    docs_url=None,        # 禁用Swagger UI文档 (/docs)
+    redoc_url=None,       # 禁用ReDoc文档 (/redoc)
+    openapi_url=None      # 禁用OpenAPI schema (/openapi.json)
 )
 
 # 添加Session中间件（必须在其他中间件之前添加）
@@ -108,7 +109,6 @@ def register_all_apis(app):
     app.add_api_route('/callback/{provider}', oauth_callback, methods=['GET'])
 
     # 注册各个API模块
-    register_web_admin_api(app)
     register_email_api(app)
     register_captcha_api(app)
     register_seo_api(app)
@@ -123,30 +123,34 @@ def register_all_apis(app):
 async def startup_event():
     """应用启动时的初始化操作"""
     logger.info("应用启动中，开始初始化...")
-
-    # 异步执行缓存预热，不阻塞服务启动
-    asyncio.create_task(perform_cache_warmup())
+    
+    # 预热JSON配置缓存
+    try:
+        logger.info("开始JSON配置缓存预热...")
+        json_config_cache = get_json_config_cache()
+        warmup_result = json_config_cache.warmup_all_caches()
+        
+        # 记录预热结果
+        success_count = warmup_result['success_count']
+        total_configs = warmup_result['total_configs']
+        execution_time = warmup_result['execution_time_ms'] / 1000
+        
+        logger.info(f"JSON配置缓存预热完成: {success_count}/{total_configs} 成功, 耗时 {execution_time:.2f}秒")
+        
+        # 如果有失败的配置，记录警告
+        if warmup_result['failed_count'] > 0:
+            logger.warning(f"有 {warmup_result['failed_count']} 个配置预热失败")
+            
+            # 列出失败的配置
+            failed_configs = [name for name, result in warmup_result['results'].items() 
+                             if result.get('status') == 'failed' or result.get('status') == 'error']
+            logger.warning(f"预热失败的配置: {', '.join(failed_configs)}")
+    except Exception as e:
+        # 即使预热失败也不应该中断应用启动
+        logger.error(f"JSON配置缓存预热过程中发生异常: {e}")
+        logger.info("应用将继续启动，但某些功能可能在首次访问时较慢")
 
     logger.info("应用启动完成")
-
-async def perform_cache_warmup():
-    """执行缓存预热（异步）"""
-    try:
-        # 等待一小段时间，确保服务完全启动
-        await asyncio.sleep(2)
-
-        logger.info("开始执行缓存预热...")
-        warmup_service = get_cache_warmup_service()
-        success = await warmup_service.warmup_all_caches()
-
-        if success:
-            logger.info("缓存预热成功完成")
-        else:
-            logger.warning("缓存预热部分失败，但服务正常运行")
-
-    except Exception as e:
-        logger.error(f"缓存预热过程中发生异常: {e}")
-        # 预热失败不影响服务正常运行
 
 @app.on_event("shutdown")
 async def shutdown_event():

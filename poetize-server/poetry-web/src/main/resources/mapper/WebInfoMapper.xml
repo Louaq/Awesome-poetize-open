@@ -21,11 +21,22 @@
         <result column="api_enabled" property="apiEnabled"/>
         <result column="api_key" property="apiKey"/>
         <result column="nav_config" property="navConfig"/>
+        <result column="footer_background_image" property="footerBackgroundImage"/>
+        <result column="footer_background_config" property="footerBackgroundConfig"/>
+        <result column="email" property="email"/>
+        <result column="minimal_footer" property="minimalFooter"/>
+        <result column="enable_auto_night" property="enableAutoNight"/>
+        <result column="auto_night_start" property="autoNightStart"/>
+        <result column="auto_night_end" property="autoNightEnd"/>
+        <result column="enable_gray_mode" property="enableGrayMode"/>
     </resultMap>
 
     <!-- 通用查询结果列 -->
     <sql id="Base_Column_List">
-        id, web_name, web_title, notices, footer, background_image, avatar, random_avatar, random_name, random_cover, waifu_json, status, enable_waifu, home_page_pull_up_height, api_key, nav_config
+        id, web_name, web_title, notices, footer, background_image, avatar, random_avatar, random_name, random_cover,
+        waifu_json, status, enable_waifu, home_page_pull_up_height, api_enabled, api_key, nav_config,
+        footer_background_image, footer_background_config, email, minimal_footer, enable_auto_night,
+        auto_night_start, auto_night_end, enable_gray_mode
     </sql>
 
 </mapper>

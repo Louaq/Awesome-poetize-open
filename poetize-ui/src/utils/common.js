@@ -5,23 +5,37 @@ import { redirectToLogin } from './tokenExpireHandler';
 
 export default {
   pushNotification(notices, isNotification) {
+    // 统一的空值检查，防止null/undefined错误
+    if (this.isEmpty(notices)) {
+      return isNotification ? [] : {};
+    }
+
+    // 确保notices是数组类型
+    if (!Array.isArray(notices)) {
+      console.warn('pushNotification: notices应该是数组类型，实际类型:', typeof notices, notices);
+      return isNotification ? [] : {};
+    }
+
     if (isNotification) {
-      if (this.isEmpty(notices)) {
-        return [];
-      } else {
-        return notices.filter(f => "推送标题：" !== f.substr(0, 5) &&
-          "推送封面：" !== f.substr(0, 5) &&
-          "推送链接：" !== f.substr(0, 5));
-      }
+      // 返回过滤后的通知数组
+      return notices.filter(f =>
+        typeof f === 'string' &&
+        "推送标题：" !== f.substr(0, 5) &&
+        "推送封面：" !== f.substr(0, 5) &&
+        "推送链接：" !== f.substr(0, 5)
+      );
     } else {
+      // 解析推送信息对象
       let push = {};
       notices.forEach(notice => {
-        if ("推送标题：" === notice.substr(0, 5)) {
-          push['标题'] = notice.substr(5);
-        } else if ("推送封面：" === notice.substr(0, 5)) {
-          push['封面'] = notice.substr(5);
-        } else if ("推送链接：" === notice.substr(0, 5)) {
-          push['链接'] = notice.substr(5);
+        if (typeof notice === 'string') {
+          if ("推送标题：" === notice.substr(0, 5)) {
+            push['标题'] = notice.substr(5);
+          } else if ("推送封面：" === notice.substr(0, 5)) {
+            push['封面'] = notice.substr(5);
+          } else if ("推送链接：" === notice.substr(0, 5)) {
+            push['链接'] = notice.substr(5);
+          }
         }
       });
       return push;

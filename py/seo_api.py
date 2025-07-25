@@ -489,31 +489,19 @@ def decrypt_data(encrypted_data):
 
 # 获取SEO配置
 async def get_seo_config():
-    """获取SEO配置（带缓存）"""
+    """获取SEO配置（统一JSON缓存）"""
     try:
-        from cache_service import get_cache_service
-        cache_service = get_cache_service()
+        from json_config_cache import get_json_config_cache
+        json_cache = get_json_config_cache()
 
-        # 先尝试从缓存获取
-        from cache_constants import CacheConstants
-        cached_config = cache_service.get(CacheConstants.SEO_CONFIG_KEY)
-        if cached_config:
-            logger.debug("从缓存获取SEO配置")
-            return cached_config
-
-        # 缓存不存在，从文件读取
-        with open(SEO_CONFIG_FILE, 'r', encoding='utf-8') as f:
-            config = json.load(f)
-
-        # 缓存配置
-        cache_service.set(
-            CacheConstants.SEO_CONFIG_KEY,
-            config,
-            CacheConstants.SEO_CONFIG_EXPIRE_TIME
-        )
-        logger.debug("SEO配置已缓存")
-
-        return config
+        # 使用统一的JSON配置缓存
+        config = json_cache.get_json_config('seo_config', SEO_CONFIG_FILE)
+        if config:
+            logger.debug("从统一缓存获取SEO配置")
+            return config
+        else:
+            logger.warning("SEO配置文件不存在，返回空配置")
+            return {}
     except Exception as e:
         logger.error(f"获取SEO配置出错: {str(e)}")
         logger.exception("获取SEO配置详细错误信息:")
@@ -543,18 +531,14 @@ def save_seo_config(config):
             json.dump(config, f, ensure_ascii=False, indent=2)
         logger.info(f"SEO配置保存成功: {SEO_CONFIG_FILE}")
 
-        # 使用统一的缓存刷新服务
+        # 使用统一JSON缓存管理器刷新缓存
         try:
-            from cache_refresh_service import get_cache_refresh_service
-            refresh_service = get_cache_refresh_service()
-            refresh_result = refresh_service.refresh_seo_caches()
-
-            if refresh_result.get("success", False):
-                logger.info(f"SEO配置更新完成，成功清理 {refresh_result.get('cleared_count', 0)} 个相关缓存")
-            else:
-                logger.warning(f"SEO缓存清理部分失败: 成功 {refresh_result.get('cleared_count', 0)}, 失败 {refresh_result.get('failed_count', 0)}")
+            from json_config_cache import get_json_config_cache
+            json_cache = get_json_config_cache()
+            json_cache.invalidate_json_cache('seo_config')
+            logger.info("SEO配置缓存已刷新")
         except Exception as cache_e:
-            logger.warning(f"清理SEO相关缓存失败: {cache_e}")
+            logger.warning(f"刷新SEO配置缓存失败: {cache_e}")
 
         return True
     except Exception as e:

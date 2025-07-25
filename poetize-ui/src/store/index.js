@@ -131,9 +131,20 @@ export default new Vuex.Store({
       localStorage.setItem("currentAdmin", JSON.stringify(user));
     },
     loadWebInfo(state, webInfo) {
-      // 解析JSON格式的数据
-      webInfo.notices = JSON.parse(webInfo.notices);
-      webInfo.randomCover = JSON.parse(webInfo.randomCover);
+      // 安全地解析JSON格式的数据
+      try {
+        webInfo.notices = webInfo.notices ? JSON.parse(webInfo.notices) : [];
+      } catch (error) {
+        console.error('解析notices JSON失败:', error);
+        webInfo.notices = [];
+      }
+
+      try {
+        webInfo.randomCover = webInfo.randomCover ? JSON.parse(webInfo.randomCover) : [];
+      } catch (error) {
+        console.error('解析randomCover JSON失败:', error);
+        webInfo.randomCover = [];
+      }
       
       // 确保navConfig是有效的JSON字符串
       if (!webInfo.navConfig || webInfo.navConfig === "{}" || webInfo.navConfig === "") {

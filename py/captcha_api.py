@@ -43,52 +43,45 @@ def init_data_files():
 
 # 获取智能验证码配置
 def get_captcha_config():
-    """获取智能验证码配置（带缓存）"""
+    """获取智能验证码配置（统一JSON缓存）"""
     try:
-        from cache_service import get_cache_service
-        cache_service = get_cache_service()
+        from json_config_cache import get_json_config_cache
+        json_cache = get_json_config_cache()
 
-        # 先尝试从缓存获取
-        cached_config = cache_service.get_cached_captcha_config(is_public=False)
-        if cached_config:
-            print("从缓存获取验证码配置")
-            return cached_config
+        # 使用统一的JSON配置缓存
+        config = json_cache.get_json_config('captcha_config', CAPTCHA_CONFIG_FILE)
+        if config:
+            # 检查配置是否包含新增字段，如果没有则使用默认值并更新
+            updated = False
+            if "screenSizeThreshold" not in config:
+                config["screenSizeThreshold"] = DEFAULT_CAPTCHA_CONFIG["screenSizeThreshold"]
+                updated = True
+            if "forceSlideForMobile" not in config:
+                config["forceSlideForMobile"] = DEFAULT_CAPTCHA_CONFIG["forceSlideForMobile"]
+                updated = True
+            if "slide" not in config:
+                config["slide"] = DEFAULT_CAPTCHA_CONFIG["slide"]
+                updated = True
+            if "checkbox" not in config:
+                config["checkbox"] = DEFAULT_CAPTCHA_CONFIG["checkbox"]
+                updated = True
 
-        if os.path.exists(CAPTCHA_CONFIG_FILE):
-            with open(CAPTCHA_CONFIG_FILE, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                # 检查配置是否包含新增字段，如果没有则使用默认值
-                if "screenSizeThreshold" not in config:
-                    config["screenSizeThreshold"] = DEFAULT_CAPTCHA_CONFIG["screenSizeThreshold"]
-                if "forceSlideForMobile" not in config:
-                    config["forceSlideForMobile"] = DEFAULT_CAPTCHA_CONFIG["forceSlideForMobile"]
-                if "slide" not in config:
-                    config["slide"] = DEFAULT_CAPTCHA_CONFIG["slide"]
-                if "checkbox" not in config:
-                    config["checkbox"] = DEFAULT_CAPTCHA_CONFIG["checkbox"]
+            # 如果配置有更新，保存到文件并刷新缓存
+            if updated:
+                save_captcha_config(config)
+                json_cache.invalidate_json_cache('captcha_config')
+                print("验证码配置已更新并刷新缓存")
+            else:
+                print("从统一缓存获取验证码配置")
 
-                # 缓存配置
-                try:
-                    cache_service.cache_captcha_config(config, is_public=False)
-                    print("验证码配置已缓存")
-                except Exception as cache_e:
-                    print(f"缓存验证码配置失败: {cache_e}")
-
-                return config
+            return config
         else:
-            # 返回默认配置并保存
+            # 配置文件不存在，创建默认配置
             save_captcha_config(DEFAULT_CAPTCHA_CONFIG)
-
-            # 缓存默认配置
-            try:
-                cache_service.cache_captcha_config(DEFAULT_CAPTCHA_CONFIG, is_public=False)
-                print("默认验证码配置已缓存")
-            except Exception as cache_e:
-                print(f"缓存默认验证码配置失败: {cache_e}")
-
+            print("创建默认验证码配置")
             return DEFAULT_CAPTCHA_CONFIG
     except Exception as e:
-        print(f"获取智能验证码配置失败: {str(e)}")
+        print(f"获取验证码配置出错: {str(e)}")
         return DEFAULT_CAPTCHA_CONFIG
 
 # 保存智能验证码配置
@@ -98,18 +91,14 @@ def save_captcha_config(config):
         with open(CAPTCHA_CONFIG_FILE, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
 
-        # 使用统一的缓存刷新服务
+        # 使用统一JSON缓存管理器刷新缓存
         try:
-            from cache_refresh_service import get_cache_refresh_service
-            refresh_service = get_cache_refresh_service()
-            refresh_result = refresh_service.refresh_captcha_caches()
-
-            if refresh_result.get("success", False):
-                print(f"验证码配置更新完成，成功清理 {refresh_result.get('cleared_count', 0)} 个相关缓存")
-            else:
-                print(f"验证码缓存清理部分失败: 成功 {refresh_result.get('cleared_count', 0)}, 失败 {refresh_result.get('failed_count', 0)}")
+            from json_config_cache import get_json_config_cache
+            json_cache = get_json_config_cache()
+            json_cache.invalidate_json_cache('captcha_config')
+            print("验证码配置缓存已刷新")
         except Exception as cache_e:
-            print(f"清理验证码相关缓存失败: {cache_e}")
+            print(f"刷新验证码配置缓存失败: {cache_e}")
 
         return True
     except Exception as e:
@@ -132,7 +121,8 @@ def generate_verification_token():
 # 注册API到FastAPI应用
 def register_captcha_api(app: FastAPI):
     """注册验证码相关API"""
-    # 确保数据文件存在
+    # 确保数据文件存在（现在由email_api.py提供）
+    from email_api import init_data_files
     init_data_files()
     
     @app.get('/webInfo/getCaptchaConfig')

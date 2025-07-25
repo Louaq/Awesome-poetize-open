@@ -255,7 +255,10 @@ public class CacheService {
     public void cacheWebInfo(WebInfo webInfo) {
         if (webInfo != null) {
             redisUtil.set(CacheConstants.WEB_INFO_KEY, webInfo, CacheConstants.LONG_EXPIRE_TIME);
-            log.debug("缓存网站信息");
+            log.info("缓存网站信息成功 - Key: {}, webName: {}, webTitle: {}",
+                    CacheConstants.WEB_INFO_KEY, webInfo.getWebName(), webInfo.getWebTitle());
+        } else {
+            log.warn("尝试缓存空的网站信息");
         }
     }
 
@@ -263,20 +266,34 @@ public class CacheService {
      * 获取缓存的网站信息
      */
     public WebInfo getCachedWebInfo() {
-        Object cached = redisUtil.get(CacheConstants.WEB_INFO_KEY);
-        if (cached instanceof WebInfo) {
-            log.debug("从缓存获取网站信息");
-            return (WebInfo) cached;
+        try {
+            Object cached = redisUtil.get(CacheConstants.WEB_INFO_KEY);
+            if (cached instanceof WebInfo) {
+                WebInfo webInfo = (WebInfo) cached;
+                log.debug("从缓存获取网站信息成功 - Key: {}, webName: {}, webTitle: {}",
+                        CacheConstants.WEB_INFO_KEY, webInfo.getWebName(), webInfo.getWebTitle());
+                return webInfo;
+            } else {
+                log.info("缓存中未找到网站信息 - Key: {}, 缓存值类型: {}",
+                        CacheConstants.WEB_INFO_KEY, cached != null ? cached.getClass().getSimpleName() : "null");
+                return null;
+            }
+        } catch (Exception e) {
+            log.error("从缓存获取网站信息失败 - Key: {}", CacheConstants.WEB_INFO_KEY, e);
+            return null;
         }
-        return null;
     }
 
     /**
      * 删除网站信息缓存
      */
     public void evictWebInfo() {
-        redisUtil.del(CacheConstants.WEB_INFO_KEY);
-        log.debug("删除网站信息缓存");
+        try {
+            redisUtil.del(CacheConstants.WEB_INFO_KEY);
+            log.info("删除网站信息缓存成功 - Key: {}", CacheConstants.WEB_INFO_KEY);
+        } catch (Exception e) {
+            log.error("删除网站信息缓存失败 - Key: {}", CacheConstants.WEB_INFO_KEY, e);
+        }
     }
 
     /**

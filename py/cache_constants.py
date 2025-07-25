@@ -67,6 +67,10 @@ class CacheConstants:
     EMAIL_CONFIG_KEY = CACHE_PREFIX + "email:config"
     EMAIL_TEST_PREFIX = CACHE_PREFIX + "email:test:"
 
+    # JSON配置文件统一缓存（永久缓存策略）
+    JSON_CONFIG_PREFIX = CACHE_PREFIX + "json_config:"
+    JSON_CONFIG_HASH_PREFIX = CACHE_PREFIX + "json_config_hash:"
+
     # 验证码配置缓存
     CAPTCHA_CONFIG_KEY = CACHE_PREFIX + "captcha:config"
     CAPTCHA_PUBLIC_CONFIG_KEY = CACHE_PREFIX + "captcha:public:config"

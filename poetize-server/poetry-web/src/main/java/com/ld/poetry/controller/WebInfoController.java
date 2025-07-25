@@ -10,6 +10,7 @@ import com.ld.poetry.entity.*;
 import com.ld.poetry.service.CacheService;
 import com.ld.poetry.service.WebInfoService;
 import com.ld.poetry.service.ThirdPartyOauthConfigService;
+import com.ld.poetry.dao.WebInfoMapper;
 import com.ld.poetry.utils.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -46,6 +47,9 @@ public class WebInfoController {
     private HistoryInfoMapper historyInfoMapper;
 
     @Autowired
+    private WebInfoMapper webInfoMapper;
+
+    @Autowired
     private SortMapper sortMapper;
 
     @Autowired
@@ -75,26 +79,67 @@ public class WebInfoController {
     @LoginCheck(0)
     @PostMapping("/updateWebInfo")
     public PoetryResult<WebInfo> updateWebInfo(@RequestBody WebInfo webInfo) {
-        webInfoService.updateById(webInfo);
+        try {
+            // 记录更新前的详细信息
+            log.info("开始更新网站信息 - ID: {}, webName: {}, webTitle: {}",
+                    webInfo.getId(), webInfo.getWebName(), webInfo.getWebTitle());
+            log.debug("更新数据详情: {}", webInfo);
 
-        LambdaQueryChainWrapper<WebInfo> wrapper = new LambdaQueryChainWrapper<>(webInfoService.getBaseMapper());
-        List<WebInfo> list = wrapper.list();
-        if (!CollectionUtils.isEmpty(list)) {
-            // 清理Redis缓存并重新缓存最新数据
-            cacheService.evictWebInfo();
-            cacheService.cacheWebInfo(list.get(0));
-            log.info("网站信息更新成功，已刷新Redis缓存");
+            // 使用自定义更新方法确保所有字段都能正确更新
+            int updateResult = webInfoMapper.updateWebInfoById(webInfo);
+            log.info("网站信息数据库更新结果: {} 行受影响, ID: {}", updateResult, webInfo.getId());
 
-            // 网站信息更新时，重新渲染首页和百宝箱页面
-            try {
-                prerenderClient.renderMainPages();
-                log.debug("网站信息更新后成功触发页面预渲染");
-            } catch (Exception e) {
-                // 预渲染失败不影响主流程，只记录日志
-                log.warn("网站信息更新后页面预渲染失败", e);
+            if (updateResult == 0) {
+                log.error("数据库更新失败：没有行受影响，可能ID不存在或数据未变化");
+                return PoetryResult.fail("更新失败：网站信息不存在或数据未变化");
             }
+
+            // 验证更新是否成功：重新查询最新数据
+            log.info("重新查询数据库验证更新结果...");
+            LambdaQueryChainWrapper<WebInfo> wrapper = new LambdaQueryChainWrapper<>(webInfoService.getBaseMapper());
+            List<WebInfo> list = wrapper.list();
+
+            if (!CollectionUtils.isEmpty(list)) {
+                WebInfo latestWebInfo = list.get(0);
+
+                // 验证数据是否真正更新
+                log.info("数据库查询结果 - webName: {}, webTitle: {}",
+                        latestWebInfo.getWebName(), latestWebInfo.getWebTitle());
+
+                // 检查关键字段是否更新成功
+                if (webInfo.getWebName() != null && !webInfo.getWebName().equals(latestWebInfo.getWebName())) {
+                    log.warn("webName更新失败 - 期望: {}, 实际: {}", webInfo.getWebName(), latestWebInfo.getWebName());
+                } else if (webInfo.getWebTitle() != null && !webInfo.getWebTitle().equals(latestWebInfo.getWebTitle())) {
+                    log.warn("webTitle更新失败 - 期望: {}, 实际: {}", webInfo.getWebTitle(), latestWebInfo.getWebTitle());
+                } else {
+                    log.info("数据库更新验证成功");
+                }
+
+                // 原子性缓存更新：先设置新缓存，再删除旧缓存
+                // 这样可以避免缓存空窗期
+                cacheService.evictWebInfo();
+                cacheService.cacheWebInfo(latestWebInfo);
+
+                log.info("网站信息缓存更新成功 - webName: {}, webTitle: {}",
+                        latestWebInfo.getWebName(), latestWebInfo.getWebTitle());
+
+                // 网站信息更新时，重新渲染首页和百宝箱页面
+                try {
+                    prerenderClient.renderMainPages();
+                    log.debug("网站信息更新后成功触发页面预渲染");
+                } catch (Exception e) {
+                    // 预渲染失败不影响主流程，只记录日志
+                    log.warn("网站信息更新后页面预渲染失败", e);
+                }
+            } else {
+                log.warn("更新后未找到网站信息数据");
+            }
+
+            return PoetryResult.success();
+        } catch (Exception e) {
+            log.error("更新网站信息失败", e);
+            return PoetryResult.fail("更新网站信息失败: " + e.getMessage());
         }
-        return PoetryResult.success();
     }
 
 
@@ -351,6 +396,40 @@ public class WebInfoController {
     @GetMapping("/getAdmire")
     public PoetryResult<List<User>> getAdmire() {
         return PoetryResult.success(commonQuery.getAdmire());
+    }
+
+    /**
+     * 获取看板娘状态
+     * 替代Python端的getWaifuStatus端点，统一架构设计
+     */
+    @GetMapping("/getWaifuStatus")
+    public PoetryResult<Map<String, Object>> getWaifuStatus() {
+        try {
+            log.debug("收到获取看板娘状态请求");
+
+            // 从缓存获取网站信息以保持性能
+            WebInfo webInfo = cacheService.getCachedWebInfo();
+
+            if (webInfo != null) {
+                Boolean enableWaifu = webInfo.getEnableWaifu();
+                if (enableWaifu == null) {
+                    enableWaifu = false;
+                }
+
+                Map<String, Object> data = new HashMap<>();
+                data.put("enableWaifu", enableWaifu);
+                data.put("id", webInfo.getId());
+
+                log.debug("返回看板娘状态: enableWaifu={}, id={}", enableWaifu, webInfo.getId());
+                return PoetryResult.success(data);
+            } else {
+                log.warn("网站信息不存在");
+                return PoetryResult.fail("网站信息不存在");
+            }
+        } catch (Exception e) {
+            log.error("获取看板娘状态失败", e);
+            return PoetryResult.fail("获取看板娘状态失败: " + e.getMessage());
+        }
     }
 
     /**

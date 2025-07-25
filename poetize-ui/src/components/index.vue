@@ -45,7 +45,7 @@
               <div class="announcement background-opacity">
                 <i class="fa fa-volume-up" aria-hidden="true"></i>
                 <div>
-                  <div v-for="(notice, index) in $common.pushNotification($store.state.webInfo.notices, true)" :key="index">
+                  <div v-for="(notice, index) in getNotifications()" :key="index">
                     {{ notice }}
                   </div>
                 </div>
@@ -263,17 +263,43 @@
       this.checkEmailCollectionNeeded();
 
       setTimeout(() => {
-        this.push = this.$common.pushNotification(this.$store.state.webInfo.notices, false);
-        if(!this.$common.isEmpty(this.push)) {
-          if("0" !== localStorage.getItem("showPushNotification_" + this.push['链接'])) {
-            this.pushDialogVisible = true;
-            localStorage.setItem("showPushNotification_" + this.push['链接'], "0");
+        try {
+          // 安全地获取网站信息和通知数据
+          const webInfo = this.$store.state.webInfo;
+          const notices = webInfo && webInfo.notices ? webInfo.notices : null;
+
+          console.log('获取推送通知数据:', notices);
+
+          this.push = this.$common.pushNotification(notices, false);
+          if(!this.$common.isEmpty(this.push)) {
+            if("0" !== localStorage.getItem("showPushNotification_" + this.push['链接'])) {
+              this.pushDialogVisible = true;
+              localStorage.setItem("showPushNotification_" + this.push['链接'], "0");
+            }
           }
+        } catch (error) {
+          console.error('处理推送通知时发生错误:', error);
+          // 设置默认值，防止页面崩溃
+          this.push = {};
         }
       }, 2000);
     },
 
     methods: {
+      /**
+       * 安全地获取通知列表
+       */
+      getNotifications() {
+        try {
+          const webInfo = this.$store.state.webInfo;
+          const notices = webInfo && webInfo.notices ? webInfo.notices : null;
+          return this.$common.pushNotification(notices, true);
+        } catch (error) {
+          console.error('获取通知列表时发生错误:', error);
+          return [];
+        }
+      },
+
       async selectSort(sort) {
         this.pagination = {
           current: 1,
@@ -433,9 +459,9 @@
           // 显示欢迎消息
           const platformName = this.getPlatformName(this.tempUserData.provider);
           if (result.skipped) {
-            this.$message.success(`欢迎通过 ${platformName} 登录！您可以稍后在个人设置中添加邮箱。`);
+            this.$message.success(`欢迎通过登录！您可以稍后在个人设置中添加邮箱。`);
           } else {
-            this.$message.success(`欢迎通过 ${platformName} 登录！邮箱已保存。`);
+            this.$message.success(`欢迎通过登录！邮箱已保存。`);
           }
 
         } catch (error) {

@@ -23,6 +23,9 @@ import org.springframework.web.client.RestTemplate;
 import com.ld.poetry.enums.PoetryEnum;
 import org.springframework.core.env.Environment;
 import lombok.extern.slf4j.Slf4j;
+import com.ld.poetry.service.CacheService;
+import com.ld.poetry.service.WebInfoService;
+import java.util.HashMap;
 
 /**
  * <p>
@@ -51,6 +54,12 @@ public class AdminController {
 
     @Autowired
     private com.ld.poetry.service.PasswordUpgradeService passwordUpgradeService;
+
+    @Autowired
+    private CacheService cacheService;
+
+    @Autowired
+    private WebInfoService webInfoService;
 
     /**
      * 获取网站信息
@@ -150,6 +159,139 @@ public class AdminController {
         } catch (Exception e) {
             log.error("生成密码安全报告失败", e);
             return PoetryResult.fail("生成密码安全报告失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 获取管理员网站详细信息（包含敏感配置）
+     * 替代Python端的getAdminWebInfoDetails端点
+     */
+    @GetMapping("/webInfo/getAdminWebInfoDetails")
+    @LoginCheck(0)
+    public PoetryResult<WebInfo> getAdminWebInfoDetails(
+            @RequestParam(value = "refresh", defaultValue = "false") boolean forceRefresh) {
+        try {
+            if (forceRefresh) {
+                // 强制刷新缓存
+                cacheService.evictWebInfo();
+                log.info("强制刷新网站信息缓存");
+            }
+
+            // 从缓存获取网站信息
+            WebInfo webInfo = cacheService.getCachedWebInfo();
+
+            if (webInfo == null) {
+                log.info("缓存中未找到网站信息，从数据库重新加载");
+                // 缓存为空，从数据库重新加载
+                LambdaQueryChainWrapper<WebInfo> wrapper = new LambdaQueryChainWrapper<>(webInfoMapper);
+                List<WebInfo> list = wrapper.list();
+                if (!CollectionUtils.isEmpty(list)) {
+                    webInfo = list.get(0);
+                    cacheService.cacheWebInfo(webInfo);
+                    log.info("从数据库重新加载网站信息并缓存 - webName: {}, webTitle: {}",
+                            webInfo.getWebName(), webInfo.getWebTitle());
+                } else {
+                    log.error("数据库中未找到网站信息");
+                    return PoetryResult.fail("网站信息不存在");
+                }
+            } else {
+                log.debug("从缓存获取网站信息成功 - webName: {}, webTitle: {}",
+                        webInfo.getWebName(), webInfo.getWebTitle());
+            }
+
+            // 返回完整信息（包含randomAvatar, randomName, waifuJson等敏感配置）
+            return PoetryResult.success(webInfo);
+        } catch (Exception e) {
+            log.error("获取管理员网站详细信息失败", e);
+            return PoetryResult.fail("获取管理员网站详细信息失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 刷新管理员缓存
+     * 替代Python端的refreshAdminWebInfoCache端点
+     */
+    @PostMapping("/webInfo/refreshCache")
+    @LoginCheck(0)
+    public PoetryResult<Map<String, Object>> refreshAdminCache() {
+        try {
+            // 清理网站信息缓存
+            cacheService.evictWebInfo();
+
+            // 重新加载并缓存
+            LambdaQueryChainWrapper<WebInfo> wrapper = new LambdaQueryChainWrapper<>(webInfoMapper);
+            List<WebInfo> list = wrapper.list();
+            if (!CollectionUtils.isEmpty(list)) {
+                cacheService.cacheWebInfo(list.get(0));
+                log.info("网站信息缓存刷新成功");
+            }
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("cleared_count", 1);
+            result.put("message", "缓存刷新成功");
+
+            log.info("管理员缓存刷新完成");
+            return PoetryResult.success(result);
+        } catch (Exception e) {
+            log.error("刷新管理员缓存失败", e);
+            return PoetryResult.fail("刷新缓存失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 更新看板娘状态
+     * 替代Python端的updateWaifuStatus端点
+     */
+    @PostMapping("/webInfo/updateWaifuStatus")
+    @LoginCheck(0)
+    public PoetryResult<Map<String, Object>> updateWaifuStatus(@RequestBody Map<String, Object> request) {
+        try {
+            // 验证请求参数
+            if (!request.containsKey("enableWaifu")) {
+                return PoetryResult.fail("缺少enableWaifu字段");
+            }
+
+            Boolean enableWaifu = (Boolean) request.get("enableWaifu");
+            Integer id = (Integer) request.get("id");
+
+            log.info("收到更新看板娘状态请求: enableWaifu={}, id={}", enableWaifu, id);
+
+            // 获取当前网站信息
+            LambdaQueryChainWrapper<WebInfo> wrapper = new LambdaQueryChainWrapper<>(webInfoMapper);
+            List<WebInfo> list = wrapper.list();
+
+            if (CollectionUtils.isEmpty(list)) {
+                return PoetryResult.fail("网站信息不存在");
+            }
+
+            WebInfo webInfo = list.get(0);
+
+            // 如果提供了id，验证id是否匹配
+            if (id != null && !id.equals(webInfo.getId())) {
+                return PoetryResult.fail("网站信息ID不匹配");
+            }
+
+            // 更新看板娘状态
+            webInfo.setEnableWaifu(enableWaifu);
+
+            // 保存到数据库
+            webInfoService.updateById(webInfo);
+
+            // 清理并重新缓存
+            cacheService.evictWebInfo();
+            cacheService.cacheWebInfo(webInfo);
+
+            log.info("看板娘状态更新成功: enableWaifu={}", enableWaifu);
+
+            // 返回结果
+            Map<String, Object> result = new HashMap<>();
+            result.put("enableWaifu", enableWaifu);
+            result.put("id", webInfo.getId());
+
+            return PoetryResult.success(result);
+        } catch (Exception e) {
+            log.error("更新看板娘状态失败", e);
+            return PoetryResult.fail("更新看板娘状态失败: " + e.getMessage());
         }
     }
 }

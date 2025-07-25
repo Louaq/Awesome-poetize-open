@@ -1,0 +1,18 @@
+"""
+OAuth提供商实现模块
+包含所有支持的OAuth提供商的具体实现
+"""
+
+from .github import GitHubProvider
+from .google import GoogleProvider
+from .twitter import TwitterProvider
+from .yandex import YandexProvider
+from .gitee import GiteeProvider
+
+__all__ = [
+    'GitHubProvider',
+    'GoogleProvider', 
+    'TwitterProvider',
+    'YandexProvider',
+    'GiteeProvider'
+]

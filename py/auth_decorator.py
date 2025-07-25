@@ -186,6 +186,34 @@ TRUSTED_INTERNAL_IPS = get_trusted_internal_ips()
 # FastAPI Security scheme
 security = HTTPBearer(auto_error=False)
 
+async def _fallback_ip_verification(client_ip: str, endpoint: str):
+    """
+    备用IP验证逻辑，当token验证失败时使用
+    主要用于内部服务间调用的向后兼容
+    """
+    # 检查是否在内部网络（向后兼容）
+    if is_internal_network_ip(client_ip):
+        logger.warning(f"⚠️ Token验证失败但IP在内部网段，允许访问（向后兼容）: {client_ip}, 请求: {endpoint}")
+        logger.warning(f"建议为内部服务请求添加正确的认证token以增强安全性")
+        return True
+
+    # 检查是否在受信任IP列表中（向后兼容）
+    current_trusted_ips = get_current_trusted_ips()
+    if client_ip in current_trusted_ips:
+        logger.warning(f"⚠️ Token验证失败但IP在受信任列表，允许访问（向后兼容）: {client_ip}, 请求: {endpoint}")
+        return True
+
+    # 都不满足，拒绝访问
+    logger.error(f"❌ Token验证失败且IP不在信任范围内，拒绝访问: {client_ip}, 请求: {endpoint}")
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail={
+            'code': 403,
+            'message': '权限不足，需要站长或管理员权限',
+            'data': None
+        }
+    )
+
 async def admin_required(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
@@ -193,8 +221,9 @@ async def admin_required(
     """
     FastAPI依赖函数，验证请求是否来自站长(userType=0)或管理员(userType=1)
     使用Java后端的验证API进行权限校验
-    
+
     注意：此依赖允许站长(userType=0)和管理员(userType=1)访问，都有完全的管理权限
+    认证逻辑：优先验证管理员token，IP验证作为辅助安全措施（与Java端逻辑保持一致）
     """
     # 开始时间
     start_time = time.time()
@@ -211,61 +240,21 @@ async def admin_required(
     elif x_forwarded_for:
         logger.info(f"忽略不可信来源的X-Forwarded-For: {x_forwarded_for} (请求来源: {client_ip})")
     
-    # 详细记录所有请求头用于调试
-    all_headers = dict(request.headers)
-    logger.info(f"收到API请求: {request.url.path}, IP: {client_ip}")
-    logger.info(f"所有请求头: {all_headers}")
-    
-    # 主要验证：检查是否来自Docker内部网络
-    if is_internal_network_ip(client_ip):
-        # 内部网络IP，进行辅助验证以增强安全性
-        internal_service = request.headers.get('X-Internal-Service')
-        user_agent = request.headers.get('User-Agent', '')
-        admin_flag = request.headers.get('X-Admin-Request')
-        
-        # 辅助验证：检查内部服务标识头
-        if internal_service in ['poetize-java', 'poetize-prerender', 'poetize-nginx']:
-            logger.info(f"✅ 内部网段+服务标识验证通过: {client_ip} ({internal_service})")
-            return True
-        
-        # 辅助验证：检查User-Agent
-        elif 'node-fetch' in user_agent or 'axios' in user_agent or 'python-requests' in user_agent or 'poetize-prerender' in user_agent:
-            logger.info(f"✅ 内部网段+User-Agent验证通过: {client_ip} (UA: {user_agent})")
-            return True
-        
-        # 辅助验证：检查管理员标志
-        elif admin_flag == 'true':
-            logger.info(f"✅ 内部网段+管理员标志验证通过: {client_ip}")
-            return True
-        
-        # 内部网段但缺少辅助验证，记录警告但仍然通过（向后兼容）
-        else:
-            logger.warning(f"⚠️ 内部网段IP但缺少辅助验证标识: {client_ip}, 请求: {request.url.path}")
-            logger.warning(f"建议在请求头中添加 X-Internal-Service 标识以增强安全性")
-            return True
-    
-    # 备用验证：检查是否在受信任IP列表中（向后兼容）
-    current_trusted_ips = get_current_trusted_ips()
-    if client_ip in current_trusted_ips:
-        logger.info(f"✅ 受信任IP列表验证通过: {client_ip}, 请求: {request.url.path}")
-        return True
-    
-    # 检查限流
-    if not admin_rate_limiter.is_allowed(client_ip):
-        logger.warning(f"IP {client_ip} 请求频率过高被拒绝访问管理员API")
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={
-                'code': 429,
-                'message': '请求过于频繁，请稍后再试',
-                'data': None
-            }
-        )
-        
     # 记录API访问信息
     endpoint = request.url.path
     logger.info(f"管理员API请求: {endpoint}, IP: {client_ip}")
-    
+
+    # 优先验证：检查是否来自Docker内部网络且带有正确标识（与Java端逻辑一致）
+    internal_service = request.headers.get('X-Internal-Service')
+    admin_flag = request.headers.get('X-Admin-Request')
+
+    # 如果是内部网络请求且带有正确的标识头，直接通过（与Java端逻辑一致）
+    if (is_internal_network_ip(client_ip) and admin_flag == 'true' and
+        internal_service in ['poetize-java', 'poetize-prerender', 'poetize-nginx', 'poetize-python']):
+        logger.info(f"✅ 内部服务请求通过认证检查 - 服务: {internal_service}, IP: {client_ip}")
+        return True
+
+    # 主要验证：token验证（优先进行，与Java端逻辑一致）
     # 从请求中获取token
     token = None
     
@@ -290,18 +279,12 @@ async def admin_required(
             token_preview = f"{token[:20]}...{token[-8:]}" if len(token) > 30 else token
             logger.info(f"从cookie获取到token: {token_preview} (长度: {len(token)})")
     
-    # 没有token则拒绝访问
+    # 没有token时尝试备用验证
     if not token:
         logger.warning(f"管理员API缺少认证token, IP: {client_ip}, API: {endpoint}")
         logger.warning(f"请求头: Authorization={credentials}, Cookie检查: Admin-Token={request.cookies.get('Admin-Token', '无')}, User-Token={request.cookies.get('User-Token', '无')}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={
-                'code': 401,
-                'message': '访问管理员功能需要登录，请确保已登录管理员账户',
-                'data': None
-            }
-        )
+        # 尝试备用IP验证
+        return await _fallback_ip_verification(client_ip, endpoint)
         
     try:
         # 处理token - 添加兼容性，确保Java后端也能接受不带Bearer前缀的token
@@ -334,54 +317,45 @@ async def admin_required(
             logger.info(f"Java后端验证API响应: {data}")
             # 检查Java后端返回的权限验证结果
             if data.get('code') == 200 and data.get('data') is True:
+                # Token验证通过，进行辅助安全检查
+
+                # 检查限流（对于外部请求）
+                if not is_internal_network_ip(client_ip):
+                    if not admin_rate_limiter.is_allowed(client_ip):
+                        logger.warning(f"IP {client_ip} 请求频率过高被拒绝访问管理员API")
+                        raise HTTPException(
+                            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                            detail={
+                                'code': 429,
+                                'message': '请求过于频繁，请稍后再试',
+                                'data': None
+                            }
+                        )
+
                 # 权限验证通过
                 elapsed = time.time() - start_time
-                logger.info(f"管理员API权限验证通过: {endpoint}, IP: {client_ip}, 耗时: {elapsed:.3f}秒")
+                logger.info(f"✅ 管理员API权限验证通过: {endpoint}, IP: {client_ip}, 耗时: {elapsed:.3f}秒")
                 return True
             else:
                 logger.warning(f"Java后端权限验证失败: {data.get('message', '未知错误')}")
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail={
-                        'code': 403,
-                        'message': data.get('message', '权限不足，需要站长或管理员权限'),
-                        'data': None
-                    }
-                )
+                # Token验证失败，尝试备用验证方式
+                return await _fallback_ip_verification(client_ip, endpoint)
         elif response.status_code == 401:
             # 处理未授权情况
             logger.warning(f"Java后端返回401未授权, IP: {client_ip}, API: {endpoint}")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail={
-                    'code': 401,
-                    'message': '登录已过期或token无效',
-                    'data': None
-                }
-            )
+            # Token无效，尝试备用验证方式
+            return await _fallback_ip_verification(client_ip, endpoint)
         else:
             data = response.json() if response.content else {}
             logger.warning(f"Java后端权限验证失败: {data.get('message', '未知错误')}")
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={
-                    'code': 403,
-                    'message': data.get('message', '权限不足，需要站长或管理员权限'),
-                    'data': None
-                }
-            )
+            # 其他错误，尝试备用验证方式
+            return await _fallback_ip_verification(client_ip, endpoint)
             
     except HTTPException:
         # 重新抛出HTTPException
         raise
     except Exception as e:
-        # 记录异常并返回错误响应
+        # 记录异常并尝试备用验证
         logger.error(f"验证权限时发生错误: {str(e)}, IP: {client_ip}, API: {endpoint}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={
-                'code': 500,
-                'message': f'验证权限时发生错误: {str(e)}',
-                'data': None
-            }
-        )
+        logger.info(f"尝试使用备用IP验证方式")
+        return await _fallback_ip_verification(client_ip, endpoint)

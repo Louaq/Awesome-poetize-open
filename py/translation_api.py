@@ -311,35 +311,19 @@ class TranslationManager:
             return default_config
     
     def load_config(self) -> Optional[TranslationConfig]:
-        """加载翻译配置
+        """加载翻译配置（统一JSON缓存）
 
-        缓存策略：
-        - Redis永久缓存 + 基于文件修改时间的主动失效
-        - 配置文件修改时立即清除Redis缓存，确保数据一致性
+        使用统一的JSON配置缓存系统，基于文件哈希的智能缓存
         """
-        import time
-        current_time = time.time()
-        current_file_mtime = self._get_file_mtime()
-
-        # 检查文件是否被修改，如果是则主动清除Redis缓存
-        self._clear_cache_if_file_changed(current_file_mtime)
-
-        # 优先从Redis缓存获取完整配置
         try:
-            cached_config = self.cache_service.get(self._config_cache_key)
-            if cached_config and self._is_cache_valid(current_file_mtime):
-                logger.debug("从Redis缓存获取翻译配置")
-                return TranslationConfig(**cached_config)
-        except Exception as e:
-            logger.warning(f"从Redis获取翻译配置失败: {e}")
+            from json_config_cache import get_json_config_cache
+            json_cache = get_json_config_cache()
 
-        try:
-            if not os.path.exists(self.config_file):
+            # 使用统一的JSON配置缓存
+            data = json_cache.get_json_config('translation_config', self.config_file)
+            if not data:
                 logger.warning("翻译配置文件不存在")
                 return None
-
-            with open(self.config_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
             
             # 确保基本结构存在
             if data is None:
@@ -380,19 +364,7 @@ class TranslationManager:
                         data['llm']['api_key'] = None
             
             config = TranslationConfig(**data)
-
-            # 更新Redis缓存（永久存储，不设置过期时间）
-            try:
-                self.cache_service.set(
-                    self._config_cache_key,
-                    config.dict()
-                    # 移除expire_time参数，使用永久缓存
-                )
-                logger.debug("翻译配置已永久缓存到Redis")
-            except Exception as e:
-                logger.warning(f"缓存翻译配置到Redis失败: {e}")
-
-            self._file_mtime = current_file_mtime
+            logger.debug("从统一缓存获取翻译配置")
             return config
         except Exception as e:
             logger.error(f"加载翻译配置失败: {e}")
@@ -454,29 +426,14 @@ class TranslationManager:
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
 
-            # 立即清除Redis缓存，确保配置修改后的数据一致性
+            # 使用统一JSON缓存管理器刷新缓存
             try:
-                # 检查缓存键是否存在
-                config_exists = self.cache_service.exists(self._config_cache_key)
-                default_lang_exists = self.cache_service.exists(self._default_lang_cache_key)
-
-                # 清除完整配置缓存
-                config_deleted = self.cache_service.delete(self._config_cache_key)
-                # 清除默认语言配置缓存
-                default_lang_deleted = self.cache_service.delete(self._default_lang_cache_key)
-
-                # 改进日志记录
-                config_status = self._get_cache_clear_status(config_exists, config_deleted)
-                default_lang_status = self._get_cache_clear_status(default_lang_exists, default_lang_deleted)
-
-                logger.info(f"配置保存后立即清除Redis缓存: "
-                          f"完整配置={config_status}, "
-                          f"默认语言={default_lang_status}")
+                from json_config_cache import get_json_config_cache
+                json_cache = get_json_config_cache()
+                json_cache.invalidate_json_cache('translation_config')
+                logger.info("翻译配置缓存已刷新")
             except Exception as e:
-                logger.error(f"清除Redis缓存失败: {e}")
-
-            # 重置文件修改时间，强制下次访问时重新检查文件
-            self._file_mtime = 0
+                logger.error(f"刷新翻译配置缓存失败: {e}")
 
             logger.info("翻译配置保存成功")
             return True

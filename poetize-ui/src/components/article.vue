@@ -1796,6 +1796,7 @@
     bottom: 15px;
     left: 20%;
     color: var(--white);
+    z-index: 1000;
   }
 
 
@@ -1988,6 +1989,7 @@
     .article-info-container {
       left: 20px;
       max-width: 320px;
+      z-index: 1000;
     }
 
     .article-info-news {

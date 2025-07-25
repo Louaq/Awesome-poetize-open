@@ -12,47 +12,162 @@ from fastapi import FastAPI, Request, HTTPException, Depends
 from config import BASE_BACKEND_URL, JAVA_CONFIG_URL
 from auth_decorator import admin_required  # 导入管理员权限装饰器
 
-# 邮箱配置文件路径 - 修改为与Java端一致的配置文件名
+# 邮箱配置文件路径
 EMAIL_CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'py', 'data', 'mail_configs.json')
 
+# 数据存储路径
+DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+if not os.path.exists(DATA_DIR):
+    os.makedirs(DATA_DIR)
+
+def init_data_files():
+    """初始化数据文件，如果文件存在但内容不正确也会修复
+
+    从 web_admin_api.py 迁移而来，确保邮件配置文件正确初始化
+    """
+    # 确保数据目录存在
+    if not os.path.exists(DATA_DIR):
+        os.makedirs(DATA_DIR)
+
+    # 初始化邮箱配置文件
+    email_config_file = os.path.join(DATA_DIR, 'mail_configs.json')
+    if not os.path.exists(email_config_file):
+        with open(email_config_file, 'w', encoding='utf-8') as f:
+            json.dump({"configs": [], "defaultIndex": -1}, f, ensure_ascii=False)
+    else:
+        # 检查文件内容是否正确
+        try:
+            with open(email_config_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                # 如果缺少必要字段，更新文件
+                if not all(key in data for key in ["configs", "defaultIndex"]):
+                    data = {"configs": data.get("configs", []), "defaultIndex": data.get("defaultIndex", -1)}
+                    with open(email_config_file, 'w', encoding='utf-8') as f:
+                        json.dump(data, f, ensure_ascii=False)
+        except:
+            # 如果文件损坏，重新创建
+            with open(email_config_file, 'w', encoding='utf-8') as f:
+                json.dump({"configs": [], "defaultIndex": -1}, f, ensure_ascii=False)
+
 def get_email_configs():
-    """获取所有邮箱配置（带缓存）"""
+    """获取所有邮箱配置（统一JSON缓存）"""
     try:
-        from cache_service import get_cache_service
-        cache_service = get_cache_service()
+        from json_config_cache import get_json_config_cache
+        json_cache = get_json_config_cache()
 
-        # 先尝试从缓存获取
-        cached_configs = cache_service.get_cached_email_config()
-        if cached_configs:
-            print("从缓存获取邮件配置")
-            return cached_configs.get("configs", [])
-
-        if not os.path.exists(EMAIL_CONFIG_FILE):
-            empty_config = {"configs": [], "defaultIndex": -1}
-
-            # 缓存空配置
-            try:
-                cache_service.cache_email_config(empty_config)
-                print("空邮件配置已缓存")
-            except Exception as cache_e:
-                print(f"缓存空邮件配置失败: {cache_e}")
-
+        # 使用统一的JSON配置缓存
+        email_data = json_cache.get_json_config('mail_configs', EMAIL_CONFIG_FILE)
+        if email_data:
+            print("从统一缓存获取邮箱配置")
+            return email_data.get("configs", [])
+        else:
+            print("邮箱配置文件不存在")
             return []
-
-        with open(EMAIL_CONFIG_FILE, 'r', encoding='utf-8') as f:
-            configs = json.load(f)
-
-            # 缓存配置
-            try:
-                cache_service.cache_email_config(configs)
-                print("邮件配置已缓存")
-            except Exception as cache_e:
-                print(f"缓存邮件配置失败: {cache_e}")
-
-            return configs.get("configs", [])
     except Exception as e:
-        print(f"读取邮箱配置文件出错: {str(e)}")
+        print(f"获取邮箱配置出错: {e}")
+        # 降级到直接文件读取
+        try:
+            if os.path.exists(EMAIL_CONFIG_FILE):
+                with open(EMAIL_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                    email_data = json.load(f)
+                    return email_data.get("configs", [])
+        except Exception as file_e:
+            print(f"直接文件读取也失败: {file_e}")
         return []
+
+def save_email_configs(configs, default_index=None):
+    """保存邮箱配置
+
+    Args:
+        configs: 邮箱配置列表
+        default_index: 默认邮箱索引
+
+    Returns:
+        bool: 保存是否成功
+    """
+    try:
+        import os
+        import json
+
+        # 确保数据目录存在
+        config_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data')
+        if not os.path.exists(config_dir):
+            os.makedirs(config_dir)
+
+        # 修改为与Java端一致的配置文件名
+        config_file = os.path.join(config_dir, 'mail_configs.json')
+
+        # 读取现有配置以获取当前的默认索引
+        current_config = {"configs": [], "defaultIndex": -1}
+        if os.path.exists(config_file):
+            with open(config_file, 'r', encoding='utf-8') as f:
+                current_config = json.load(f)
+
+        # 如果未提供默认索引，则使用当前的默认索引
+        if default_index is None:
+            default_index = current_config.get("defaultIndex", -1)
+
+        # 为每个配置添加或更新ID，确保高级配置参数被保存
+        for i, config in enumerate(configs):
+            if 'id' not in config:
+                config['id'] = i + 1
+
+            # 确保高级配置参数存在
+            if 'connectionTimeout' not in config:
+                config['connectionTimeout'] = 25000
+            if 'timeout' not in config:
+                config['timeout'] = 25000
+            if 'jndiName' not in config:
+                config['jndiName'] = ''
+            if 'trustAllCerts' not in config:
+                config['trustAllCerts'] = False
+            if 'customProperties' not in config:
+                config['customProperties'] = {}
+
+        # 构建保存的数据结构
+        save_data = {
+            "configs": configs,
+            "defaultIndex": default_index
+        }
+
+        # 保存到文件
+        with open(config_file, 'w', encoding='utf-8') as f:
+            json.dump(save_data, f, ensure_ascii=False, indent=2)
+
+        print(f"邮箱配置保存成功: {len(configs)} 个配置，默认索引: {default_index}")
+        return True
+
+    except Exception as e:
+        print(f"保存邮箱配置失败: {str(e)}")
+        return False
+
+def get_random_email_config():
+    """获取随机邮箱配置，用于发送验证码等邮件"""
+    configs = get_email_configs()
+
+    # 过滤出已启用的邮箱配置
+    enabled_configs = [config for config in configs if config.get("enabled", False)]
+
+    if not enabled_configs:
+        # 如果没有启用的配置，尝试使用默认配置
+        try:
+            from cache_service import get_cache_service
+            cache_service = get_cache_service()
+            cached_config = cache_service.get_cached_email_config()
+            if cached_config:
+                default_index = cached_config.get("defaultIndex", -1)
+                if default_index >= 0 and default_index < len(configs):
+                    print(f"没有启用的邮箱配置，使用默认配置 (索引: {default_index})")
+                    return configs[default_index]
+        except Exception as e:
+            print(f"获取默认邮箱配置失败: {e}")
+        return None
+
+    # 随机选择一个启用的配置
+    import random
+    selected_config = random.choice(enabled_configs)
+    print(f"随机选择邮箱配置: {selected_config.get('username', 'unknown')}")
+    return selected_config
 
 def get_mail_config(config_id=None):
     """获取指定ID的邮箱配置，如果未指定ID则返回默认配置"""
@@ -274,26 +389,151 @@ def test_email_config(config):
 
 # 注册邮件相关API路由
 def register_email_api(app: FastAPI):
-    @app.post('/api/mail/testConfig')
-    async def test_config_api(request: Request, _: bool = Depends(admin_required)):
-        """测试邮箱配置API - 接受完整的配置对象"""
+    # 确保数据文件存在
+    init_data_files()
+
+    # ============================================================================
+    # 邮件配置管理API端点
+    # ============================================================================
+
+    @app.get('/webInfo/getEmailConfigs')
+    async def get_email_configs_api():
+        """获取邮箱配置（带缓存优化）"""
+        print("收到获取邮箱配置请求")
         try:
-            config = await request.json()
-            if not config:
-                raise HTTPException(status_code=400, detail={"code": 400, "message": "配置信息不能为空"})
-            
-            success, message = test_email_config(config)
-            return {"code": 200 if success else 500, "message": message}
+            # 使用缓存实现
+            email_configs = get_email_configs()
+            print(f"返回邮箱配置数据（已缓存优化）: {len(email_configs) if email_configs else 0} 个配置")
+            return {
+                "code": 200,
+                "message": "获取成功",
+                "data": email_configs
+            }
+        except Exception as e:
+            print(f"获取邮箱配置失败: {e}")
+            return {
+                "code": 500,
+                "message": f"获取邮箱配置失败: {str(e)}",
+                "data": []
+            }
+
+    @app.get('/webInfo/getDefaultMailConfig')
+    async def get_default_mail_config():
+        """获取默认邮箱配置索引（带缓存优化）"""
+        print("收到获取默认邮箱配置索引请求")
+        try:
+            # 使用统一JSON缓存获取邮件配置
+            from json_config_cache import get_json_config_cache
+            json_cache = get_json_config_cache()
+
+            email_data = json_cache.get_json_config('mail_configs', EMAIL_CONFIG_FILE)
+            if email_data:
+                default_index = email_data.get("defaultIndex", -1)
+                print(f"从统一缓存返回默认邮箱配置索引: {default_index}")
+                return {
+                    "code": 200,
+                    "message": "获取成功",
+                    "data": default_index
+                }
+        except Exception as e:
+            print(f"从统一缓存获取默认邮箱索引失败: {e}")
+
+        # 降级到文件读取
+        try:
+            if os.path.exists(EMAIL_CONFIG_FILE):
+                with open(EMAIL_CONFIG_FILE, 'r', encoding='utf-8') as f:
+                    email_data = json.load(f)
+                    default_index = email_data.get('defaultIndex', -1)
+                    print(f"从文件返回默认邮箱配置索引: {default_index}")
+                    return {
+                        "code": 200,
+                        "message": "获取成功",
+                        "data": default_index
+                    }
+        except Exception as e:
+            print(f"从文件获取默认邮箱索引失败: {e}")
+
+        return {
+            "code": 200,
+            "message": "获取成功",
+            "data": -1
+        }
+
+    @app.post('/webInfo/saveEmailConfigs')
+    async def save_email_configs_api(request: Request, _: bool = Depends(admin_required)):
+        """保存邮箱配置API"""
+        try:
+            # 获取URL中的默认索引参数
+            default_index_str = request.query_params.get('defaultIndex', '-1')
+            try:
+                default_index = int(default_index_str)
+            except ValueError:
+                default_index = -1
+
+            # 获取请求体中的配置数据
+            configs = await request.json()
+            print(f"收到保存邮箱配置请求，配置数量: {len(configs)}, 默认索引: {default_index}")
+
+            # 验证配置数据
+            if not isinstance(configs, list):
+                raise HTTPException(status_code=400, detail={
+                    "code": 400,
+                    "message": "配置数据格式错误，应为数组",
+                    "data": None
+                })
+
+            # 为每个配置添加必要的字段和默认值
+            for config in configs:
+                # 确保必要字段存在
+                if 'enabled' not in config:
+                    config['enabled'] = True
+                if 'customProperties' not in config:
+                    config['customProperties'] = config.get('customProperties', {})
+
+            save_result = save_email_configs(configs, default_index)
+
+            if save_result:
+                # 使用统一JSON缓存管理器刷新缓存
+                try:
+                    from json_config_cache import get_json_config_cache
+                    json_cache = get_json_config_cache()
+                    json_cache.invalidate_json_cache('mail_configs')
+                    print("邮件配置缓存已刷新")
+                except Exception as cache_e:
+                    print(f"刷新邮件配置缓存失败: {cache_e}")
+                    # 缓存刷新失败不影响保存成功的状态
+
+                print(f"邮箱配置保存成功，共{len(configs)}个配置，默认索引: {default_index}")
+                return {
+                    "code": 200,
+                    "message": "保存成功",
+                    "data": None
+                }
+            else:
+                print(f"邮箱配置保存失败")
+                raise HTTPException(status_code=500, detail={
+                    "code": 500,
+                    "message": "保存失败",
+                    "data": None
+                })
         except HTTPException:
             raise
         except Exception as e:
-            print(f"测试邮箱配置API出错: {str(e)}")
-            raise HTTPException(status_code=500, detail={"code": 500, "message": f"测试邮箱配置失败: {str(e)}"})
+            print(f"保存邮箱配置出错: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            raise HTTPException(status_code=500, detail={
+                "code": 500,
+                "message": f"保存失败: {str(e)}",
+                "data": None
+            })
 
-    # 添加与前端匹配的路由
+    # ============================================================================
+    # 邮件测试API端点
+    # ============================================================================
     @app.post('/webInfo/testEmailConfig')
-    async def test_email_config_alt(request: Request, _: bool = Depends(admin_required)):
-        """测试邮箱配置（前端适配接口）"""
+    async def test_email_config_api(request: Request, _: bool = Depends(admin_required)):
+        """测试邮箱配置API - 前端使用，优先调用Java API，提供降级机制"""
         print("接收到测试邮箱配置请求")
         try:
             config = await request.json()
@@ -552,3 +792,4 @@ def register_email_api(app: FastAPI):
                 "message": f"设置失败: {str(e)}",
                 "data": None
             })
+

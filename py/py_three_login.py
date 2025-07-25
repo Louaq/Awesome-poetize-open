@@ -1,312 +1,373 @@
-import httpx
+"""
+第三方登录服务
+使用工厂模式和策略模式重构的OAuth登录服务
+
+主要改进：
+1. 使用工厂模式管理OAuth提供商
+2. 统一的错误处理机制
+3. 可扩展的架构设计
+4. 保持与现有代码的完全兼容性
+"""
+
 import os
-import secrets
-from urllib.parse import parse_qs, urlencode, quote
-from google.oauth2 import id_token
-from google.auth.transport import requests as google_requests
-from oauthlib.oauth1 import Client
-from fastapi import FastAPI, Request, HTTPException, Depends
+import logging
+import httpx
+from typing import Dict, Any, Optional
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import RedirectResponse, JSONResponse
 from starlette.middleware.sessions import SessionMiddleware
-from config import SECRET_KEY, JAVA_BACKEND_URL, FRONTEND_URL, JAVA_CONFIG_URL, BASE_BACKEND_URL
+
+# 导入现有模块（保持兼容性）
+from config import SECRET_KEY, JAVA_BACKEND_URL, FRONTEND_URL
 from redis_oauth_state_manager import oauth_state_manager, get_session_id
-from cache_service import get_cache_service
+import httpx
 
-# 定义Yandex OAuth实现
-class YandexOAuth:
-    @staticmethod
-    def get_session():
-        return None  # 简化实现，不需要session对象
-        
-# 创建Yandex替代模块
-yandex = YandexOAuth()
+# 导入重构的OAuth模块
+from oauth import OAuthProviderFactory, OAuthConfigManager, OAuthError, ConfigurationError
+from oauth.providers.twitter import TwitterProvider
 
-# 修复导入路径
-ENV = os.environ.get("ENV", "development")
-from web_admin_api import get_third_login_config
+# 配置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# 创建独立运行使用的FastAPI应用
-app = FastAPI()
-app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+# ============================================================================
+# 第三方登录配置获取函数
+# ============================================================================
 
-# ============================
-# 工具函数
-# ============================
-def generate_state_token():
-    """生成防CSRF的随机state"""
-    return secrets.token_urlsafe(16)
-
-def get_oauth_config(provider):
-    try:
-        # 从本地配置文件中获取第三方登录配置
-        config = get_third_login_config()
-        if not config:
-            print(f"无法获取第三方登录配置")
-            return None
-        
-        # 检查第三方登录功能是否启用
-        if not config.get('enable', False):
-            print(f"第三方登录功能未启用")
-            return None
-        
-        # 获取特定提供商的配置
-        provider_config = config.get(provider)
-        if not provider_config:
-            print(f"未找到{provider}的配置")
-            return None
-        
-        # 检查该平台是否启用
-        if not provider_config.get('enabled', True):
-            print(f"{provider}平台登录功能未启用")
-            return None
-        
-        # 检查配置是否完整
-        if provider == 'twitter':
-            if not (provider_config.get('client_key') and provider_config.get('client_secret')):
-                print(f"{provider}配置不完整")
-                return None
-        else:
-            if not (provider_config.get('client_id') and provider_config.get('client_secret')):
-                print(f"{provider}配置不完整")
-                return None
-        
-        return provider_config
-    except Exception as e:
-        print(f"获取{provider}配置时出错: {str(e)}")
-        return None
-
-# ============================
-# 第三方登录配置
-# ============================
-def get_github_config():
-    configs = get_oauth_config("github")
-    if not configs:
-        return {
-            "client_id": "",
-            "client_secret": "",
-            "auth_url": "https://github.com/login/oauth/authorize",
-            "token_url": "https://github.com/login/oauth/access_token",
-            "user_info_url": "https://api.github.com/user",
-            "emails_url": "https://api.github.com/user/emails",
-            "redirect_uri": "",
-            "scope": "user:email"
-        }
-    
-    github_config = configs
-    return {
-        "client_id": github_config.get("client_id", ""),
-        "client_secret": github_config.get("client_secret", ""),
-        "auth_url": "https://github.com/login/oauth/authorize",
-        "token_url": "https://github.com/login/oauth/access_token",
-        "user_info_url": "https://api.github.com/user",
-        "emails_url": "https://api.github.com/user/emails",
-        "redirect_uri": github_config.get("redirect_uri", ""),
-        "scope": "user:email"
-    }
-
-def get_google_config():
-    configs = get_oauth_config("google")
-    if not configs:
-        return {
-            "client_id": "",
-            "client_secret": "",
-            "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
-            "token_url": "https://oauth2.googleapis.com/token",
-            "user_info_url": "https://people.googleapis.com/v1/people/me",
-            "redirect_uri": "",
-            "scope": "openid email profile"
-        }
-    
-    google_config = configs
-    return {
-        "client_id": google_config.get("client_id", ""),
-        "client_secret": google_config.get("client_secret", ""),
-        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
-        "token_url": "https://oauth2.googleapis.com/token",
-        "user_info_url": "https://people.googleapis.com/v1/people/me",
-        "redirect_uri": google_config.get("redirect_uri", ""),
-        "scope": "openid email profile"
-    }
-
-def get_twitter_config():
-    configs = get_oauth_config("x")
-    if not configs:
-        return {
-            "client_key": "",
-            "client_secret": "",
-            "request_token_url": "https://api.twitter.com/oauth/request_token",
-            "auth_url": "https://api.twitter.com/oauth/authenticate",
-            "access_token_url": "https://api.twitter.com/oauth/access_token",
-            "user_info_url": "https://api.twitter.com/1.1/account/verify_credentials.json",
-            "redirect_uri": "",
-            "include_email": "true"
-        }
-    
-    twitter_config = configs
-    return {
-        "client_key": twitter_config.get("client_key", ""),
-        "client_secret": twitter_config.get("client_secret", ""),
-        "request_token_url": "https://api.twitter.com/oauth/request_token",
-        "auth_url": "https://api.twitter.com/oauth/authenticate",
-        "access_token_url": "https://api.twitter.com/oauth/access_token",
-        "user_info_url": "https://api.twitter.com/1.1/account/verify_credentials.json",
-        "redirect_uri": twitter_config.get("redirect_uri", ""),
-        "include_email": "true"
-    }
-
-def get_yandex_config():
-    configs = get_oauth_config("yandex")
-    if not configs:
-        return {
-            "client_id": "",
-            "client_secret": "",
-            "auth_url": "https://oauth.yandex.com/authorize",
-            "token_url": "https://oauth.yandex.com/token",
-            "user_info_url": "https://login.yandex.ru/info",
-            "redirect_uri": "",
-            "scope": "login:email login:info"
-        }
-    
-    yandex_config = configs
-    return {
-        "client_id": yandex_config.get("client_id", ""),
-        "client_secret": yandex_config.get("client_secret", ""),
-        "auth_url": "https://oauth.yandex.com/authorize",
-        "token_url": "https://oauth.yandex.com/token",
-        "user_info_url": "https://login.yandex.ru/info",
-        "redirect_uri": yandex_config.get("redirect_uri", ""),
-        "scope": "login:email login:info"
-    }
-
-def get_gitee_config():
-    configs = get_oauth_config("gitee")
-    if not configs:
-        return {
-            "client_id": "",
-            "client_secret": "",
-            "auth_url": "https://gitee.com/oauth/authorize",
-            "token_url": "https://gitee.com/oauth/token",
-            "user_info_url": "https://gitee.com/api/v5/user",
-            "redirect_uri": "",
-            "scope": "user_info emails"
-        }
-    
-    gitee_config = configs
-    return {
-        "client_id": gitee_config.get("client_id", ""),
-        "client_secret": gitee_config.get("client_secret", ""),
-        "auth_url": "https://gitee.com/oauth/authorize",
-        "token_url": "https://gitee.com/oauth/token",
-        "user_info_url": "https://gitee.com/api/v5/user",
-        "redirect_uri": gitee_config.get("redirect_uri", ""),
-        "scope": "user_info emails"
-    }
-
-# ============================
-# 邮箱检测工具函数
-# ============================
-def check_email_collection_needed(email, provider):
+def get_oauth_login_config():
     """
-    检查是否需要前端收集邮箱
-
-    Args:
-        email: 从OAuth API获取的邮箱地址
-        provider: OAuth提供商名称
+    获取第三方登录配置（直接调用Java API）
 
     Returns:
-        tuple: (processed_email, email_collection_needed)
+        dict: 第三方登录配置字典，包含各平台配置
+        None: 获取失败时返回None
     """
-    # 检查邮箱是否为空或无效
-    if not email or email.strip() == "":
-        print(f"{provider}用户未绑定邮箱，需要前端收集")
-        return "", True
-
-    # 邮箱存在且有效
-    return email.strip(), False
-
-# ============================
-# 路由定义
-# ============================
-async def oauth_login(provider: str, request: Request):
-    """统一登录入口"""
-    print(f"启动 {provider} OAuth登录")
-
-    # 检查session是否可用
     try:
-        test_session = request.session
-    except Exception as e:
-        print(f"Session中间件错误: {e}")
-        return JSONResponse({"error": "Session middleware not available"}, status_code=500)
-
-    config = None
-    if provider == "github":
-        config = get_github_config()
-    elif provider == "google":
-        config = get_google_config()
-    elif provider == "x":
-        config = get_twitter_config()
-    elif provider == "yandex":
-        config = get_yandex_config()
-    elif provider == "gitee":
-        config = get_gitee_config()
-
-    if not config:
-        print(f"{provider} OAuth配置未找到")
-        return JSONResponse({"error": "Unsupported provider"}, status_code=400)
-    
-    # 检查配置有效性
-    if provider != "x" and (not config.get("client_id") or not config.get("client_secret")):
-        return JSONResponse({"error": "未配置OAuth信息，请先在后台设置"}, status_code=400)
-    elif provider == "x" and (not config.get("client_key") or not config.get("client_secret")):
-        return JSONResponse({"error": "未配置OAuth信息，请先在后台设置"}, status_code=400)
-
-    try:
-        # Twitter OAuth 1.0 特殊处理
-        if provider == "x":
-            client = Client(config["client_key"], config["client_secret"])
-            uri, headers, body = client.sign(
-                config["request_token_url"],
-                http_method="POST",
-                callback_uri=config["redirect_uri"]
-            )
-            async with httpx.AsyncClient() as client:
-                response = await client.post(uri, headers=headers, data=body)
-            if response.status_code != 200:
-                return JSONResponse({"error": "Twitter request token failed"}, status_code=500)
-
-            request_token = parse_qs(response.text)
-            oauth_token = request_token.get("oauth_token", [None])[0]
-            request.session["x_oauth_token_secret"] = request_token.get("oauth_token_secret", [None])[0]
-
-            auth_url = f"{config['auth_url']}?oauth_token={oauth_token}"
-            return RedirectResponse(auth_url)
-
-        # OAuth 2.0 平台处理 - 使用改进的状态管理
-        session_id = get_session_id(request)
-        state = oauth_state_manager.generate_state(provider, session_id)
-
-        # 同时存储到session作为备份（如果session可用）
-        try:
-            request.session[f"{provider}_state"] = state
-        except Exception as e:
-            print(f"无法存储到session，使用状态管理器: {e}")
-
-        auth_params = {
-            "client_id": config["client_id"],
-            "redirect_uri": config["redirect_uri"],
-            "scope": config.get("scope", ""),
-            "state": state,
-            "response_type": "code"
+        java_api_url = f"{JAVA_BACKEND_URL}/webInfo/getThirdLoginConfig"
+        headers = {
+            "Content-Type": "application/json",
+            "X-Internal-Service": "poetize-python-oauth",
+            "User-Agent": "poetize-python-oauth/1.0.0"
         }
-        if provider == "google":
-            auth_params["access_type"] = "offline"  # 获取refresh_token
 
-        auth_url = config["auth_url"] + "?" + urlencode(auth_params)
-        return RedirectResponse(auth_url)
+        with httpx.Client(timeout=10.0) as client:
+            response = client.get(java_api_url, headers=headers)
+            if response.status_code == 200:
+                result = response.json()
+                if result.get("code") == 200 and result.get("data"):
+                    logger.info("OAuth配置获取成功")
+                    return result["data"]
+                else:
+                    logger.warning(f"Java API返回错误: {result.get('message', '未知错误')}")
+                    return None
+            else:
+                logger.warning(f"Java API请求失败，状态码: {response.status_code}")
+                return None
 
     except Exception as e:
-        print(f"Login init failed: {str(e)}")
-        return JSONResponse({"error": "Service unavailable"}, status_code=500)
+        logger.error(f"获取OAuth配置失败: {str(e)}")
+        return None
+
+# 创建FastAPI应用
+app = FastAPI(title="第三方登录服务", version="2.0.0")
+app.add_middleware(SessionMiddleware, secret_key=SECRET_KEY)
+
+# 初始化OAuth工厂（使用新的配置函数）
+config_manager = OAuthConfigManager(config_source_func=get_oauth_login_config)
+oauth_factory = OAuthProviderFactory(config_manager)
+
+
+class OAuthService:
+    """OAuth服务类 - 封装OAuth相关业务逻辑"""
+    
+    def __init__(self, factory: OAuthProviderFactory):
+        self.factory = factory
+    
+    async def initiate_login(self, provider: str, request: Request) -> RedirectResponse:
+        """
+        发起OAuth登录
+        
+        Args:
+            provider: OAuth提供商名称
+            request: FastAPI请求对象
+            
+        Returns:
+            RedirectResponse: 重定向到OAuth授权页面
+        """
+        try:
+            # 创建提供商实例
+            oauth_provider = self.factory.create_provider(provider)
+            
+            # 特殊处理Twitter OAuth 1.0
+            if provider == "x":
+                return await self._handle_twitter_login(oauth_provider, request)
+            
+            # 处理OAuth 2.0登录
+            return await self._handle_oauth2_login(oauth_provider, request)
+            
+        except ConfigurationError as e:
+            logger.warning(f"OAuth配置错误: {e.message}")
+            return JSONResponse(
+                {"error": "未配置OAuth信息，请先在后台设置"}, 
+                status_code=400
+            )
+        except OAuthError as e:
+            logger.error(f"OAuth登录失败: {e.message}")
+            return JSONResponse(
+                {"error": "OAuth服务暂时不可用"}, 
+                status_code=500
+            )
+    
+    async def _handle_twitter_login(self, provider: TwitterProvider, request: Request) -> RedirectResponse:
+        """处理Twitter OAuth 1.0登录"""
+        try:
+            # 获取request token
+            callback_uri = provider.config["redirect_uri"]
+            request_token_data = await provider.get_request_token(callback_uri)
+            
+            # 存储token secret到session
+            request.session["x_oauth_token_secret"] = request_token_data["oauth_token_secret"]
+            
+            # 生成授权URL
+            auth_url = f"{provider.config['auth_url']}?oauth_token={request_token_data['oauth_token']}"
+            return RedirectResponse(auth_url)
+            
+        except Exception as e:
+            logger.error(f"Twitter登录失败: {str(e)}")
+            return JSONResponse({"error": "Twitter登录服务暂时不可用"}, status_code=500)
+    
+    async def _handle_oauth2_login(self, provider, request: Request) -> RedirectResponse:
+        """处理OAuth 2.0登录"""
+        try:
+            # 生成state token
+            session_id = get_session_id(request)
+            state = oauth_state_manager.generate_state(provider.provider_name, session_id)
+            
+            # 备份到session
+            try:
+                request.session[f"{provider.provider_name}_state"] = state
+            except Exception as e:
+                logger.warning(f"无法存储到session: {e}")
+            
+            # 生成授权URL
+            auth_url = provider.get_auth_url(state)
+            return RedirectResponse(auth_url)
+            
+        except Exception as e:
+            logger.error(f"OAuth 2.0登录失败: {str(e)}")
+            return JSONResponse({"error": "OAuth登录服务暂时不可用"}, status_code=500)
+    
+    async def handle_callback(self, provider: str, request: Request) -> RedirectResponse:
+        """
+        处理OAuth回调
+        
+        Args:
+            provider: OAuth提供商名称
+            request: FastAPI请求对象
+            
+        Returns:
+            RedirectResponse: 重定向响应
+        """
+        try:
+            # 获取回调参数
+            code = request.query_params.get("code")
+            state = request.query_params.get("state")
+            error = request.query_params.get("error")
+            
+            # 检查OAuth错误
+            if error:
+                logger.warning(f"OAuth授权失败: provider={provider}, error={error}")
+                return RedirectResponse(f"{FRONTEND_URL}/oauth-callback?error={error}&platform={provider}")
+            
+            # 创建提供商实例
+            oauth_provider = self.factory.create_provider(provider)
+            
+            # 验证state（OAuth 2.0）
+            if provider != "x":
+                if not await self._validate_oauth2_state(state, provider):
+                    return RedirectResponse(f"{FRONTEND_URL}/oauth-callback?error=state_validation_failed&platform={provider}")
+            
+            # 获取用户信息
+            if provider == "x":
+                user_data = await self._handle_twitter_callback(oauth_provider, request)
+            else:
+                user_data = await self._handle_oauth2_callback(oauth_provider, code)
+            
+            # 调用Java后端处理登录
+            return await self._process_login_result(user_data, provider, request)
+            
+        except ConfigurationError as e:
+            logger.error(f"OAuth配置错误: {e.message}")
+            return RedirectResponse(f"{FRONTEND_URL}/oauth-callback?error=config_error&platform={provider}")
+        except OAuthError as e:
+            logger.error(f"OAuth回调处理失败: {e.message}")
+            return RedirectResponse(f"{FRONTEND_URL}/oauth-callback?error=oauth_error&platform={provider}")
+        except Exception as e:
+            logger.error(f"OAuth回调异常: provider={provider}, error={str(e)}")
+            return RedirectResponse(f"{FRONTEND_URL}/oauth-callback?error=callback_error&platform={provider}")
+    
+    async def _validate_oauth2_state(self, state: str, provider: str) -> bool:
+        """验证OAuth 2.0 state"""
+        try:
+            # 使用本模块的state验证逻辑（保持兼容性）
+            state_info = get_state_info_before_validation(state, provider)
+            if not state_info:
+                return False
+
+            action_type = state_info.get("action", "login")
+            validation_result = secure_validate_oauth_state(state, provider, action_type)
+
+            return validation_result.get("success", False)
+
+        except Exception as e:
+            logger.error(f"State验证异常: {str(e)}")
+            return False
+
+    async def _handle_twitter_callback(self, provider: TwitterProvider, request: Request) -> Dict[str, Any]:
+        """处理Twitter回调"""
+        oauth_token = request.query_params.get("oauth_token")
+        oauth_verifier = request.query_params.get("oauth_verifier")
+        oauth_token_secret = request.session.get("x_oauth_token_secret")
+
+        if not all([oauth_token, oauth_verifier, oauth_token_secret]):
+            raise OAuthError("Twitter回调参数不完整", "invalid_params", "x")
+
+        # 获取访问令牌
+        access_token_data = await provider.get_access_token(
+            oauth_token, oauth_token_secret, oauth_verifier
+        )
+
+        # 获取用户信息
+        user_info = await provider.get_user_info(
+            access_token_data["access_token"],
+            access_token_data["access_token_secret"]
+        )
+
+        return user_info
+
+    async def _handle_oauth2_callback(self, provider, code: str) -> Dict[str, Any]:
+        """处理OAuth 2.0回调"""
+        if not code:
+            raise OAuthError(f"{provider.provider_name}回调缺少授权码", "missing_code", provider.provider_name)
+
+        # 获取访问令牌
+        access_token = await provider.get_access_token(code)
+
+        # 获取用户信息
+        user_info = await provider.get_user_info(access_token)
+
+        return user_info
+
+    async def _process_login_result(self, user_data: Dict[str, Any], provider: str, request: Request) -> RedirectResponse:
+        """处理登录结果"""
+        try:
+            # 使用本模块的Java后端调用逻辑（保持兼容性）
+            java_response = await call_java_login_api(user_data)
+            response_data = java_response.json()
+
+            if java_response.status_code == 200 and response_data.get("code") == 200:
+                user_result = response_data.get("data", {})
+                access_token = user_result.get("accessToken")
+                response_message = response_data.get("message", "")
+
+                if access_token:
+                    # 检查是否需要邮箱收集
+                    if response_message == "EMAIL_COLLECTION_NEEDED":
+                        return RedirectResponse(f"{FRONTEND_URL}?userToken={access_token}&emailCollectionNeeded=true")
+                    else:
+                        return RedirectResponse(f"{FRONTEND_URL}?userToken={access_token}")
+
+            # 登录失败
+            error_message = response_data.get("message", "登录失败")
+            return RedirectResponse(f"{FRONTEND_URL}/oauth-callback?error={error_message}&platform={provider}")
+
+        except Exception as e:
+            logger.error(f"处理登录结果失败: {str(e)}")
+            return RedirectResponse(f"{FRONTEND_URL}/oauth-callback?error=login_processing_failed&platform={provider}")
+
+
+# 创建OAuth服务实例
+oauth_service = OAuthService(oauth_factory)
+
+
+# ============================
+# FastAPI路由定义
+# ============================
+
+@app.get('/login/{provider}')
+async def login_route(provider: str, request: Request):
+    """OAuth登录入口"""
+    logger.info(f"启动 {provider} OAuth登录")
+    return await oauth_service.initiate_login(provider, request)
+
+
+@app.get('/callback/{provider}')
+async def callback_route(provider: str, request: Request):
+    """OAuth回调处理"""
+    logger.info(f"处理 {provider} OAuth回调")
+    return await oauth_service.handle_callback(provider, request)
+
+
+@app.get('/health')
+async def health_check():
+    """健康检查接口"""
+    return {
+        "status": "ok",
+        "service": "third-party-login-service-refactored",
+        "version": "2.0.0",
+        "supported_providers": oauth_factory.get_supported_providers(),
+        "enabled_providers": oauth_factory.get_enabled_providers()
+    }
+
+
+@app.get('/providers')
+async def get_providers():
+    """获取支持的OAuth提供商信息"""
+    return {
+        "supported_providers": oauth_factory.get_supported_providers(),
+        "enabled_providers": oauth_factory.get_enabled_providers()
+    }
+
+
+# ============================
+# 兼容性接口
+# ============================
+
+def register_third_login_api(fastapi_app: FastAPI):
+    """注册第三方登录相关API（兼容性接口）"""
+    # 为了保持与原版本的完全兼容性，我们需要将路由注册到传入的app实例
+
+    @fastapi_app.get('/login/{provider}')
+    async def login_route_compat(provider: str, request: Request):
+        """OAuth登录入口（兼容性路由）"""
+        logger.info(f"启动 {provider} OAuth登录")
+        return await oauth_service.initiate_login(provider, request)
+
+    @fastapi_app.get('/callback/{provider}')
+    async def callback_route_compat(provider: str, request: Request):
+        """OAuth回调处理（兼容性路由）"""
+        logger.info(f"处理 {provider} OAuth回调")
+        return await oauth_service.handle_callback(provider, request)
+
+    @fastapi_app.get('/health')
+    async def health_check_compat():
+        """健康检查接口（兼容性路由）"""
+        return {
+            "status": "ok",
+            "service": "third-party-login-service"  # 保持与原版本一致
+        }
+
+    @fastapi_app.get('/oauth/providers')
+    async def get_providers_compat():
+        """获取支持的OAuth提供商信息（兼容性路由）"""
+        return {
+            "supported_providers": oauth_factory.get_supported_providers(),
+            "enabled_providers": oauth_factory.get_enabled_providers()
+        }
+
+# ============================
+# 原版本兼容性函数 - State验证相关
+# ============================
 
 def determine_action_type_from_state_info(state_info: dict) -> str:
     """
@@ -485,7 +546,9 @@ def secure_validate_oauth_state(state: str, provider: str, action_type: str = "l
             "message": "状态验证过程中发生错误"
         }
 
-
+# ============================
+# Java后端API调用函数
+# ============================
 
 async def call_java_bind_api_direct(provider: str, code: str, state: str, state_info: dict):
     """
@@ -569,468 +632,69 @@ async def call_java_login_api(unified_data: dict):
 
         return MockResponse(500, {"code": 500, "message": f"登录失败: {str(e)}"})
 
+# ============================
+# 主要兼容性接口函数
+# ============================
+
+# 为了保持与原版本的完全兼容性，我们需要导出原有的函数名
+async def oauth_login(provider: str, request: Request):
+    """OAuth登录函数（兼容性接口）"""
+    return await oauth_service.initiate_login(provider, request)
+
 async def oauth_callback(provider: str, request: Request):
-    """统一OAuth回调处理 - 使用安全的state验证机制"""
-    import logging
-    logger = logging.getLogger(__name__)
+    """OAuth回调函数（兼容性接口）"""
+    return await oauth_service.handle_callback(provider, request)
 
-    logger.info(f"开始处理OAuth回调: provider={provider}")
 
-    # 获取OAuth参数
-    code = request.query_params.get("code")
-    state = request.query_params.get("state")
-    error = request.query_params.get("error")
+# ============================
+# 扩展示例：添加新的OAuth提供商
+# ============================
 
-    # 检查OAuth错误
-    if error:
-        logger.warning(f"OAuth授权失败: provider={provider}, error={error}")
-        return RedirectResponse(f"{FRONTEND_URL}/oauth-callback?error={error}&platform={provider}")
+def add_new_provider_example():
+    """
+    示例：如何添加新的OAuth提供商
+    这展示了重构后架构的可扩展性
+    """
+    from oauth.base import OAuth2Provider
+    from typing import Dict, Any
 
-    # 🔒 在状态验证前先安全地获取操作类型，并验证provider匹配
-    state_info = get_state_info_before_validation(state, provider)
-    action_type = determine_action_type_from_state_info(state_info)
+    class LinkedInProvider(OAuth2Provider):
+        """LinkedIn OAuth提供商示例"""
 
-    logger.info(f"检测到操作类型: provider={provider}, action={action_type}")
+        def get_provider_name(self) -> str:
+            return "linkedin"
 
-    # 执行安全的state验证
-    validation_result = secure_validate_oauth_state(state, provider, action_type)
-    if not validation_result["success"]:
-        error_code = validation_result.get("error", "unknown")
-        error_message = validation_result.get("message", "状态验证失败")
+        async def get_access_token(self, code: str) -> str:
+            # LinkedIn特定的token获取逻辑
+            pass
 
-        logger.warning(f"OAuth状态验证失败: provider={provider}, error={error_code}, message={error_message}")
+        async def get_user_info(self, access_token: str) -> Dict[str, Any]:
+            # LinkedIn特定的用户信息获取逻辑
+            pass
 
-        # 返回安全的错误信息，不泄露具体的验证失败原因
-        return RedirectResponse(f"{FRONTEND_URL}/oauth-callback?error=state_validation_failed&platform={provider}")
+    # 注册新提供商
+    linkedin_config_template = {
+        "auth_url": "https://www.linkedin.com/oauth/v2/authorization",
+        "token_url": "https://www.linkedin.com/oauth/v2/accessToken",
+        "user_info_url": "https://api.linkedin.com/v2/people/~",
+        "scope": "r_liteprofile r_emailaddress"
+    }
 
-    logger.info(f"OAuth状态验证成功: provider={provider}, action={action_type}")
+    oauth_factory.register_provider("linkedin", LinkedInProvider, linkedin_config_template)
+    print("✅ 成功添加LinkedIn OAuth提供商")
 
-    # 检查session状态（保持向后兼容）
-    try:
-        dict(request.session)
-    except Exception as e:
-        logger.error(f"Session访问错误: provider={provider}, error={str(e)}")
-        return JSONResponse({"error": "Session error"}, status_code=500)
 
-    config = None
-    if provider == "github":
-        config = get_github_config()
-    elif provider == "google":
-        config = get_google_config()
-    elif provider == "x":
-        config = get_twitter_config()
-    elif provider == "yandex":
-        config = get_yandex_config()
-    elif provider == "gitee":
-        config = get_gitee_config()
-
-    if not config:
-        print(f"{provider} OAuth配置未找到")
-        return JSONResponse({"error": "Unsupported provider"}, status_code=400)
-
-    try:
-        # Twitter OAuth 1.0 处理
-        if provider == "x":
-            oauth_token = request.query_params.get("oauth_token")
-            oauth_verifier = request.query_params.get("oauth_verifier")
-            oauth_token_secret = request.session.get("x_oauth_token_secret")
-
-            if not all([oauth_token, oauth_verifier, oauth_token_secret]):
-                return JSONResponse({"error": "Invalid parameters"}, status_code=400)
-
-            client = Client(
-                config["client_key"],
-                config["client_secret"],
-                resource_owner_key=oauth_token,
-                resource_owner_secret=oauth_token_secret,
-                verifier=oauth_verifier
-            )
-            uri, headers, body = client.sign(config["access_token_url"], http_method="POST")
-            async with httpx.AsyncClient() as client:
-                response = await client.post(uri, headers=headers, data=body)
-            access_data = parse_qs(response.text)
-            access_token = access_data.get("oauth_token", [None])[0]
-            access_token_secret = access_data.get("oauth_token_secret", [None])[0]
-
-            # 获取用户信息（带邮箱）
-            auth_client = Client(
-                config["client_key"],
-                config["client_secret"],
-                resource_owner_key=access_token,
-                resource_owner_secret=access_token_secret
-            )
-            user_info_url = f"{config['user_info_url']}?include_email=true"
-            async with httpx.AsyncClient() as client:
-                uri, headers, body = auth_client.sign(user_info_url)
-                user_response = await client.get(uri, headers=headers)
-            user_info = user_response.json()
-
-            # 检查是否需要前端收集邮箱
-            raw_email = user_info.get("email")
-            processed_email, email_collection_needed = check_email_collection_needed(raw_email, "Twitter/X")
-
-            unified_data = {
-                "provider": "x",
-                "uid": user_info.get("id_str"),
-                "username": user_info.get("screen_name"),
-                "email": processed_email,
-                "avatar": user_info.get("profile_image_url_https", "").replace("_normal", ""),
-                "email_collection_needed": email_collection_needed
-            }
-
-        # Yandex 处理
-        elif provider == "yandex":
-            if not code:
-                logger.warning(f"Yandex OAuth错误: 缺少授权码")
-                return JSONResponse({"error": "Missing authorization code"}, status_code=400)
-
-            # state验证已在函数开始时完成，这里直接处理授权码
-
-            async with httpx.AsyncClient() as client:
-                token_response = await client.post(
-                    config["token_url"],
-                    data={
-                        "grant_type": "authorization_code",
-                        "code": code,
-                        "client_id": config["client_id"],
-                        "client_secret": config["client_secret"],
-                        "redirect_uri": config["redirect_uri"]
-                    }
-                )
-            token_data = token_response.json()
-            access_token = token_data.get("access_token")
-
-            async with httpx.AsyncClient() as client:
-                user_response = await client.get(
-                    config["user_info_url"],
-                    params={"format": "json"},
-                    headers={"Authorization": f"OAuth {access_token}"}
-                )
-            user_info = user_response.json()
-
-            # 检查是否需要前端收集邮箱
-            raw_email = user_info.get("default_email")
-            processed_email, email_collection_needed = check_email_collection_needed(raw_email, "Yandex")
-
-            unified_data = {
-                "provider": "yandex",
-                "uid": user_info.get("id"),
-                "username": user_info.get("login"),
-                "email": processed_email,
-                "avatar": f"https://avatars.yandex.net/get-yapic/{user_info.get('default_avatar_id')}/islands-200",
-                "email_collection_needed": email_collection_needed
-            }
-
-        # GitHub 处理
-        elif provider == "github":
-            if not code:
-                logger.warning(f"GitHub OAuth错误: 缺少授权码")
-                return JSONResponse({"error": "Missing authorization code"}, status_code=400)
-
-            # state验证已在函数开始时完成，这里直接处理授权码
-
-            async with httpx.AsyncClient() as client:
-                token_response = await client.post(
-                    config["token_url"],
-                    headers={"Accept": "application/json"},
-                    data={
-                        "client_id": config["client_id"],
-                        "client_secret": config["client_secret"],
-                        "code": code,
-                        "redirect_uri": config["redirect_uri"]
-                    }
-                )
-            access_token = token_response.json().get("access_token")
-
-            async with httpx.AsyncClient() as client:
-                user_info_response = await client.get(
-                    config["user_info_url"],
-                    headers={"Authorization": f"token {access_token}"}
-                )
-                user_info = user_info_response.json()
-
-                emails_response = await client.get(
-                    config["emails_url"],
-                    headers={"Authorization": f"token {access_token}"}
-                )
-                emails = emails_response.json()
-
-            primary_email = next((e["email"] for e in emails if e["primary"] and e["verified"]), None)
-
-            # 检查是否需要前端收集邮箱
-            processed_email, email_collection_needed = check_email_collection_needed(primary_email, "GitHub")
-
-            # 确保所有字段都是字符串类型，避免Java端类型转换问题
-            unified_data = {
-                "provider": "github",
-                "uid": str(user_info.get("id", "")),
-                "username": user_info.get("login", ""),
-                "email": processed_email,
-                "avatar": user_info.get("avatar_url", ""),
-                "email_collection_needed": email_collection_needed
-            }
-
-        # Google 处理
-        elif provider == "google":
-            if not code:
-                logger.warning(f"Google OAuth错误: 缺少授权码")
-                return JSONResponse({"error": "Missing authorization code"}, status_code=400)
-
-            # state验证已在函数开始时完成，这里直接处理授权码
-
-            async with httpx.AsyncClient() as client:
-                token_response = await client.post(
-                    config["token_url"],
-                    data={
-                        "code": code,
-                        "client_id": config["client_id"],
-                        "client_secret": config["client_secret"],
-                        "redirect_uri": config["redirect_uri"],
-                        "grant_type": "authorization_code"
-                    }
-                )
-            token_data = token_response.json()
-            access_token = token_data.get("access_token")
-            id_token_jwt = token_data.get("id_token")
-
-            # 验证ID Token
-            id_info = id_token.verify_oauth2_token(
-                id_token_jwt,
-                google_requests.Request(),
-                config["client_id"]
-            )
-            if id_info['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
-                raise ValueError("Invalid issuer")
-
-            async with httpx.AsyncClient() as client:
-                user_response = await client.get(
-                    config["user_info_url"],
-                    params={"personFields": "names,emailAddresses,photos"},
-                    headers={"Authorization": f"Bearer {access_token}"}
-                )
-            user_data = user_response.json()
-
-            # 检查是否需要前端收集邮箱
-            raw_email = id_info.get("email", "")
-            processed_email, email_collection_needed = check_email_collection_needed(raw_email, "Google")
-
-            # 确保所有字段都是字符串类型
-            unified_data = {
-                "provider": "google",
-                "uid": str(id_info.get("sub", "")),
-                "username": user_data.get("names", [{}])[0].get("displayName", ""),
-                "email": processed_email,
-                "avatar": user_data.get("photos", [{}])[0].get("url", ""),
-                "email_collection_needed": email_collection_needed
-            }
-
-        # Gitee 处理
-        elif provider == "gitee":
-            if not code:
-                logger.warning(f"Gitee OAuth错误: 缺少授权码")
-                return JSONResponse({"error": "Missing authorization code"}, status_code=400)
-
-            # state验证已在函数开始时完成，这里直接处理授权码
-
-            async with httpx.AsyncClient() as client:
-                token_response = await client.post(
-                    config["token_url"],
-                    data={
-                        "client_id": config["client_id"],
-                        "client_secret": config["client_secret"],
-                        "code": code,
-                        "grant_type": "authorization_code",
-                        "redirect_uri": config["redirect_uri"]
-                    }
-                )
-            token_data = token_response.json()
-            access_token = token_data.get("access_token")
-
-            # 获取用户基本信息
-            async with httpx.AsyncClient() as client:
-                user_response = await client.get(
-                    config["user_info_url"],
-                    headers={"Authorization": f"token {access_token}"}
-                )
-            user_info = user_response.json()
-
-            # 获取用户邮箱信息（Gitee需要单独调用邮箱API）
-            user_email = ""
-            try:
-                async with httpx.AsyncClient() as client:
-                    emails_response = await client.get(
-                        "https://gitee.com/api/v5/emails",
-                        headers={"Authorization": f"token {access_token}"}
-                    )
-
-                if emails_response.status_code == 200:
-                    emails_data = emails_response.json()
-
-                    # 优先选择主邮箱
-                    primary_email = None
-                    verified_email = None
-
-                    for email_info in emails_data:
-                        if email_info.get("primary", False):
-                            primary_email = email_info.get("email", "")
-                        elif email_info.get("verified", False) and not verified_email:
-                            verified_email = email_info.get("email", "")
-
-                    # 选择邮箱优先级：主邮箱 > 已验证邮箱 > 第一个邮箱
-                    if primary_email:
-                        user_email = primary_email
-                    elif verified_email:
-                        user_email = verified_email
-                    elif emails_data and len(emails_data) > 0:
-                        user_email = emails_data[0].get("email", "")
-                else:
-                    print(f"Gitee邮箱API请求失败: HTTP {emails_response.status_code}")
-            except Exception as e:
-                print(f"获取Gitee邮箱信息异常: {e}")
-
-            # 检查是否需要前端收集邮箱
-            processed_email, email_collection_needed = check_email_collection_needed(user_email, "Gitee")
-
-            # 确保所有字段都是字符串类型
-            unified_data = {
-                "provider": "gitee",
-                "uid": str(user_info.get("id", "")),
-                "username": user_info.get("login", ""),
-                "email": processed_email,
-                "avatar": user_info.get("avatar_url", ""),
-                "email_collection_needed": email_collection_needed
-            }
-
-        else:
-            return JSONResponse({"error": "Unsupported provider"}, status_code=400)
-
-        # 使用之前获取的操作类型
-        print(f"🎯 使用操作类型: {action_type}")
-
-        if action_type == "bind":
-            # 绑定操作：立即调用Java后端绑定接口，避免授权码过期
-            # 跳过Python端的用户信息获取，减少延迟
-            # code、state、error参数已在函数开始时获取
-
-            if error:
-                logger.warning(f"{provider} OAuth授权失败: {error}")
-                return RedirectResponse(f"{FRONTEND_URL}/oauth-callback?error={error}&platform={provider}")
-            elif code and state:
-                logger.info(f"{provider} OAuth授权成功，立即调用Java绑定接口（跳过Python用户信息获取）")
-
-                # 记录时间戳，用于分析时序
-                import time
-                start_time = time.time()
-                logger.info(f"开始调用Java绑定接口: provider={provider}, timestamp={start_time}")
-
-                # 立即调用Java后端绑定接口，避免授权码过期
-                java_response = await call_java_bind_api_direct(provider, code, state, state_info)
-
-                end_time = time.time()
-                elapsed_time = end_time - start_time
-                logger.info(f"Java绑定接口调用完成: provider={provider}, 耗时={elapsed_time:.2f}秒")
-
-                # 解析Java响应
-                try:
-                    response_data = java_response.json()
-                    logger.info(f"Java响应数据: provider={provider}, status={java_response.status_code}, success={response_data.get('code') == 200}")
-                except Exception as json_error:
-                    logger.error(f"解析Java响应JSON失败: provider={provider}, error={json_error}")
-                    logger.error(f"原始响应: status={java_response.status_code}, content={getattr(java_response, 'text', 'N/A')}")
-                    return RedirectResponse(f"{FRONTEND_URL}/oauth-callback?error=Java后端响应格式错误&platform={provider}")
-
-                if java_response.status_code == 200 and response_data.get("code") == 200:
-                    logger.info(f"{provider} 账号绑定成功，总耗时: {elapsed_time:.2f}秒")
-                    return RedirectResponse(f"{FRONTEND_URL}/oauth-callback?success=true&platform={provider}&message=绑定成功")
-                else:
-                    error_message = response_data.get("message", "绑定失败")
-                    logger.warning(f"{provider} 账号绑定失败: {error_message}，总耗时: {elapsed_time:.2f}秒")
-                    logger.warning(f"失败详情: Java状态码={java_response.status_code}, 业务状态码={response_data.get('code')}")
-                    return RedirectResponse(f"{FRONTEND_URL}/oauth-callback?error={error_message}&platform={provider}")
-            else:
-                print(f"❌ {provider} OAuth回调参数不完整")
-                return RedirectResponse(f"{FRONTEND_URL}/oauth-callback?error=授权参数不完整&platform={provider}")
-        else:
-            # 登录操作：调用登录接口
-            java_response = await call_java_login_api(unified_data)
-
-            # 解析Java响应
-            response_data = java_response.json()
-
-            # 登录操作的响应处理
-            if java_response.status_code == 200 and response_data.get("code") == 200:
-                user_data = response_data.get("data", {})
-                access_token = user_data.get("accessToken")
-                response_message = response_data.get("message", "")
-
-                if access_token:
-                    # 检查是否需要邮箱收集
-                    if response_message == "EMAIL_COLLECTION_NEEDED":
-                        print(f"{provider} OAuth成功，需要邮箱收集")
-                        # 重定向到前端，并添加邮箱收集标记
-                        return RedirectResponse(f"{FRONTEND_URL}?userToken={access_token}&emailCollectionNeeded=true")
-                    else:
-                        print(f"{provider} OAuth成功")
-                        # 正常的OAuth登录重定向
-                        return RedirectResponse(f"{FRONTEND_URL}?userToken={access_token}")
-
-            # 登录失败，返回原始响应
-            return JSONResponse(response_data)
-
-    except httpx.TimeoutException as e:
-        logger.error(f"Java后端调用超时: provider={provider}, error={str(e)}")
-        return JSONResponse({"error": "服务响应超时，请稍后重试"}, status_code=504)
-
-    except httpx.ConnectError as e:
-        logger.error(f"Java后端连接失败: provider={provider}, url={JAVA_BACKEND_URL}, error={str(e)}")
-        return JSONResponse({"error": "服务暂时不可用，请稍后重试"}, status_code=502)
-
-    except httpx.HTTPStatusError as e:
-        logger.error(f"Java后端HTTP错误: provider={provider}, status={e.response.status_code}")
-        return JSONResponse({"error": "服务处理错误，请稍后重试"}, status_code=502)
-
-    except httpx.RequestError as e:
-        logger.error(f"HTTP请求异常: provider={provider}, error={str(e)}")
-        return JSONResponse({"error": "网络请求失败，请检查网络连接"}, status_code=502)
-
-    except ValueError as e:
-        logger.error(f"数据解析失败: provider={provider}, error={str(e)}")
-        return JSONResponse({"error": "数据格式错误，请重新授权"}, status_code=400)
-
-    except Exception as e:
-        logger.error(f"OAuth回调处理失败: provider={provider}, error={str(e)}")
-        return JSONResponse({"error": "OAuth回调处理失败，请重新授权"}, status_code=500)
-
-# 注册第三方登录API到FastAPI应用
-def register_third_login_api(app: FastAPI):
-    """注册第三方登录相关API"""
-    
-    @app.get('/login/{provider}')
-    async def login_route(provider: str, request: Request):
-        return await oauth_login(provider, request)
-    
-    @app.get('/callback/{provider}')
-    async def callback_route(provider: str, request: Request):
-        return await oauth_callback(provider, request)
-    
-    @app.get('/health')
-    async def health_check():
-        """健康检查接口"""
-        return {"status": "ok", "service": "third-party-login-service"}
-
-# 当作为独立模块运行时
 if __name__ == '__main__':
     import uvicorn
-    from web_admin_api import register_web_admin_api
-    
-    # 注册网站管理API
-    register_web_admin_api(app)
-    
-    # 注册第三方登录路由
-    register_third_login_api(app)
-    
+
+    # 第三方登录服务独立运行（架构优化后）
+    logger.info("启动独立的第三方登录OAuth服务")
+
+    # 演示扩展性
+    # add_new_provider_example()
+
     # 启动服务
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 5001))  # 使用不同端口避免冲突
     debug = os.environ.get("ENV") == "development"
-    print(f"启动第三方登录服务，端口: {port}，调试模式: {debug}")
-    uvicorn.run(app, host="0.0.0.0", port=port, debug=debug) 
+    print(f"启动第三方登录服务（重构版），端口: {port}，调试模式: {debug}")
+    uvicorn.run(app, host="0.0.0.0", port=port, debug=debug)
