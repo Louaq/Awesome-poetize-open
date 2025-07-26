@@ -8,6 +8,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.HttpServletRequest;
+import com.ld.poetry.utils.PoetryUtil;
+import com.ld.poetry.constants.CommonConst;
 
 /**
  * 异步任务工具类
@@ -116,11 +119,34 @@ public class AsyncTaskUtil {
      * @param details 操作详情
      */
     public static void logUserOperation(String operation, String details) {
+        // 获取当前用户信息
         String username = getCurrentUsername();
         Integer userId = getCurrentUserId();
         
-        log.info("异步任务用户操作 - 用户: {}(ID: {}), 操作: {}, 详情: {}", 
-                username, userId, operation, details);
+        // 增加更多可能的上下文来源检查
+        User user = getCurrentUser();
+        if (user == null) {
+            // 尝试从当前请求获取用户信息（适用于HTTP请求触发的异步任务）
+            HttpServletRequest request = PoetryUtil.getRequest();
+            if (request != null) {
+                String token = request.getHeader(CommonConst.TOKEN_HEADER);
+                if (token != null && !token.equals("null") && staticUserCacheManager != null) {
+                    try {
+                        user = staticUserCacheManager.getUserByToken(token);
+                        if (user != null) {
+                            username = user.getUsername();
+                            userId = user.getId();
+                            log.debug("异步任务从请求中恢复用户上下文: userId={}, username={}", userId, username);
+                        }
+                    } catch (Exception e) {
+                        log.debug("从请求恢复用户上下文失败: {}", e.getMessage());
+                    }
+                }
+            }
+        }
+        
+        String userInfo = userId != null ? username + "(ID: " + userId + ")" : username;
+        log.info("异步任务用户操作 - 用户: {}, 操作: {}, 详情: {}", userInfo, operation, details);
     }
     
     /**

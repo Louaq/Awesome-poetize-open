@@ -4,8 +4,10 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.ld.poetry.dao.SysConfigMapper;
 import com.ld.poetry.entity.SysConfig;
+import com.ld.poetry.service.CacheService;
 import com.ld.poetry.service.SysConfigService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -20,6 +22,9 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class SysConfigServiceImpl extends ServiceImpl<SysConfigMapper, SysConfig> implements SysConfigService {
 
+    @Autowired
+    private CacheService cacheService;
+
     @Override
     public String getConfigValueByKey(String configKey) {
         if (configKey == null || configKey.trim().isEmpty()) {
@@ -28,12 +33,24 @@ public class SysConfigServiceImpl extends ServiceImpl<SysConfigMapper, SysConfig
         }
         
         try {
+            // 优先从缓存获取
+            String cachedValue = cacheService.getCachedSysConfig(configKey);
+            if (cachedValue != null) {
+                log.debug("从缓存获取配置成功，key: {}, value: {}", configKey, cachedValue);
+                return cachedValue;
+            }
+            
+            // 缓存未命中，从数据库获取
             LambdaQueryWrapper<SysConfig> queryWrapper = new LambdaQueryWrapper<>();
             queryWrapper.eq(SysConfig::getConfigKey, configKey);
             
             SysConfig sysConfig = this.getOne(queryWrapper);
             if (sysConfig != null) {
-                log.debug("获取配置成功，key: {}, value: {}", configKey, sysConfig.getConfigValue());
+                log.debug("从数据库获取配置成功，key: {}, value: {}", configKey, sysConfig.getConfigValue());
+                
+                // 将配置值存入缓存
+                cacheService.cacheSysConfig(configKey, sysConfig.getConfigValue());
+                
                 return sysConfig.getConfigValue();
             } else {
                 log.warn("未找到配置项，key: {}", configKey);

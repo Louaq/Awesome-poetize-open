@@ -117,10 +117,10 @@ public class WebInfoController {
 
                 // 原子性缓存更新：先设置新缓存，再删除旧缓存
                 // 这样可以避免缓存空窗期
-                cacheService.evictWebInfo();
+                // cacheService.evictWebInfo(); // 不再需要删除缓存，直接覆盖即可
                 cacheService.cacheWebInfo(latestWebInfo);
 
-                log.info("网站信息缓存更新成功 - webName: {}, webTitle: {}",
+                log.info("网站信息缓存更新成功(永久缓存) - webName: {}, webTitle: {}",
                         latestWebInfo.getWebName(), latestWebInfo.getWebTitle());
 
                 // 网站信息更新时，重新渲染首页和百宝箱页面

@@ -69,10 +69,10 @@ public class PoetryApplicationRunner implements ApplicationRunner {
                 log.info("WebInfo status字段为null，设置为默认值true");
             }
 
-            // 缓存网站信息到Redis
+            // 缓存网站信息到Redis（永久缓存）
             cacheService.cacheWebInfo(webInfo);
 
-            log.info("网站基本信息已加载到Redis缓存 - WebName: {}, EnableWaifu: {}, Status: {}",
+            log.info("网站基本信息已加载到Redis缓存(永久) - WebName: {}, EnableWaifu: {}, Status: {}",
                     webInfo.getWebName(), webInfo.getEnableWaifu(), webInfo.getStatus());
         } else {
             log.warn("未找到网站基本信息，请检查数据库");

@@ -1,11 +1,14 @@
 package com.ld.poetry.service;
 
+import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.ld.poetry.constants.CacheConstants;
 import com.ld.poetry.constants.CommonConst;
+import com.ld.poetry.dao.WebInfoMapper;
 import com.ld.poetry.entity.Article;
 import com.ld.poetry.entity.User;
 import com.ld.poetry.entity.WebInfo;
 import com.ld.poetry.utils.RedisUtil;
+import com.ld.poetry.utils.SpringContextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -254,8 +257,9 @@ public class CacheService {
      */
     public void cacheWebInfo(WebInfo webInfo) {
         if (webInfo != null) {
-            redisUtil.set(CacheConstants.WEB_INFO_KEY, webInfo, CacheConstants.LONG_EXPIRE_TIME);
-            log.info("缓存网站信息成功 - Key: {}, webName: {}, webTitle: {}",
+            // 使用PERMANENT_EXPIRE_TIME常量（值为0）表示永久缓存
+            redisUtil.set(CacheConstants.WEB_INFO_KEY, webInfo, CacheConstants.PERMANENT_EXPIRE_TIME);
+            log.info("缓存网站信息成功(永久缓存) - Key: {}, webName: {}, webTitle: {}",
                     CacheConstants.WEB_INFO_KEY, webInfo.getWebName(), webInfo.getWebTitle());
         } else {
             log.warn("尝试缓存空的网站信息");
@@ -276,10 +280,64 @@ public class CacheService {
             } else {
                 log.info("缓存中未找到网站信息 - Key: {}, 缓存值类型: {}",
                         CacheConstants.WEB_INFO_KEY, cached != null ? cached.getClass().getSimpleName() : "null");
+                
+                // 尝试从数据库加载
+                try {
+                    WebInfo webInfo = loadWebInfoFromDatabase();
+                    if (webInfo != null) {
+                        // 加载成功，更新缓存
+                        cacheWebInfo(webInfo);
+                        return webInfo;
+                    }
+                } catch (Exception e) {
+                    log.error("从数据库加载网站信息失败", e);
+                }
+                
                 return null;
             }
         } catch (Exception e) {
             log.error("从缓存获取网站信息失败 - Key: {}", CacheConstants.WEB_INFO_KEY, e);
+            
+            // 尝试从数据库加载
+            try {
+                WebInfo webInfo = loadWebInfoFromDatabase();
+                if (webInfo != null) {
+                    // 加载成功，更新缓存
+                    cacheWebInfo(webInfo);
+                    return webInfo;
+                }
+            } catch (Exception dbError) {
+                log.error("缓存失败后尝试从数据库加载网站信息也失败", dbError);
+            }
+            
+            return null;
+        }
+    }
+    
+    /**
+     * 从数据库加载网站信息
+     * 私有方法，供getCachedWebInfo使用
+     */
+    private WebInfo loadWebInfoFromDatabase() {
+        try {
+            WebInfoMapper webInfoMapper = SpringContextUtil.getBean(WebInfoMapper.class);
+            List<WebInfo> list = new LambdaQueryChainWrapper<>(webInfoMapper).list();
+            
+            if (list != null && !list.isEmpty()) {
+                WebInfo webInfo = list.get(0);
+                // 确保status字段有默认值
+                if (webInfo.getStatus() == null) {
+                    webInfo.setStatus(true);
+                    log.info("WebInfo status字段为null，设置为默认值true");
+                }
+                log.info("成功从数据库加载网站信息");
+                return webInfo;
+            } else {
+                log.warn("数据库中未找到网站信息");
+                return null;
+            }
+        } catch (Exception e) {
+            log.error("从数据库加载网站信息异常", e);
             return null;
         }
     }
@@ -302,8 +360,8 @@ public class CacheService {
     public void cacheSysConfig(String configKey, String configValue) {
         if (configKey != null) {
             String key = CacheConstants.buildSysConfigKey(configKey);
-            redisUtil.set(key, configValue, CacheConstants.VERY_LONG_EXPIRE_TIME);
-            log.debug("缓存系统配置: {}", configKey);
+            redisUtil.set(key, configValue, CacheConstants.PERMANENT_EXPIRE_TIME);
+            log.debug("缓存系统配置(永久): {}", configKey);
         }
     }
 

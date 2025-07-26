@@ -31,10 +31,21 @@ public class WebInfoHandlerInterceptor implements HandlerInterceptor {
             }
 
             // 使用CacheService获取网站信息
+            // 注意：我们已经修改了CacheService.getCachedWebInfo()方法
+            // 当缓存不存在时，它会自动从数据库加载
             WebInfo webInfo = cacheService.getCachedWebInfo();
 
-            if (webInfo == null || !webInfo.getStatus()) {
-                log.debug("网站维护中或网站信息不存在，拦截请求: {}", request.getRequestURI());
+            // 如果webInfo仍然为null，说明数据库中也没有数据
+            if (webInfo == null) {
+                log.error("无法获取网站信息，缓存和数据库中均不存在");
+                response.setContentType("application/json;charset=UTF-8");
+                response.getWriter().write(JSON.toJSONString(PoetryResult.fail(CodeMsg.SYSTEM_REPAIR.getCode(), CodeMsg.SYSTEM_REPAIR.getMsg())));
+                return false;
+            }
+
+            // 检查网站状态
+            if (!webInfo.getStatus()) {
+                log.debug("网站维护中，拦截请求: {}", request.getRequestURI());
                 response.setContentType("application/json;charset=UTF-8");
                 response.getWriter().write(JSON.toJSONString(PoetryResult.fail(CodeMsg.SYSTEM_REPAIR.getCode(), CodeMsg.SYSTEM_REPAIR.getMsg())));
                 return false;
@@ -43,9 +54,9 @@ public class WebInfoHandlerInterceptor implements HandlerInterceptor {
                 return true;
             }
         } catch (Exception e) {
-            log.error("获取网站信息时发生错误，拦截请求: {}", request.getRequestURI(), e);
+            log.error("WebInfoHandlerInterceptor处理请求时发生异常", e);
             response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write(JSON.toJSONString(PoetryResult.fail(CodeMsg.SYSTEM_REPAIR.getCode(), CodeMsg.SYSTEM_REPAIR.getMsg())));
+            response.getWriter().write(JSON.toJSONString(PoetryResult.fail(CodeMsg.SYSTEM_REPAIR.getCode(), "系统发生错误，请稍后重试")));
             return false;
         }
     }

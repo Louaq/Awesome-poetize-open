@@ -6,6 +6,7 @@ import com.ld.poetry.aop.LoginCheck;
 import com.ld.poetry.config.PoetryResult;
 import com.ld.poetry.entity.SysConfig;
 import com.ld.poetry.enums.PoetryEnum;
+import com.ld.poetry.service.CacheService;
 import com.ld.poetry.service.SysConfigService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
@@ -29,6 +30,9 @@ public class SysConfigController {
 
     @Autowired
     private SysConfigService sysConfigService;
+    
+    @Autowired
+    private CacheService cacheService;
 
     /**
      * 查询系统参数
@@ -58,7 +62,28 @@ public class SysConfigController {
                 !Integer.toString(PoetryEnum.SYS_CONFIG_PRIVATE.getCode()).equals(configType)) {
             return PoetryResult.fail("配置类型不正确！");
         }
-        sysConfigService.saveOrUpdate(sysConfig);
+        
+        // 保存前获取旧的配置值（如果存在）
+        String oldValue = null;
+        if (sysConfig.getId() != null) {
+            SysConfig oldConfig = sysConfigService.getById(sysConfig.getId());
+            if (oldConfig != null) {
+                oldValue = oldConfig.getConfigValue();
+            }
+        }
+        
+        boolean success = sysConfigService.saveOrUpdate(sysConfig);
+        
+        if (success) {
+            // 配置更新成功后，主动更新缓存
+            try {
+                // 更新系统配置缓存
+                cacheService.cacheSysConfig(sysConfig.getConfigKey(), sysConfig.getConfigValue());
+            } catch (Exception e) {
+                return PoetryResult.success("配置已保存，但缓存更新失败，可能需要重启应用");
+            }
+        }
+        
         return PoetryResult.success();
     }
 
@@ -68,7 +93,19 @@ public class SysConfigController {
     @GetMapping("/deleteConfig")
     @LoginCheck(0)
     public PoetryResult deleteConfig(@RequestParam("id") Integer id) {
-        sysConfigService.removeById(id);
+        // 获取要删除的配置信息
+        SysConfig config = sysConfigService.getById(id);
+        if (config != null) {
+            boolean success = sysConfigService.removeById(id);
+            if (success) {
+                // 删除相关缓存
+                try {
+                    cacheService.evictSysConfig(config.getConfigKey());
+                } catch (Exception e) {
+                    return PoetryResult.success("配置已删除，但缓存清理失败，可能需要重启应用");
+                }
+            }
+        }
         return PoetryResult.success();
     }
 

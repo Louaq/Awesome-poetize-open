@@ -78,21 +78,33 @@ public class ThreadContextConfig implements AsyncConfigurer {
             final User finalUser = currentUser;
             final String finalToken = token;
             
+            // 捕获当前用户信息，确保即使在没有RequestContext的情况下也能获取
+            final User capturedUser = PoetryUtil.getCurrentUser();
+            final Integer capturedUserId = PoetryUtil.getUserId();
+            final String capturedUsername = PoetryUtil.getUsername();
+            
             return () -> {
                 try {
                     // 设置异步任务生命周期管理
                     AsyncUserContext.setStartTime();
                     
                     // 设置用户上下文到异步线程
-                    if (finalUser != null) {
+                    // 优先使用捕获的用户信息，因为它可能更完整
+                    if (capturedUser != null) {
+                        AsyncUserContext.setUser(capturedUser);
+                        log.debug("异步任务使用捕获的用户信息: {}", capturedUser.getUsername());
+                    } else if (finalUser != null) {
                         AsyncUserContext.setUser(finalUser);
+                        log.debug("异步任务使用从token获取的用户信息: {}", finalUser.getUsername());
                     }
+                    
                     if (finalToken != null) {
                         AsyncUserContext.setToken(finalToken);
                     }
                     
+                    User userContext = AsyncUserContext.getUser();
                     log.debug("异步任务开始 - 用户: {}, Token: {}", 
-                            finalUser != null ? finalUser.getUsername() : "匿名",
+                            userContext != null ? userContext.getUsername() : (capturedUsername != null ? capturedUsername : "匿名"),
                             finalToken != null ? finalToken.substring(0, Math.min(finalToken.length(), 10)) + "..." : "无");
                     
                     // 执行异步任务

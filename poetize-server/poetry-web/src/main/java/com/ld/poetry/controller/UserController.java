@@ -1,14 +1,16 @@
 package com.ld.poetry.controller;
 
-
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ld.poetry.aop.LoginCheck;
-import com.ld.poetry.config.PoetryResult;
 import com.ld.poetry.aop.SaveCheck;
 import com.ld.poetry.entity.User;
+import com.ld.poetry.handle.PoetryRuntimeException;
 import com.ld.poetry.service.CacheService;
 import com.ld.poetry.service.MailService;
 import com.ld.poetry.service.UserService;
+import com.ld.poetry.config.PoetryResult;
 import com.ld.poetry.utils.PoetryUtil;
+import com.ld.poetry.vo.BaseRequestVO;
 import com.ld.poetry.vo.UserVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -165,7 +167,7 @@ public class UserController {
     }
 
     /**
-     * 更新邮箱、手机号、密码
+     * 修改密钥信息(手机号、邮箱、密码)
      * <p>
      * 1 手机号
      * 2 邮箱
@@ -175,7 +177,16 @@ public class UserController {
     @LoginCheck
     public PoetryResult<UserVO> updateSecretInfo(@RequestParam("place") String place, @RequestParam("flag") Integer flag, @RequestParam(value = "code", required = false) String code, @RequestParam("password") String password) {
         try {
-            Integer userId = PoetryUtil.getUserId();
+            // 获取当前用户信息，并进行额外验证
+            User currentUser = PoetryUtil.getCurrentUser();
+            if (currentUser == null) {
+                log.error("用户上下文验证失败 - 无法获取当前用户信息, place={}, flag={}", place, flag);
+                return PoetryResult.fail("用户认证失败，请重新登录");
+            }
+            
+            Integer userId = currentUser.getId();
+            log.debug("准备更新用户密钥信息: userId={}, place={}, flag={}", userId, place, flag);
+            
             // 使用CacheService清理用户缓存
             cacheService.evictUser(userId);
             log.debug("清理用户密钥信息缓存: userId={}", userId);

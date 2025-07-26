@@ -5,8 +5,11 @@ import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapp
 import com.ld.poetry.constants.CommonConst;
 import com.ld.poetry.dao.ResourcePathMapper;
 import com.ld.poetry.entity.ResourcePath;
+import com.ld.poetry.entity.User;
 import com.ld.poetry.service.MailService;
 import com.ld.poetry.utils.AsyncTaskUtil;
+import com.ld.poetry.utils.PoetryUtil;
+import com.ld.poetry.config.AsyncUserContext;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -170,18 +173,46 @@ public class MailUtil {
      */
     @org.springframework.scheduling.annotation.Async
     public void sendMailMessage(List<String> to, String subject, String text) {
+        // 获取当前用户信息（用于日志记录）
+        String username = AsyncTaskUtil.getCurrentUsername();
+        Integer userId = AsyncTaskUtil.getCurrentUserId();
+        User currentUser = AsyncTaskUtil.getCurrentUser();
+        
+        if (userId == null && currentUser == null) {
+            // 尝试从请求上下文中获取用户信息（作为备份方案）
+            try {
+                currentUser = PoetryUtil.getCurrentUser();
+                if (currentUser != null) {
+                    username = currentUser.getUsername();
+                    userId = currentUser.getId();
+                    log.debug("从请求上下文恢复用户信息成功: userId={}, username={}", userId, username);
+                }
+            } catch (Exception e) {
+                log.debug("从请求上下文恢复用户信息失败: {}", e.getMessage());
+            }
+        }
+        
         // 记录异步任务开始
         AsyncTaskUtil.logUserOperation("邮件发送", String.format("收件人: %s, 主题: %s", 
                 JSON.toJSONString(to), subject));
         
-        log.info("异步邮件发送开始 - 用户: {}, 收件人: {}, 主题: {}", 
-                AsyncTaskUtil.getCurrentUsername(), JSON.toJSONString(to), subject);
+        log.info("异步邮件发送开始 - 用户: {}{}, 收件人: {}, 主题: {}", 
+                username, 
+                userId != null ? " (ID: " + userId + ")" : "",
+                JSON.toJSONString(to), subject);
         
         try {
             // 验证用户上下文（邮件发送通常不强制要求用户上下文）
             if (AsyncTaskUtil.hasUserContext()) {
                 log.debug("邮件发送任务 - 当前用户: {} (ID: {})", 
                         AsyncTaskUtil.getCurrentUsername(), AsyncTaskUtil.getCurrentUserId());
+            } else if (currentUser != null) {
+                // 如果异步上下文中没有，但我们已经获取到用户信息，则手动设置
+                AsyncUserContext.setUser(currentUser);
+                if (StringUtils.hasText(PoetryUtil.getToken())) {
+                    AsyncUserContext.setToken(PoetryUtil.getToken());
+                }
+                log.debug("邮件发送任务 - 手动恢复用户上下文: {} (ID: {})", currentUser.getUsername(), currentUser.getId());
             } else {
                 log.debug("邮件发送任务 - 无用户上下文（系统邮件）");
             }

@@ -107,6 +107,8 @@ public class CacheConstants {
     
     /**
      * 网站信息缓存键
+     * 注意：网站信息使用永久缓存（不设置过期时间）
+     * @see com.ld.poetry.service.CacheService#cacheWebInfo(WebInfo)
      */
     public static final String WEB_INFO_KEY = CACHE_PREFIX + "webinfo";
 
@@ -269,6 +271,12 @@ public class CacheConstants {
      * 超长期缓存过期时间（秒）- 24小时
      */
     public static final long VERY_LONG_EXPIRE_TIME = 86400;
+    
+    /**
+     * 永久缓存标识（秒）- 0表示永不过期
+     * 用于系统核心配置等需要永久保存的缓存
+     */
+    public static final long PERMANENT_EXPIRE_TIME = 0;
     
     /**
      * 用户会话过期时间（秒）- 7天
