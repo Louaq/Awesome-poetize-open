@@ -14,6 +14,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
     @Autowired
     private SecurityFilter securityFilter;
 
+    @Autowired
+    private PoetryFilter poetryFilter;
+
     @Bean
     public RestTemplate restTemplate() {
         return new RestTemplate();
@@ -29,6 +32,19 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registration.addUrlPatterns("/*");
         registration.setName("securityFilter");
         registration.setOrder(1); // 设置过滤器优先级，数字越小优先级越高
+        return registration;
+    }
+
+    /**
+     * 注册访问量统计过滤器
+     */
+    @Bean
+    public FilterRegistrationBean<PoetryFilter> poetryFilterRegistration() {
+        FilterRegistrationBean<PoetryFilter> registration = new FilterRegistrationBean<>();
+        registration.setFilter(poetryFilter);
+        registration.addUrlPatterns("/*");
+        registration.setName("poetryFilter");
+        registration.setOrder(2); // 设置在SecurityFilter之后执行
         return registration;
     }
 
