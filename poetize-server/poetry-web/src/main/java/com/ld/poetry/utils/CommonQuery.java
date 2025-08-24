@@ -8,6 +8,7 @@ import com.ld.poetry.entity.*;
 import com.ld.poetry.service.CacheService;
 import com.ld.poetry.service.UserService;
 import com.ld.poetry.vo.FamilyVO;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.lionsoul.ip2region.xdb.Searcher;
 import org.springframework.beans.BeanUtils;
@@ -24,6 +25,7 @@ import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.stream.Collectors;
 
 
+@Slf4j
 @Component
 public class CommonQuery {
     @Autowired
@@ -61,49 +63,82 @@ public class CommonQuery {
     }
 
     public void saveHistory(String ip) {
-        // 过滤无效IP，避免记录Docker内部IP和无效地址
-        if (ip == null || ip.isEmpty() || "unknown".equals(ip) || isInvalidIP(ip)) {
-            return;
-        }
-        
-        Integer userId = PoetryUtil.getUserId();
-        String ipUser = ip + (userId != null ? "_" + userId.toString() : "");
-
-        @SuppressWarnings("unchecked")
-        CopyOnWriteArraySet<String> ipHistory = (CopyOnWriteArraySet<String>) cacheService.getCachedIpHistory();
-        if (ipHistory != null && !ipHistory.contains(ipUser)) {
-            synchronized (ipUser.intern()) {
-                if (!ipHistory.contains(ipUser)) {
-                    ipHistory.add(ipUser);
-                    HistoryInfo historyInfo = new HistoryInfo();
-                    historyInfo.setIp(ip);
-                    historyInfo.setUserId(userId);
-                    if (searcher != null) {
-                        try {
-                            String search = searcher.search(ip);
-                            String[] region = search.split("\\|");
-                            if (!"0".equals(region[0])) {
-                                historyInfo.setNation(region[0]);
-                            }
-                            if (!"0".equals(region[2])) {
-                                historyInfo.setProvince(region[2]);
-                            }
-                            if (!"0".equals(region[3])) {
-                                historyInfo.setCity(region[3]);
-                            }
-                        } catch (Exception e) {
-                            // IP解析失败时记录日志，但仍然保存IP记录
-                            System.err.println("IP地理位置解析失败: " + ip + ", 错误: " + e.getMessage());
-                        }
-                    }
-                    historyInfoMapper.insert(historyInfo);
-                }
+        try {
+            // 过滤无效IP，避免记录Docker内部IP和无效地址
+            if (ip == null || ip.isEmpty() || "unknown".equals(ip) || isInvalidIP(ip)) {
+                log.debug("[saveHistory] 过滤无效IP: {}", ip);
+                return;
             }
+            
+            log.debug("[saveHistory] 处理有效IP: {}", ip);
+            
+            Integer userId = PoetryUtil.getUserId();
+            String ipUser = ip + (userId != null ? "_" + userId.toString() : "");
+            log.debug("[saveHistory] 用户标识: {}", ipUser);
+    
+            @SuppressWarnings("unchecked")
+            CopyOnWriteArraySet<String> ipHistory = (CopyOnWriteArraySet<String>) cacheService.getCachedIpHistory();
+            
+            if (ipHistory == null) {
+                log.warn("[saveHistory] ipHistory缓存为null，初始化新的缓存");
+                ipHistory = new CopyOnWriteArraySet<>();
+                cacheService.cacheIpHistory(ipHistory);
+            }
+            
+            if (!ipHistory.contains(ipUser)) {
+                synchronized (ipUser.intern()) {
+                    if (!ipHistory.contains(ipUser)) {
+                        log.info("[saveHistory] 新的访问记录，开始保存: {}", ipUser);
+                        
+                        ipHistory.add(ipUser);
+                        HistoryInfo historyInfo = new HistoryInfo();
+                        historyInfo.setIp(ip);
+                        historyInfo.setUserId(userId);
+                        
+                        if (searcher != null) {
+                            try {
+                                String search = searcher.search(ip);
+                                String[] region = search.split("\\|");
+                                if (!"0".equals(region[0])) {
+                                    historyInfo.setNation(region[0]);
+                                }
+                                if (region.length > 2 && !"0".equals(region[2])) {
+                                    historyInfo.setProvince(region[2]);
+                                }
+                                if (region.length > 3 && !"0".equals(region[3])) {
+                                    historyInfo.setCity(region[3]);
+                                }
+                                log.debug("[saveHistory] IP地理位置解析成功: {}", search);
+                            } catch (Exception e) {
+                                // IP解析失败时记录日志，但仍然保存IP记录
+                                log.warn("[saveHistory] IP地理位置解析失败: {}, 错误: {}", ip, e.getMessage());
+                            }
+                        } else {
+                            log.debug("[saveHistory] IP地理位置解析器为null，跳过解析");
+                        }
+                        
+                        // 保存到数据库
+                        historyInfoMapper.insert(historyInfo);
+                        log.info("[saveHistory] 访问记录保存成功，ID: {}", historyInfo.getId());
+                        
+                        // 更新缓存
+                        cacheService.cacheIpHistory(ipHistory);
+                        
+                    } else {
+                        log.debug("[saveHistory] 访问记录已存在，跳过: {}", ipUser);
+                    }
+                }
+            } else {
+                log.debug("[saveHistory] 访问记录已存在于缓存中，跳过: {}", ipUser);
+            }
+        } catch (Exception e) {
+            log.error("[saveHistory] 保存访问记录时发生异常: {}", e.getMessage(), e);
         }
     }
     
     /**
      * 判断是否为无效IP地址
+     * 在开发环境下放宽IP过滤条件，允许内网IP访问统计
      */
     private boolean isInvalidIP(String ip) {
         if (ip == null || ip.isEmpty()) {
@@ -115,17 +150,51 @@ public class CommonQuery {
             return true;
         }
         
-        // Docker内部网络地址
-        if (ip.startsWith("172.") || ip.startsWith("10.") || ip.startsWith("192.168.")) {
-            return true;
-        }
-        
-        // 其他无效IP
+        // 其他明确无效的IP
         if (ip.equals("unknown") || ip.equals("0.0.0.0") || ip.equals("null")) {
             return true;
         }
         
+        // 在开发/测试环境下，允许内网IP进行访问统计
+        // 检查是否为有效的IP格式
+        if (!isValidIpFormat(ip)) {
+            return true;
+        }
+        
+        // 生产环境下可以考虑过滤内网IP，但开发环境需要统计
+        // 注释掉严格的内网IP过滤，允许所有有效格式的IP
+        // if (ip.startsWith("172.") || ip.startsWith("10.") || ip.startsWith("192.168.")) {
+        //     return true;
+        // }
+        
         return false;
+    }
+    
+    /**
+     * 验证IP格式是否有效
+     */
+    private boolean isValidIpFormat(String ip) {
+        if (ip == null || ip.trim().isEmpty()) {
+            return false;
+        }
+        
+        // 简单的IPv4格式验证
+        String[] parts = ip.split("\\.");
+        if (parts.length != 4) {
+            return false;
+        }
+        
+        try {
+            for (String part : parts) {
+                int num = Integer.parseInt(part);
+                if (num < 0 || num > 255) {
+                    return false;
+                }
+            }
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     public User getUser(Integer userId) {
