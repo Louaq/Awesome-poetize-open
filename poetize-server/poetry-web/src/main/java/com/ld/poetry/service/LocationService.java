@@ -1,37 +1,28 @@
 package com.ld.poetry.service;
 
+import com.ld.poetry.service.provider.IpLocationProviderFactory;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import org.springframework.web.client.RestTemplate;
 
+import java.net.Inet6Address;
+import java.net.InetAddress;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Pattern;
 
 /**
  * IP地理位置解析服务
- * 用于获取IP地址对应的地理位置信息
+ * 使用工厂模式管理多个IP解析提供者，支持自动降级和优先级选择
  */
 @Slf4j
 @Service
 public class LocationService {
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    @Autowired
+    private IpLocationProviderFactory providerFactory;
     
     // IP地理位置缓存，避免重复查询
     private final ConcurrentHashMap<String, String> locationCache = new ConcurrentHashMap<>();
-    
-    // IPv4地址正则表达式
-    private static final Pattern IPV4_PATTERN = Pattern.compile(
-        "^(([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\.){3}([01]?\\d\\d?|2[0-4]\\d|25[0-5])$"
-    );
-    
-    // 淘宝IP服务限流器 - 1QPS限制
-    private final Semaphore rateLimiter = new Semaphore(1);
-    private volatile long lastRequestTime = 0L;
-    private static final long MIN_REQUEST_INTERVAL = 1000L; // 1秒间隔
 
     /**
      * 根据IP地址获取地理位置
@@ -56,203 +47,13 @@ public class LocationService {
             return location;
         }
 
-        // 解析公网IP地理位置
-        String location = parsePublicIpLocation(ipAddress);
+        // 使用工厂模式解析公网IP地理位置
+        String location = providerFactory.resolveLocation(ipAddress);
         
         // 缓存结果
         locationCache.put(ipAddress, location);
         
         return location;
-    }
-
-    /**
-     * 解析公网IP的地理位置
-     * @param ipAddress IP地址
-     * @return 地理位置
-     */
-    private String parsePublicIpLocation(String ipAddress) {
-        // 使用淘宝IP服务获取地理位置信息
-        return tryTaobaoIpService(ipAddress);
-    }
-    
-    /**
-     * 使用淘宝IP服务解析IP地理位置
-     * 实现1QPS限流，确保不超过服务访问频率限制
-     * @param ipAddress IP地址
-     * @return 地理位置
-     */
-    private String tryTaobaoIpService(String ipAddress) {
-        try {
-            // 获取限流许可，最多等待5秒
-            if (!rateLimiter.tryAcquire(5, TimeUnit.SECONDS)) {
-                log.warn("获取淘宝IP服务限流许可超时，IP: {}", ipAddress);
-                return "未知";
-            }
-            
-            try {
-                // 确保与上次请求间隔至少1秒
-                long currentTime = System.currentTimeMillis();
-                long timeSinceLastRequest = currentTime - lastRequestTime;
-                
-                if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
-                    long sleepTime = MIN_REQUEST_INTERVAL - timeSinceLastRequest;
-                    log.debug("淘宝IP服务限流等待: {}ms, IP: {}", sleepTime, ipAddress);
-                    Thread.sleep(sleepTime);
-                }
-                
-                // 更新请求时间
-                lastRequestTime = System.currentTimeMillis();
-                
-                // 使用淘宝IP服务API
-                String apiUrl = "http://ip.taobao.com/outGetIpInfo?ip=" + ipAddress + "&accessKey=alibaba-inc";
-                
-                // 设置超时时间
-                restTemplate.getInterceptors().clear();
-                
-                String response = restTemplate.getForObject(apiUrl, String.class);
-                
-                if (StringUtils.hasText(response)) {
-                    return parseTaobaoIpResponse(response);
-                }
-                
-            } finally {
-                // 释放限流许可
-                rateLimiter.release();
-            }
-            
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            log.warn("淘宝IP服务请求被中断: {}", ipAddress);
-        } catch (Exception e) {
-            log.warn("淘宝IP服务解析IP地理位置失败: {}, 错误: {}", ipAddress, e.getMessage());
-        }
-        
-        return "未知";
-    }
-
-
-    /**
-     * 解析淘宝IP服务响应
-     * @param response API响应JSON字符串
-     * @return 格式化的地理位置
-     */
-    private String parseTaobaoIpResponse(String response) {
-        try {
-            // 淘宝IP服务返回格式: {"data":{"country":"中国","region":"北京","city":"北京"}}
-            if (response.contains("\"data\":")) {
-                String country = extractJsonValue(response, "country");
-                String region = extractJsonValue(response, "region");
-                String city = extractJsonValue(response, "city");
-                
-                // 直接使用API返回的地理位置信息
-                return formatTaobaoLocation(country, region, city);
-            }
-        } catch (Exception e) {
-            log.warn("解析淘宝IP服务响应失败: {}", e.getMessage());
-        }
-        
-        return "未知";
-    }
-
-    
-    /**
-     * 格式化淘宝IP服务返回的地理位置信息
-     * @param country 国家
-     * @param region 地区/省份
-     * @param city 城市
-     * @return 格式化后的位置
-     */
-    private String formatTaobaoLocation(String country, String region, String city) {
-        if (!"中国".equals(country)) {
-            // 非中国地区，返回国家名
-            return StringUtils.hasText(country) ? country : "未知";
-        }
-        
-        // 中国地区处理
-        if (StringUtils.hasText(region)) {
-            // 特殊地区加上中国前缀
-            if ("香港".equals(region)) {
-                return "中国香港";
-            } else if ("澳门".equals(region)) {
-                return "中国澳门";
-            } else if ("台湾".equals(region)) {
-                return "中国台湾";
-            } else {
-                // 中国大陆省份，去掉后缀
-                String province = region.replaceAll("省|市|自治区|特别行政区", "");
-                return province;
-            }
-        }
-        
-        return "中国";
-    }
-
-    /**
-     * 从JSON字符串中提取指定字段的值
-     * @param json JSON字符串
-     * @param field 字段名
-     * @return 字段值
-     */
-    private String extractJsonValue(String json, String field) {
-        try {
-            String pattern = "\"" + field + "\":\"";
-            int startIndex = json.indexOf(pattern);
-            if (startIndex != -1) {
-                startIndex += pattern.length();
-                int endIndex = json.indexOf("\"", startIndex);
-                if (endIndex != -1) {
-                    return json.substring(startIndex, endIndex);
-                }
-            }
-        } catch (Exception e) {
-            log.warn("提取JSON字段失败: {}", e.getMessage());
-        }
-        return "";
-    }
-
-    /**
-     * 判断是否为内网IP
-     * @param ip IP地址
-     * @return 是否为内网IP
-     */
-    private boolean isInternalIp(String ip) {
-        if (!StringUtils.hasText(ip)) {
-            return true;
-        }
-
-        // 本地回环地址
-        if (ip.equals("127.0.0.1") || ip.equals("localhost") || 
-            ip.equals("0:0:0:0:0:0:0:1") || ip.equals("::1")) {
-            return true;
-        }
-
-        // 私有IP地址段
-        if (ip.startsWith("192.168.") || 
-            ip.startsWith("10.") || 
-            (ip.startsWith("172.") && isInRange172(ip))) {
-            return true;
-        }
-
-        // 其他无效IP
-        return ip.equals("unknown") || ip.equals("0.0.0.0");
-    }
-
-    /**
-     * 检查是否在172.16.0.0-172.31.255.255范围内
-     * @param ip IP地址
-     * @return 是否在范围内
-     */
-    private boolean isInRange172(String ip) {
-        try {
-            String[] parts = ip.split("\\.");
-            if (parts.length == 4) {
-                int secondOctet = Integer.parseInt(parts[1]);
-                return secondOctet >= 16 && secondOctet <= 31;
-            }
-        } catch (Exception e) {
-            // 忽略解析错误
-        }
-        return false;
     }
 
     /**
@@ -272,26 +73,172 @@ public class LocationService {
     }
     
     /**
-     * 获取限流器状态信息
-     * @return 限流器可用许可数
+     * 获取提供者状态信息（用于调试和监控）
+     * @return 提供者状态
      */
-    public int getAvailablePermits() {
-        return rateLimiter.availablePermits();
+    public String getProvidersStatus() {
+        return providerFactory.getProvidersStatus();
     }
     
     /**
-     * 获取上次请求时间
-     * @return 上次请求时间戳
+     * 测试指定IP的解析结果（用于调试）
+     * @param ipAddress IP地址
+     * @return 详细测试信息
      */
-    public long getLastRequestTime() {
-        return lastRequestTime;
+    public String testIpResolution(String ipAddress) {
+        StringBuilder result = new StringBuilder();
+        result.append("IP解析测试结果 - ").append(ipAddress).append(":\n");
+        
+        boolean isIPv6 = isIPv6Address(ipAddress);
+        boolean isInternal = isInternalIp(ipAddress);
+        result.append("IP类型: ").append(isIPv6 ? "IPv6" : "IPv4").append("\n");
+        result.append("是否内网: ").append(isInternal ? "是" : "否").append("\n");
+        
+        if (!isInternal) {
+            result.append("提供者状态:\n").append(getProvidersStatus()).append("\n");
+            var providers = providerFactory.getAvailableProviders(ipAddress);
+            result.append("可用提供者: ").append(providers.size()).append("个\n");
+        }
+        
+        String finalResult = getLocationByIp(ipAddress);
+        result.append("最终结果: ").append(finalResult);
+        
+        return result.toString();
     }
     
     /**
-     * 获取下次可请求时间
-     * @return 下次可请求时间戳
+     * 判断是否为IPv6地址
+     * @param ip IP地址
+     * @return 是否为IPv6
      */
-    public long getNextAllowedRequestTime() {
-        return lastRequestTime + MIN_REQUEST_INTERVAL;
+    private boolean isIPv6Address(String ip) {
+        if (!StringUtils.hasText(ip)) {
+            return false;
+        }
+        
+        try {
+            InetAddress inetAddress = InetAddress.getByName(ip);
+            return inetAddress instanceof Inet6Address;
+        } catch (Exception e) {
+            return ip.contains(":") && !ip.contains(".");
+        }
+    }
+    
+    /**
+     * 判断是否为内网IP（支持IPv4和IPv6）
+     * @param ip IP地址
+     * @return 是否为内网IP
+     */
+    private boolean isInternalIp(String ip) {
+        if (!StringUtils.hasText(ip)) {
+            return true;
+        }
+
+        ip = ip.trim();
+        
+        // IPv4本地回环地址
+        if (ip.equals("127.0.0.1") || ip.equals("localhost") || ip.equals("0.0.0.0")) {
+            return true;
+        }
+        
+        // IPv6本地回环地址
+        if (ip.equals("::1") || ip.equals("0:0:0:0:0:0:0:1") || 
+            ip.equalsIgnoreCase("localhost")) {
+            return true;
+        }
+        
+        // 其他明确无效的IP
+        if (ip.equals("unknown") || ip.equals("-") || ip.equals("null") || 
+            ip.equals("undefined")) {
+            return true;
+        }
+        
+        // 使用Java内置方法检查是否为内网IP
+        try {
+            InetAddress inetAddress = InetAddress.getByName(ip);
+            
+            // 检查是否为内网地址
+            if (inetAddress.isSiteLocalAddress() || 
+                inetAddress.isLinkLocalAddress() || 
+                inetAddress.isLoopbackAddress()) {
+                return true;
+            }
+            
+            // IPv6特殊处理
+            if (inetAddress instanceof Inet6Address) {
+                return isInternalIPv6(ip);
+            }
+            
+            // IPv4私有地址段检查
+            if (ip.startsWith("192.168.") || 
+                ip.startsWith("10.") || 
+                (ip.startsWith("172.") && isInRange172(ip))) {
+                return true;
+            }
+            
+        } catch (Exception e) {
+            log.debug("IP地址格式验证失败: {}", ip);
+            return true; // 无法解析的IP认为是无效的
+        }
+        
+        return false;
+    }
+    
+    /**
+     * 检查是否为内网IPv6地址
+     * @param ipv6 IPv6地址
+     * @return 是否为内网IPv6
+     */
+    private boolean isInternalIPv6(String ipv6) {
+        if (!StringUtils.hasText(ipv6)) {
+            return true;
+        }
+        
+        ipv6 = ipv6.toLowerCase().trim();
+        
+        // IPv6本地回环
+        if (ipv6.equals("::1")) {
+            return true;
+        }
+        
+        // IPv6链路本地地址 (fe80::/10)
+        if (ipv6.startsWith("fe80:")) {
+            return true;
+        }
+        
+        // IPv6唯一本地地址 (fc00::/7)
+        if (ipv6.startsWith("fc") || ipv6.startsWith("fd")) {
+            return true;
+        }
+        
+        // IPv6多播地址 (ff00::/8)
+        if (ipv6.startsWith("ff")) {
+            return true;
+        }
+        
+        // IPv4映射的IPv6地址
+        if (ipv6.contains("::ffff:")) {
+            return true;
+        }
+        
+        return false;
+    }
+
+    /**
+     * 检查是否在172.16.0.0-172.31.255.255范围内
+     * @param ip IP地址
+     * @return 是否在范围内
+     */
+    private boolean isInRange172(String ip) {
+        try {
+            String[] parts = ip.split("\\.");
+            if (parts.length == 4) {
+                int secondOctet = Integer.parseInt(parts[1]);
+                return secondOctet >= 16 && secondOctet <= 31;
+            }
+        } catch (Exception e) {
+            // 忽略解析错误
+        }
+        return false;
     }
 }

@@ -33,10 +33,8 @@ public class RateLimiterTest {
             System.out.println("第" + (i + 1) + "次请求结果: " + result + 
                              ", 结束时间: " + System.currentTimeMillis());
             
-            // 检查限流器状态
-            System.out.println("可用许可数: " + locationService.getAvailablePermits());
-            System.out.println("上次请求时间: " + locationService.getLastRequestTime());
-            System.out.println("下次允许请求时间: " + locationService.getNextAllowedRequestTime());
+            // 检查缓存状态（工厂模式下的新方法）
+            System.out.println("缓存大小: " + locationService.getCacheSize());
             System.out.println("---");
         }
         
@@ -54,24 +52,25 @@ public class RateLimiterTest {
     }
     
     @Test 
-    public void testRateLimiterStatusMethods() {
-        // 测试限流器状态方法
+    public void testFactoryPatternStatus() {
+        // 测试工厂模式下的状态方法
         
         // 初始状态检查
-        int initialPermits = locationService.getAvailablePermits();
-        assertTrue(initialPermits >= 0 && initialPermits <= 1, 
-                  "初始许可数应该在0-1之间");
+        int cacheSize = locationService.getCacheSize();
+        assertTrue(cacheSize >= 0, "缓存大小应该为非负数");
         
-        // 测试时间相关方法
-        long lastRequestTime = locationService.getLastRequestTime();
-        long nextAllowedTime = locationService.getNextAllowedRequestTime();
+        // 测试缓存功能
+        String testIp = "192.168.1.1";
+        String result = locationService.getLocationByIp(testIp);
+        assertEquals("内网IP", result);
         
-        assertTrue(nextAllowedTime >= lastRequestTime, 
-                  "下次允许时间应该大于等于上次请求时间");
+        int newCacheSize = locationService.getCacheSize();
+        assertEquals(cacheSize + 1, newCacheSize, "缓存大小应该增加1");
         
-        System.out.println("限流器状态检查通过");
-        System.out.println("可用许可数: " + initialPermits);
-        System.out.println("上次请求时间: " + lastRequestTime);
-        System.out.println("下次允许请求时间: " + nextAllowedTime);
+        System.out.println("工厂模式状态检查通过");
+        System.out.println("缓存大小: " + newCacheSize);
+        
+        // 注意：在工厂模式下，限流功能由具体的提供者处理
+        // 需要集成测试来验证完整的限流功能
     }
 }

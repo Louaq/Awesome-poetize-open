@@ -415,6 +415,7 @@ INSERT INTO `poetize`.`sys_config` (`id`, `config_name`, `config_key`, `config_v
 INSERT INTO `poetize`.`sys_config` (`id`, `config_name`, `config_key`, `config_value`, `config_type`) VALUES (31, '单一字体文件名称', 'font.single.filename', 'font.woff2', '2');
 INSERT INTO `poetize`.`sys_config` (`id`, `config_name`, `config_key`, `config_value`, `config_type`) VALUES (32, '是否从远程加载字体Unicode范围', 'font.unicode.remote', 'true', '2');
 INSERT INTO `poetize`.`sys_config` (`id`, `config_name`, `config_key`, `config_value`, `config_type`) VALUES (33, '字体Unicode范围JSON文件路径', 'font.unicode.path', '/static/assets/font_chunks/unicode_ranges.json', '2');
+INSERT INTO `poetize`.`sys_config` (`id`, `config_name`, `config_key`, `config_value`, `config_type`) VALUES (34, '腾讯位置服务Key', 'tencent.lbs.key', '', '1');
 
 -- 初始化第三方OAuth登录配置数据
 INSERT INTO `poetize`.`third_party_oauth_config` (`platform_type`, `platform_name`, `scope`, `enabled`, `global_enabled`, `sort_order`, `remark`, `deleted`) VALUES
