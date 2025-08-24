@@ -2163,6 +2163,23 @@ def register_seo_api(app: FastAPI):
                     logger.info(f"预渲染服务SEO配置缓存清理结果: {'成功' if cache_response.status_code == 200 else f'失败,非200状态码: {cache_response.status_code}, 响应: {cache_response.text}'}")
                 except Exception as e:
                     logger.error(f"清理预渲染服务SEO配置缓存失败: {str(e)}")
+                
+                # 触发首页预渲染（SEO配置更新后需要更新首页内容）
+                try:
+                    logger.info("正在触发首页预渲染...")
+                    async with httpx.AsyncClient(verify=False) as client:
+                        prerender_response = await client.post(
+                            f"{prerender_url}/render/pages",
+                            json={"type": "home"},
+                            timeout=10
+                        )
+                    if prerender_response.status_code == 200:
+                        logger.info("首页预渲染触发成功")
+                    else:
+                        logger.warning(f"首页预渲染触发失败，状态码: {prerender_response.status_code}, 响应: {prerender_response.text}")
+                except Exception as e:
+                    logger.error(f"触发首页预渲染失败: {str(e)}")
+                    # 不影响SEO配置保存的成功响应
 
                 return JSONResponse({"code": 200, "message": "更新SEO配置成功", "data": current_config})
             else:
@@ -2233,6 +2250,23 @@ def register_seo_api(app: FastAPI):
                     logger.info(f"预渲染服务SEO配置缓存清理结果: {'成功' if cache_response.status_code == 200 else f'失败,非200状态码: {cache_response.status_code}, 响应: {cache_response.text}'}")
                 except Exception as e:
                     logger.error(f"清理预渲染服务SEO配置缓存失败: {str(e)}")
+                
+                # 触发首页预渲染（SEO开关状态变更后需要更新首页内容）
+                try:
+                    logger.info("正在触发首页预渲染...")
+                    async with httpx.AsyncClient(verify=False) as client:
+                        prerender_response = await client.post(
+                            f"{prerender_url}/render/pages",
+                            json={"type": "home"},
+                            timeout=10
+                        )
+                    if prerender_response.status_code == 200:
+                        logger.info("首页预渲染触发成功")
+                    else:
+                        logger.warning(f"首页预渲染触发失败，状态码: {prerender_response.status_code}, 响应: {prerender_response.text}")
+                except Exception as e:
+                    logger.error(f"触发首页预渲染失败: {str(e)}")
+                    # 不影响SEO开关状态保存的成功响应
                 
                 return JSONResponse({"code": 200, "message": "SEO开关状态更新成功", "data": {"enable": enable_status}})
             else:
