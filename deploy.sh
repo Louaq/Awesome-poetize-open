@@ -2,7 +2,7 @@
 ## 作者: LeapYa
 ## 修改时间: 2025-08-25
 ## 描述: 部署 Poetize 博客系统安装脚本
-## 版本: 1.5.0
+## 版本: 1.5.1
 
 # 定义颜色
 RED='\033[0;31m'
@@ -85,7 +85,7 @@ SWAP_SIZE=1G      # 默认swap大小为1G（对于2GB及以下内存将自动增
 RUN_IN_BACKGROUND=false
 LOG_FILE="deploy.log"
 DISABLE_DOCKER_CACHE=true  # 默认禁用Docker构建缓存
-POETIZE_KEEP_GIT=true      # 默认保留Git仓库以支持update功能
+POETIZE_KEEP_GIT=false      # 默认删除Git仓库，不依赖git更新
 
 # 添加sed_i跨平台兼容函数（在文件开头合适位置添加）
 sed_i() {
@@ -354,8 +354,8 @@ show_help() {
   echo "  --enable-docker-cache   启用Docker构建缓存（默认禁用以节省空间）"
   echo ""
   echo "Git仓库选项:"
-  echo "  --keep-git              保留Git仓库（默认，支持后续update功能）"
-  echo "  --no-git, --remove-git  删除Git仓库（节省磁盘空间，不支持Git更新）"
+  echo "  --keep-git              保留Git仓库（可选，支持git更新）"
+  echo "  --no-git, --remove-git  删除Git仓库（默认，节省磁盘空间）"
   echo ""
   echo "示例:"
   echo "  $0 --domain example.com --domain www.example.com --email admin@example.com --enable-https"
@@ -364,8 +364,8 @@ show_help() {
   echo "  $0 --background         # 在后台运行，输出到deploy.log"
   echo "  $0 --background --log-file custom.log"
   echo "  $0 --enable-swap --swap-size 2G"
-  echo "  $0 --no-git             # 部署时删除Git仓库，节省空间"
-  echo "  $0 --keep-git           # 保留Git仓库，支持后续update功能"
+  echo "  $0 --no-git             # 部署时删除Git仓库，节省空间（默认）"
+  echo "  $0 --keep-git           # 保留Git仓库，支持git更新功能"
   echo ""
 }
 
@@ -5075,13 +5075,13 @@ download_and_extract_project() {
 
   info "正在下载项目源码..."
 
-  # 检查是否保留Git仓库（支持后续update功能）
+  # 检查是否保留Git仓库（默认删除以节省空间）
   local keep_git="$POETIZE_KEEP_GIT"  # 使用命令行参数设置的值
 
   if [ "$keep_git" = "true" ]; then
     info "Git仓库设置: 保留Git仓库（支持后续使用 'poetize -update' 命令更新）"
   else
-    info "Git仓库设置: 删除Git仓库（节省磁盘空间，后续更新需重新下载）"
+    info "Git仓库设置: 删除Git仓库（节省磁盘空间，需要使用全量更新）"
   fi
 
   if is_china_environment; then
@@ -5089,7 +5089,7 @@ download_and_extract_project() {
       info "下载完整Git仓库（支持后续更新功能）..."
       git clone "$repo_url" "$extract_dir"
     else
-      info "下载项目源码（浅克隆，不支持Git更新）..."
+      info "下载项目源码（浅克隆，不保留Git仓库）..."
       git clone --depth 1 "$repo_url" "$extract_dir"
       rm -rf "$extract_dir/.git"
     fi
@@ -5102,7 +5102,7 @@ download_and_extract_project() {
       info "下载完整Git仓库（支持后续更新功能）..."
       git clone "$download_url" "$extract_dir"
     else
-      info "下载项目源码（浅克隆，不支持Git更新）..."
+      info "下载项目源码（浅克隆，不保留Git仓库）..."
       git clone --depth 1 "$download_url" "$extract_dir"
       rm -rf "$extract_dir/.git"
     fi
@@ -5116,6 +5116,8 @@ download_and_extract_project() {
   if [ "$keep_git" = "true" ] && [ -d "$extract_dir/.git" ]; then
     success "Git仓库已保留，支持使用 'poetize -update' 命令进行后续更新"
     info "Git仓库大小: $(du -sh "$extract_dir/.git" | cut -f1)"
+  elif [ "$keep_git" = "false" ]; then
+    success "Git仓库已删除，节省磁盘空间，后续需使用全量更新"
   fi
 
   # 创建项目目录并移动文件
