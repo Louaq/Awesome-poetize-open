@@ -14,7 +14,17 @@
       </el-tag>
       <!-- 总览 -->
       <div>
-        <div class="history-title">总览</div>
+        <div class="history-title">
+          总览
+          <el-button type="text" 
+                     style="float: right; margin-top: -5px; color: #409EFF;"
+                     @click="refreshHistoryCache"
+                     :loading="refreshing"
+                     title="刷新统计数据">
+            <i class="el-icon-refresh"></i>
+            {{ refreshing ? '刷新中...' : '刷新' }}
+          </el-button>
+        </div>
         <div>
           <div style="width: 400px;margin: 0 auto;display: flex;justify-content: center">
             <div class="history-name" style="line-height: 35px">总访问量（每个IP每天记一次）:</div>
@@ -194,7 +204,8 @@ export default {
   data() {
     return {
       historyInfo: {},
-      loading: false
+      loading: false,
+      refreshing: false
     }
   },
 
@@ -223,6 +234,37 @@ export default {
             message: error.message,
             type: "error"
           });
+        });
+    },
+    
+    refreshHistoryCache() {
+      if (this.refreshing) return;
+      
+      this.refreshing = true;
+      this.$http.post(this.$constant.baseURL + "/webInfo/refreshHistoryCache", {}, true)
+        .then((res) => {
+          if (res.success || res.code === 200) {
+            this.$message({
+              message: `缓存刷新成功！总访问量: ${res.data.totalCount}`,
+              type: "success"
+            });
+            // 刷新完成后重新获取数据
+            this.getHistoryInfo();
+          } else {
+            this.$message({
+              message: res.message || '刷新失败',
+              type: "error"
+            });
+          }
+        })
+        .catch((error) => {
+          this.$message({
+            message: error.message || '网络错误，请稍后重试',
+            type: "error"
+          });
+        })
+        .finally(() => {
+          this.refreshing = false;
         });
     }
   }

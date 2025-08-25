@@ -254,6 +254,28 @@ public class WebInfoController {
         try {
             // 使用安全的缓存获取方法，内置了默认值处理
             Map<String, Object> history = cacheService.getCachedIpHistoryStatisticsSafely();
+            
+            // 检查是否需要刷新缓存
+            if (Boolean.TRUE.equals(history.get("_cache_refresh_needed"))) {
+                log.info("检测到缓存需要刷新，主动刷新统计数据");
+                try {
+                    // 主动刷新缓存
+                    Map<String, Object> refreshedHistory = new HashMap<>();
+                    refreshedHistory.put(CommonConst.IP_HISTORY_PROVINCE, historyInfoMapper.getHistoryByProvince());
+                    refreshedHistory.put(CommonConst.IP_HISTORY_IP, historyInfoMapper.getHistoryByIp());
+                    refreshedHistory.put(CommonConst.IP_HISTORY_HOUR, historyInfoMapper.getHistoryBy24Hour());
+                    refreshedHistory.put(CommonConst.IP_HISTORY_COUNT, historyInfoMapper.getHistoryCount());
+                    
+                    // 缓存新数据
+                    cacheService.cacheIpHistoryStatistics(refreshedHistory);
+                    history = refreshedHistory;
+                    log.info("缓存刷新成功，总访问量: {}", history.get(CommonConst.IP_HISTORY_COUNT));
+                } catch (Exception refreshException) {
+                    log.error("主动刷新缓存失败", refreshException);
+                    // 刷新失败时删除标记，避免频繁刷新
+                    history.remove("_cache_refresh_needed");
+                }
+            }
 
             // 获取今日访问信息
             List<HistoryInfo> infoList = new LambdaQueryChainWrapper<>(historyInfoMapper)
@@ -644,6 +666,62 @@ public class WebInfoController {
         }
 
         return PoetryResult.success(stats);
+    }
+
+    /**
+     * 手动刷新访问统计缓存（管理员专用）
+     */
+    @LoginCheck(1)
+    @PostMapping("/refreshHistoryCache")
+    public PoetryResult<Map<String, Object>> refreshHistoryCache() {
+        try {
+            log.info("管理员手动刷新访问统计缓存");
+            
+            // 清理旧缓存
+            cacheService.evictIpHistoryStatistics();
+            
+            // 重新构建统计数据
+            Map<String, Object> history = new HashMap<>();
+            
+            // 获取省份统计
+            List<Map<String, Object>> provinceStats = historyInfoMapper.getHistoryByProvince();
+            history.put(CommonConst.IP_HISTORY_PROVINCE, provinceStats != null ? provinceStats : new ArrayList<>());
+            log.info("省份访问统计更新成功，数据条数: {}", provinceStats != null ? provinceStats.size() : 0);
+            
+            // 获取IP统计
+            List<Map<String, Object>> ipStats = historyInfoMapper.getHistoryByIp();
+            history.put(CommonConst.IP_HISTORY_IP, ipStats != null ? ipStats : new ArrayList<>());
+            log.info("IP访问统计更新成功，数据条数: {}", ipStats != null ? ipStats.size() : 0);
+            
+            // 获取24小时统计
+            List<Map<String, Object>> hourStats = historyInfoMapper.getHistoryBy24Hour();
+            history.put(CommonConst.IP_HISTORY_HOUR, hourStats != null ? hourStats : new ArrayList<>());
+            log.info("24小时访问统计更新成功，数据条数: {}", hourStats != null ? hourStats.size() : 0);
+            
+            // 获取总访问量
+            Long totalCount = historyInfoMapper.getHistoryCount();
+            history.put(CommonConst.IP_HISTORY_COUNT, totalCount != null ? totalCount : 0L);
+            log.info("总访问量统计更新成功: {}", totalCount);
+            
+            // 缓存新数据
+            cacheService.cacheIpHistoryStatistics(history);
+            
+            // 返回统计结果
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", true);
+            result.put("totalCount", totalCount);
+            result.put("provinceCount", provinceStats != null ? provinceStats.size() : 0);
+            result.put("ipCount", ipStats != null ? ipStats.size() : 0);
+            result.put("hourCount", hourStats != null ? hourStats.size() : 0);
+            result.put("refreshTime", System.currentTimeMillis());
+            
+            log.info("访问统计缓存刷新完成");
+            return PoetryResult.success(result);
+            
+        } catch (Exception e) {
+            log.error("手动刷新访问统计缓存失败", e);
+            return PoetryResult.fail("刷新失败: " + e.getMessage());
+        }
     }
 
     @LoginCheck(0)

@@ -562,27 +562,34 @@ public class CacheService {
     }
 
     /**
-     * 安全地获取缓存的IP历史统计信息，如果缓存为空则返回默认值
+     * 安全地获取缓存的IP历史统计信息，如果缓存为空则尝试刷新缓存
      */
     @SuppressWarnings("unchecked")
     public Map<String, Object> getCachedIpHistoryStatisticsSafely() {
         try {
             Object cached = getCachedIpHistoryStatistics();
             if (cached instanceof Map) {
-                return (Map<String, Object>) cached;
+                Map<String, Object> stats = (Map<String, Object>) cached;
+                // 检查关键统计数据是否为空或异常
+                Object countObj = stats.get(CommonConst.IP_HISTORY_COUNT);
+                if (countObj != null && countObj instanceof Number && ((Number) countObj).longValue() >= 0) {
+                    return stats;
+                }
+                log.warn("缓存中的总访问量数据异常: {}", countObj);
             }
         } catch (Exception e) {
             log.error("安全获取IP历史统计信息时出错", e);
         }
 
-        // 返回默认值
+        log.warn("IP历史统计缓存为空或异常，返回带刷新标记的默认值");
+        // 返回默认值，但标记需要刷新
         Map<String, Object> defaultStats = new HashMap<>();
         defaultStats.put(CommonConst.IP_HISTORY_PROVINCE, new ArrayList<>());
         defaultStats.put(CommonConst.IP_HISTORY_IP, new ArrayList<>());
         defaultStats.put(CommonConst.IP_HISTORY_HOUR, new ArrayList<>());
         defaultStats.put(CommonConst.IP_HISTORY_COUNT, 0L);
+        defaultStats.put("_cache_refresh_needed", true);
 
-        log.info("返回默认IP历史统计信息");
         return defaultStats;
     }
 

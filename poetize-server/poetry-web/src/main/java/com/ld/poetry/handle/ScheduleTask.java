@@ -74,10 +74,29 @@ public class ScheduleTask {
             }
             
             try {
-                history.put(CommonConst.IP_HISTORY_COUNT, historyInfoMapper.getHistoryCount());
-                log.info("成功更新总访问量统计");
+                Long totalCount = historyInfoMapper.getHistoryCount();
+                history.put(CommonConst.IP_HISTORY_COUNT, totalCount);
+                log.info("成功更新总访问量统计: {}", totalCount);
+                
+                // 额外验证总访问量是否合理
+                if (totalCount == null) {
+                    log.error("总访问量查询返回null，数据库查询可能存在问题");
+                    history.put(CommonConst.IP_HISTORY_COUNT, 0L);
+                } else if (totalCount < 0) {
+                    log.error("总访问量为负数: {}，数据异常", totalCount);
+                    history.put(CommonConst.IP_HISTORY_COUNT, 0L);
+                } else {
+                    log.debug("总访问量数据正常: {}", totalCount);
+                }
             } catch (Exception e) {
-                log.error("总访问量统计更新失败", e);
+                log.error("总访问量统计更新失败，详细错误信息:", e);
+                // 记录数据库连接状态
+                try {
+                    Long testCount = historyInfoMapper.selectCount(null);
+                    log.error("数据库连接正常，表记录总数: {}", testCount);
+                } catch (Exception dbException) {
+                    log.error("数据库连接异常", dbException);
+                }
                 history.put(CommonConst.IP_HISTORY_COUNT, 0L);
             }
             
