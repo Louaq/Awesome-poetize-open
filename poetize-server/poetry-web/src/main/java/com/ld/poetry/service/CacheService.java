@@ -17,6 +17,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import org.springframework.util.CollectionUtils;
 
 /**
  * 缓存服务类
@@ -237,6 +239,8 @@ public class CacheService {
         log.debug("删除分类文章列表缓存");
     }
 
+
+
     /**
      * 删除文章相关的所有缓存
      */
@@ -393,48 +397,6 @@ public class CacheService {
     }
 
     /**
-     * 缓存分类信息列表
-     */
-    public void cacheSortList(List<?> sortList) {
-        if (sortList != null) {
-            redisUtil.set(CacheConstants.SORT_LIST_KEY, sortList, CacheConstants.VERY_LONG_EXPIRE_TIME);
-            log.info("缓存分类信息列表(24小时)");
-        }
-    }
-
-    /**
-     * 获取缓存的分类信息列表
-     * 如果缓存不存在或已过期，会自动尝试从数据库重新加载
-     */
-    @SuppressWarnings("unchecked")
-    public List<?> getCachedSortList() {
-        Object cached = redisUtil.get(CacheConstants.SORT_LIST_KEY);
-        if (cached instanceof List) {
-            log.debug("从缓存获取分类信息列表");
-            return (List<?>) cached;
-        }
-        
-        // 缓存不存在或已过期，尝试从数据库重新加载
-        try {
-            org.springframework.context.ApplicationContext context = SpringContextUtil.getApplicationContext();
-            if (context != null) {
-                com.ld.poetry.dao.SortMapper sortMapper = context.getBean(com.ld.poetry.dao.SortMapper.class);
-                List<?> sortList = new com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper<>(sortMapper).list();
-                if (sortList != null && !sortList.isEmpty()) {
-                    // 重新缓存
-                    cacheSortList(sortList);
-                    log.info("分类信息缓存已过期，已从数据库重新加载: {} 条记录", sortList.size());
-                    return sortList;
-                }
-            }
-        } catch (Exception e) {
-            log.error("从数据库重新加载分类信息失败", e);
-        }
-        
-        return null;
-    }
-    
-    /**
      * 获取缓存的标签信息列表
      * 如果缓存不存在或已过期，会自动尝试从数据库重新加载
      */
@@ -469,14 +431,6 @@ public class CacheService {
         }
         
         return null;
-    }
-
-    /**
-     * 删除分类信息列表缓存
-     */
-    public void evictSortList() {
-        redisUtil.del(CacheConstants.SORT_LIST_KEY);
-        log.debug("删除分类信息列表缓存");
     }
 
     /**

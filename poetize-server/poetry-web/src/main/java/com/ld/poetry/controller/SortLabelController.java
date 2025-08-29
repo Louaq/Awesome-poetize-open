@@ -7,7 +7,6 @@ import com.ld.poetry.dao.LabelMapper;
 import com.ld.poetry.dao.SortMapper;
 import com.ld.poetry.entity.Label;
 import com.ld.poetry.entity.Sort;
-import com.ld.poetry.service.CacheService;
 import com.ld.poetry.utils.CommonQuery;
 import com.ld.poetry.utils.PrerenderClient;
 import lombok.extern.slf4j.Slf4j;
@@ -44,9 +43,6 @@ public class SortLabelController {
     @Autowired
     private PrerenderClient prerenderClient;
 
-    @Autowired
-    private CacheService cacheService;
-
     /**
      * 获取分类标签信息
      */
@@ -70,10 +66,7 @@ public class SortLabelController {
         }
 
         sortMapper.insert(sort);
-
-        // 清理分类信息缓存，与其他地方的分类缓存清理保持一致
-        cacheService.evictSortList();
-        log.info("分类新增成功，已清理Redis缓存，分类名称: {}", sort.getSortName());
+        log.info("分类新增成功，分类名称: {}", sort.getSortName());
 
         // 分类新增后，重新渲染首页和分类索引页面
         try {
@@ -96,10 +89,7 @@ public class SortLabelController {
     @LoginCheck(0)
     public PoetryResult deleteSort(@RequestParam("id") Integer id) {
         sortMapper.deleteById(id);
-
-        // 清理分类信息缓存，与其他地方的分类缓存清理保持一致
-        cacheService.evictSortList();
-        log.info("分类删除成功，已清理Redis缓存，分类ID: {}", id);
+        log.info("分类删除成功，分类ID: {}", id);
 
         // 分类删除后，删除对应分类页面的预渲染文件，并重新渲染首页和分类索引页面
         try {
@@ -123,10 +113,7 @@ public class SortLabelController {
     @LoginCheck(0)
     public PoetryResult updateSort(@RequestBody Sort sort) {
         sortMapper.updateById(sort);
-
-        // 清理分类信息缓存，与其他地方的分类缓存清理保持一致
-        cacheService.evictSortList();
-        log.info("分类更新成功，已清理Redis缓存，分类ID: {}", sort.getId());
+        log.info("分类更新成功，分类ID: {}", sort.getId());
 
         // 分类更新后，重新渲染对应分类页面、首页和分类索引页面
         try {
@@ -164,10 +151,7 @@ public class SortLabelController {
             return PoetryResult.fail("标签名称和标签描述和分类Id不能为空！");
         }
         labelMapper.insert(label);
-
-        // 清理分类信息缓存，与其他地方的分类缓存清理保持一致
-        cacheService.evictSortList();
-        log.info("标签新增成功，已清理Redis缓存，标签名称: {}", label.getLabelName());
+        log.info("标签新增成功，标签名称: {}", label.getLabelName());
 
         // 标签新增后，重新渲染对应分类页面
         try {
@@ -192,10 +176,7 @@ public class SortLabelController {
         Label label = labelMapper.selectById(id);
         
         labelMapper.deleteById(id);
-
-        // 清理分类信息缓存，与其他地方的分类缓存清理保持一致
-        cacheService.evictSortList();
-        log.info("标签删除成功，已清理Redis缓存，标签ID: {}", id);
+        log.info("标签删除成功，标签ID: {}", id);
 
         // 标签删除后，重新渲染对应分类页面
         if (label != null && label.getSortId() != null) {
@@ -219,10 +200,7 @@ public class SortLabelController {
     @LoginCheck(0)
     public PoetryResult updateLabel(@RequestBody Label label) {
         labelMapper.updateById(label);
-
-        // 清理分类信息缓存，与其他地方的分类缓存清理保持一致
-        cacheService.evictSortList();
-        log.info("标签更新成功，已清理Redis缓存，标签ID: {}", label.getId());
+        log.info("标签更新成功，标签ID: {}", label.getId());
 
         // 标签更新后，重新渲染对应分类页面
         try {

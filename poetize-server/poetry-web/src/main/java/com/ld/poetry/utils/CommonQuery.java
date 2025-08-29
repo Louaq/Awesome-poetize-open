@@ -399,48 +399,32 @@ public class CommonQuery {
     }
 
     public List<Sort> getSortInfo() {
-        // 使用Redis缓存替换PoetryCache
-        @SuppressWarnings("unchecked")
-        List<Sort> sortInfo = (List<Sort>) cacheService.getCachedSortList();
-        if (sortInfo != null) {
-            return sortInfo;
-        }
+        // 直接从数据库查询，不使用缓存
+        List<Sort> sorts = new LambdaQueryChainWrapper<>(sortMapper).list();
+        if (!CollectionUtils.isEmpty(sorts)) {
+            sorts.forEach(sort -> {
+                LambdaQueryChainWrapper<Article> sortWrapper = new LambdaQueryChainWrapper<>(articleMapper);
+                Long countOfSort = sortWrapper
+                    .eq(Article::getSortId, sort.getId())
+                    .eq(Article::getDeleted, false)
+                    .count();
+                sort.setCountOfSort(countOfSort.intValue());
 
-        synchronized (CommonConst.SORT_INFO.intern()) {
-            // 双重检查锁定
-            @SuppressWarnings("unchecked")
-            List<Sort> cachedSortInfo = (List<Sort>) cacheService.getCachedSortList();
-            if (cachedSortInfo == null) {
-                List<Sort> sorts = new LambdaQueryChainWrapper<>(sortMapper).list();
-                if (!CollectionUtils.isEmpty(sorts)) {
-                    sorts.forEach(sort -> {
-                        LambdaQueryChainWrapper<Article> sortWrapper = new LambdaQueryChainWrapper<>(articleMapper);
-                        Long countOfSort = sortWrapper
-                            .eq(Article::getSortId, sort.getId())
+                LambdaQueryChainWrapper<Label> wrapper = new LambdaQueryChainWrapper<>(labelMapper);
+                List<Label> labels = wrapper.eq(Label::getSortId, sort.getId()).list();
+                if (!CollectionUtils.isEmpty(labels)) {
+                    labels.forEach(label -> {
+                        LambdaQueryChainWrapper<Article> labelWrapper = new LambdaQueryChainWrapper<>(articleMapper);
+                        Long countOfLabel = labelWrapper
+                            .eq(Article::getLabelId, label.getId())
                             .eq(Article::getDeleted, false)
                             .count();
-                        sort.setCountOfSort(countOfSort.intValue());
-
-                        LambdaQueryChainWrapper<Label> wrapper = new LambdaQueryChainWrapper<>(labelMapper);
-                        List<Label> labels = wrapper.eq(Label::getSortId, sort.getId()).list();
-                        if (!CollectionUtils.isEmpty(labels)) {
-                            labels.forEach(label -> {
-                                LambdaQueryChainWrapper<Article> labelWrapper = new LambdaQueryChainWrapper<>(articleMapper);
-                                Long countOfLabel = labelWrapper
-                                    .eq(Article::getLabelId, label.getId())
-                                    .eq(Article::getDeleted, false)
-                                    .count();
-                                label.setCountOfLabel(countOfLabel.intValue());
-                            });
-                            sort.setLabels(labels);
-                        }
+                        label.setCountOfLabel(countOfLabel.intValue());
                     });
+                    sort.setLabels(labels);
                 }
-                cacheService.cacheSortList(sorts);
-                return sorts;
-            } else {
-                return cachedSortInfo;
-            }
+            });
         }
+        return sorts;
     }
 }

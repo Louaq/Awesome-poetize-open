@@ -177,9 +177,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         // 将文章ID回填到VO对象
         articleVO.setId(article.getId());
 
-        // 使用Redis缓存清理替换PoetryCache
-        cacheService.evictSortList();
-
         // 异步发送订阅邮件，避免阻塞保存操作
         if (articleVO.getViewStatus()) {
             final Integer labelId = articleVO.getLabelId();
@@ -330,8 +327,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 }
                 log.info("【异步保存】数据库保存成功，任务ID: {}, 文章ID: {}", taskId, article.getId());
 
-                // 清理缓存
-                cacheService.evictSortList();
+                // 缓存清理已移除
                 
                 // 更新状态：后台处理中
                 updateSaveStatus(taskId, "processing", "文章已保存，正在处理邮件通知和翻译...");
@@ -596,7 +592,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
 
         // 使用Redis缓存清理替换PoetryCache
         cacheService.evictArticleRelatedCache(id);
-        cacheService.deleteKey(CacheConstants.SORT_LIST_KEY);
 
         return PoetryResult.success();
     }
@@ -651,7 +646,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         }
         
         updateChainWrapper.update();
-        cacheService.evictSortList();
+        // 缓存清理已移除
 
         // 更新后重新翻译，TranslationService 内部完毕后预渲染
         new Thread(() -> translationService.refreshArticleTranslation(articleVO.getId())).start();
@@ -1412,8 +1407,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 }
                 log.info("【异步更新】数据库更新成功，任务ID: {}, 文章ID: {}", taskId, articleVO.getId());
 
-                // 清理缓存
-                cacheService.evictSortList();
+                // 缓存清理已移除
                 
                 // 更新状态：后台处理中
                 updateSaveStatus(taskId, "processing", "文章已更新，正在处理翻译...");

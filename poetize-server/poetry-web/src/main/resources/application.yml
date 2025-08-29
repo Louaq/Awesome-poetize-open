@@ -88,7 +88,7 @@ spring:
   cache:
     type: redis
     redis:
-      time-to-live: 600000  # 默认10分钟过期
+      time-to-live: 604800000  # 默认7天过期，与TOKEN_EXPIRE保持一致（604800秒 * 1000毫秒）
       cache-null-values: false
       use-key-prefix: true
       key-prefix: "poetize:"

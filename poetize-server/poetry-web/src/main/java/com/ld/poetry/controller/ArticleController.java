@@ -120,7 +120,6 @@ public class ArticleController {
             }
             // 清理文章相关缓存
             cacheService.evictSortArticleList();
-            cacheService.evictSortList();
             
             // 保存文章
             PoetryResult result = articleService.saveArticle(articleVO);
@@ -270,7 +269,6 @@ public class ArticleController {
             }
             // 清理文章相关缓存
             cacheService.evictSortArticleList();
-            cacheService.evictSortList();
             
             return result;
         } catch (Exception e) {
@@ -316,7 +314,6 @@ public class ArticleController {
         }
         // 清理文章相关缓存
         cacheService.evictSortArticleList();
-        cacheService.evictSortList();
         
         // 删除文章翻译（仅删除，不重新翻译）
         try {
@@ -393,7 +390,6 @@ public class ArticleController {
         }
         // 清理文章相关缓存
         cacheService.evictSortArticleList();
-        cacheService.evictSortList();
         
         PoetryResult result = articleService.updateArticle(articleVO);
         
@@ -878,7 +874,6 @@ public class ArticleController {
             }
             // 清理文章相关缓存
             cacheService.evictSortArticleList();
-            cacheService.evictSortList();
             
             return result;
         } catch (Exception e) {

@@ -467,12 +467,12 @@ public class WebInfoController {
     }
 
     /**
-     * 清除分类信息缓存
+     * 清除分类信息缓存（已禁用）
      */
     @GetMapping("/clearSortCache")
     public PoetryResult<String> clearSortCache() {
-        cacheService.evictSortList();
-        return PoetryResult.success();
+        // 分类缓存功能已移除，直接返回成功
+        return PoetryResult.success("分类缓存功能已禁用");
     }
 
     /**
@@ -793,6 +793,8 @@ public class WebInfoController {
             return PoetryResult.fail("获取第三方登录状态失败: " + e.getMessage());
         }
     }
+
+
 
 }
 

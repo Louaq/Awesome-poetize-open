@@ -25,8 +25,7 @@ public class CacheManagerService {
         // 清理分类文章列表缓存
         cacheService.evictSortArticleList();
         
-        // 清理分类信息缓存
-        cacheService.evictSortList();
+        // 分类信息缓存已移除
         
         // 清理文章搜索缓存（这里可以扩展为批量清理）
         // 注意：搜索缓存使用动态key，需要特殊处理
@@ -67,8 +66,7 @@ public class CacheManagerService {
     public void evictAllSystemCache() {
         log.info("开始清理系统配置相关缓存");
         
-        // 清理分类信息缓存
-        cacheService.evictSortList();
+        // 分类信息缓存已移除
         
         // 清理家庭成员列表缓存
         String familyCacheKey = CacheConstants.CACHE_PREFIX + "family:list";
@@ -101,13 +99,11 @@ public class CacheManagerService {
 
         try {
             // 检查关键缓存是否存在
-            boolean hasSortList = cacheService.hasKey(CacheConstants.SORT_LIST_KEY);
             boolean hasSortArticles = cacheService.hasKey(CacheConstants.SORT_ARTICLE_LIST_KEY);
             boolean hasAdmireList = cacheService.hasKey(CacheConstants.ADMIRE_LIST_KEY);
             boolean hasFamilyList = cacheService.hasKey(CacheConstants.FAMILY_LIST_KEY);
 
             stats.put("type", "Redis");
-            stats.put("sortListCache", hasSortList);
             stats.put("sortArticlesCache", hasSortArticles);
             stats.put("admireListCache", hasAdmireList);
             stats.put("familyListCache", hasFamilyList);

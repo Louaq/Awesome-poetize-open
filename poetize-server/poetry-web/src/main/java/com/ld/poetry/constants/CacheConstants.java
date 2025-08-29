@@ -87,10 +87,7 @@ public class CacheConstants {
 
     // ================================ 分类标签缓存 ================================
     
-    /**
-     * 分类信息缓存键
-     */
-    public static final String SORT_LIST_KEY = CACHE_PREFIX + "sort:list";
+
 
     /**
      * 分类文章列表缓存键
