@@ -270,10 +270,18 @@
 
       // 监听文章保存成功事件，自动刷新文章列表
       this.$root.$on('articleSaved', () => {
-        console.log('收到文章保存成功事件，刷新首页文章列表');
-        this.getSortArticles();
-        // 更新最后刷新时间戳
-        this.updateLastRefreshTimestamp();
+        console.log('收到文章保存成功事件，准备刷新首页文章列表');
+        
+        // 先清除本地缓存，然后添加延迟
+        this.sortArticles = {};
+        
+        // 添加延迟，确保后端缓存清除完成
+        setTimeout(() => {
+          console.log('延迟后开始刷新首页文章列表');
+          this.getSortArticles();
+          // 更新最后刷新时间戳
+          this.updateLastRefreshTimestamp();
+        }, 2000); // 延迟2秒，给后端更多时间
       });
 
       // 检查是否需要主动刷新文章列表（基于时间戳）
@@ -380,13 +388,24 @@
           });
       },
       getSortArticles() {
-        this.$http.get(this.$constant.baseURL + "/article/listSortArticle")
+        console.log('开始获取分类文章列表...');
+        
+        // 添加时间戳参数，避免浏览器缓存
+        const timestamp = Date.now();
+        const url = `${this.$constant.baseURL}/article/listSortArticle?t=${timestamp}`;
+        
+        this.$http.get(url)
           .then((res) => {
+            console.log('获取分类文章列表成功:', res);
             if (!this.$common.isEmpty(res.data)) {
               this.sortArticles = res.data;
+              console.log('更新后的分类文章数据:', this.sortArticles);
+            } else {
+              console.log('返回的分类文章数据为空');
             }
           })
           .catch((error) => {
+            console.error('获取分类文章列表失败:', error);
             this.$message({
               message: error.message,
               type: "error"
