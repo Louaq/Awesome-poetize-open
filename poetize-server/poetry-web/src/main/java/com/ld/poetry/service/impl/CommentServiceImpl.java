@@ -69,7 +69,6 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
     private UserService userService;
 
     @Override
-    @CacheEvict(value = "comments", key = "#commentVO.source + '_' + #commentVO.type")
     public PoetryResult saveComment(CommentVO commentVO) {
         if (CommentTypeEnum.getEnumByCode(commentVO.getType()) == null) {
             return PoetryResult.fail("评论来源类型不存在！");
@@ -176,7 +175,6 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
     }
 
     @Override
-    @CacheEvict(value = "comments", allEntries = true)
     public PoetryResult deleteComment(Integer id) {
         Integer userId = PoetryUtil.getUserId();
 

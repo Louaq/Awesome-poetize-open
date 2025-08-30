@@ -129,5 +129,5 @@ public class RedisConfig {
         return template;
     }
 
-    // 缓存管理器配置已移至CacheConfig.java，避免重复配置
+    // 注意：项目现在完全使用Redis缓存，不再使用Spring Cache框架
 }

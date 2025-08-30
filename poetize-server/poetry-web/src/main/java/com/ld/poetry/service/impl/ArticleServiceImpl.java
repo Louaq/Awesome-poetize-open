@@ -106,7 +106,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     private CacheService cacheService;
 
     @Override
-    @CacheEvict(value = {"articles", "sortArticles"}, allEntries = true)
     public PoetryResult saveArticle(ArticleVO articleVO) {
         long startTime = System.currentTimeMillis();
         log.info("【Service性能监控】开始保存文章到数据库");
@@ -585,7 +584,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     }
 
     @Override
-    @CacheEvict(value = {"articles", "sortArticles"}, allEntries = true)
     public PoetryResult deleteArticle(Integer id) {
         Integer userId = PoetryUtil.getUserId();
         
@@ -880,7 +878,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     }
 
     @Override
-    @Cacheable(value = "sortArticles", key = "'all'", unless = "#result == null || #result.data == null")
     public PoetryResult<Map<Integer, List<ArticleVO>>> listSortArticle() {
         // 使用Redis缓存替换PoetryCache
         Map<Integer, List<Article>> cachedResult = cacheService.getCachedSortArticleList();
