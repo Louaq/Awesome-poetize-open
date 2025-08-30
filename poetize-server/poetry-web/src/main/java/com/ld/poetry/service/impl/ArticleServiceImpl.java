@@ -215,6 +215,14 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         // 异步翻译完成后内部会触发预渲染
         new Thread(() -> translationService.translateAndSaveArticle(article.getId())).start();
         
+        // 手动清除Redis中的分类文章列表缓存，确保首页能显示新文章
+        try {
+            cacheService.evictSortArticleList();
+            log.info("已清除分类文章列表缓存，确保首页显示最新文章");
+        } catch (Exception e) {
+            log.error("清除分类文章列表缓存失败: {}", e.getMessage(), e);
+        }
+        
         long endTime = System.currentTimeMillis();
         log.info("【Service性能监控】saveArticle方法总耗时: {}ms", endTime - startTime);
         
@@ -327,7 +335,13 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 }
                 log.info("【异步保存】数据库保存成功，任务ID: {}, 文章ID: {}", taskId, article.getId());
 
-                // 缓存清理已移除
+                // 手动清除Redis中的分类文章列表缓存，确保首页能显示新文章
+                try {
+                    cacheService.evictSortArticleList();
+                    log.info("【异步保存】已清除分类文章列表缓存，确保首页显示最新文章，任务ID: {}", taskId);
+                } catch (Exception e) {
+                    log.error("【异步保存】清除分类文章列表缓存失败，任务ID: {}, 错误: {}", taskId, e.getMessage(), e);
+                }
                 
                 // 更新状态：后台处理中
                 updateSaveStatus(taskId, "processing", "文章已保存，正在处理邮件通知和翻译...");
@@ -646,7 +660,14 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         }
         
         updateChainWrapper.update();
-        // 缓存清理已移除
+        
+        // 手动清除Redis中的分类文章列表缓存，确保首页能显示更新后的文章
+        try {
+            cacheService.evictSortArticleList();
+            log.info("已清除分类文章列表缓存，确保首页显示更新后的文章");
+        } catch (Exception e) {
+            log.error("清除分类文章列表缓存失败: {}", e.getMessage(), e);
+        }
 
         // 更新后重新翻译，TranslationService 内部完毕后预渲染
         new Thread(() -> translationService.refreshArticleTranslation(articleVO.getId())).start();
@@ -1407,7 +1428,13 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 }
                 log.info("【异步更新】数据库更新成功，任务ID: {}, 文章ID: {}", taskId, articleVO.getId());
 
-                // 缓存清理已移除
+                // 手动清除Redis中的分类文章列表缓存，确保首页能显示更新后的文章
+                try {
+                    cacheService.evictSortArticleList();
+                    log.info("【异步更新】已清除分类文章列表缓存，确保首页显示更新后的文章，任务ID: {}", taskId);
+                } catch (Exception e) {
+                    log.error("【异步更新】清除分类文章列表缓存失败，任务ID: {}, 错误: {}", taskId, e.getMessage(), e);
+                }
                 
                 // 更新状态：后台处理中
                 updateSaveStatus(taskId, "processing", "文章已更新，正在处理翻译...");
