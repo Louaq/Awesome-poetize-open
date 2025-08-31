@@ -236,8 +236,8 @@
 
     created() {
       this.getGuShi();
-      // 初始化时检查是否需要刷新文章列表
-      this.checkAndRefreshIfNeeded();
+      // 直接获取文章列表
+      this.getSortArticles();
     },
 
     beforeDestroy() {
@@ -272,20 +272,15 @@
       this.$root.$on('articleSaved', () => {
         console.log('收到文章保存成功事件，准备刷新首页文章列表');
         
-        // 先清除本地缓存，然后添加延迟
+        // 先清除本地缓存
         this.sortArticles = {};
         
         // 添加延迟，确保后端缓存清除完成
         setTimeout(() => {
           console.log('延迟后开始刷新首页文章列表');
           this.getSortArticles();
-          // 更新最后刷新时间戳
-          this.updateLastRefreshTimestamp();
-        }, 2000); // 延迟2秒，给后端更多时间
+        }, 1000); // 延迟1秒
       });
-
-      // 检查是否需要主动刷新文章列表（基于时间戳）
-      this.checkAndRefreshIfNeeded();
 
       setTimeout(() => {
         try {
@@ -522,50 +517,7 @@
         return platformNames[provider] || provider;
       },
 
-      /**
-       * 检查是否需要主动刷新文章列表（基于时间戳）
-       * 如果距离上次刷新超过5分钟，则主动刷新
-       */
-      checkAndRefreshIfNeeded() {
-        try {
-          const lastUpdateTime = localStorage.getItem('lastArticleListUpdate');
-          const now = Date.now();
-          const fiveMinutes = 5 * 60 * 1000; // 5分钟，单位：毫秒
 
-          console.log('🔍 检查文章列表更新时间...');
-          console.log('上次更新时间:', lastUpdateTime ? new Date(parseInt(lastUpdateTime)).toLocaleString() : '从未更新');
-          console.log('当前时间:', new Date(now).toLocaleString());
-          console.log('时间差:', lastUpdateTime ? Math.round((now - parseInt(lastUpdateTime)) / 1000) + '秒' : '未知');
-
-          // 如果没有时间戳记录，或者距离上次更新超过5分钟，则主动刷新
-          if (!lastUpdateTime || (now - parseInt(lastUpdateTime)) > fiveMinutes) {
-            console.log('⏰ 距离上次更新超过5分钟，主动刷新文章列表');
-            this.getSortArticles();
-            // 更新最后刷新时间戳
-            this.updateLastRefreshTimestamp();
-          } else {
-            console.log('✅ 文章列表数据较新，无需刷新');
-          }
-        } catch (error) {
-          console.error('❌ 检查文章列表更新时间时发生错误:', error);
-          // 出错时也刷新一次，确保数据是最新的
-          this.getSortArticles();
-          this.updateLastRefreshTimestamp();
-        }
-      },
-
-      /**
-       * 更新最后刷新时间戳
-       */
-      updateLastRefreshTimestamp() {
-        try {
-          const now = Date.now();
-          localStorage.setItem('lastArticleListUpdate', now.toString());
-          console.log('📝 更新文章列表最后刷新时间:', new Date(now).toLocaleString());
-        } catch (error) {
-          console.error('❌ 更新最后刷新时间戳时发生错误:', error);
-        }
-      }
     }
   }
 </script>
