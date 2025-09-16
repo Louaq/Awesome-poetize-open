@@ -6,7 +6,7 @@ export default function () {
   this.ws_protocol = constant.wsProtocol;
   this.ip = constant.imBaseURL;
   this.port = constant.wsPort;
-  this.paramStr = 'Authorization=' + localStorage.getItem("userToken");
+  this.paramStr = 'token=' + localStorage.getItem("userToken");
   this.binaryType = 'blob';
 
   this.initWs = () => {
