@@ -1,8 +1,8 @@
 #!/bin/bash
 ## 作者: LeapYa
-## 修改时间: 2025-09-15
+## 修改时间: 2025-09-16
 ## 描述: Poetize 博客系统自动迁移脚本
-## 版本: 0.5.1
+## 版本: 1.0.0
 
 # 定义颜色
 RED='\033[0;31m'
@@ -28,7 +28,7 @@ DB_ROOT_PASSWORD=""
 DB_USER_PASSWORD=""
 BACKUP_DIR=""
 IS_CHINA_ENV=false
-CURRENT_DIR=$(dirname "$(pwd)")
+CURRENT_DIR=$(dirname "$(pwd)" | sed 's:/*$::')  # 当前目录，去除末尾的一个或多个斜杠
 MIGRATE_UPLOADS="yes"    # 是否迁移用户上传文件，默认为yes
 extract_dir="Awesome-poetize-open"  # 项目提取目录
 
@@ -1224,59 +1224,59 @@ main() {
 
 # 显示迁移总结
 show_migration_summary() {
-    echo
-    echo "${GREEN}===========================================${NC}"
-    echo "${GREEN}           迁移完成总结${NC}"
-    echo "${GREEN}===========================================${NC}"
-    echo
+    echo -e ""
+    echo -e "${GREEN}===========================================${NC}"
+    echo -e "${GREEN}           迁移完成总结${NC}"
+    echo -e "${GREEN}===========================================${NC}"
+    echo -e ""
     
     # 显示各步骤状态
     local step_status
-    echo "${BLUE}迁移步骤完成情况:${NC}"
+    echo -e "${BLUE}迁移步骤完成情况:${NC}"
     
     step_status=$(get_step_status "$STEP_PREREQUISITES")
-    echo "  ✓ 前置条件检查: ${GREEN}$step_status${NC}"
+    echo -e "  ✓ 前置条件检查: ${GREEN}$step_status${NC}"
     
     step_status=$(get_step_status "$STEP_READ_CREDENTIALS")
-    echo "  ✓ 读取数据库凭据: ${GREEN}$step_status${NC}"
+    echo -e "  ✓ 读取数据库凭据: ${GREEN}$step_status${NC}"
     
     step_status=$(get_step_status "$STEP_USER_INPUT")
-    echo "  ✓ 用户输入收集: ${GREEN}$step_status${NC}"
+    echo -e "  ✓ 用户输入收集: ${GREEN}$step_status${NC}"
     
     step_status=$(get_step_status "$STEP_EXTRACT_DOMAINS")
-    echo "  ✓ 域名提取: ${GREEN}$step_status${NC}"
+    echo -e "  ✓ 域名提取: ${GREEN}$step_status${NC}"
     
     step_status=$(get_step_status "$STEP_BACKUP_DB")
-    echo "  ✓ 数据库备份: ${GREEN}$step_status${NC}"
+    echo -e "  ✓ 数据库备份: ${GREEN}$step_status${NC}"
     
     step_status=$(get_step_status "$STEP_TEST_SSH")
-    echo "  ✓ SSH连接测试: ${GREEN}$step_status${NC}"
+    echo -e "  ✓ SSH连接测试: ${GREEN}$step_status${NC}"
     
     step_status=$(get_step_status "$STEP_DETECT_ENV")
-    echo "  ✓ 环境检测: ${GREEN}$step_status${NC}"
+    echo -e "  ✓ 环境检测: ${GREEN}$step_status${NC}"
     
     step_status=$(get_step_status "$STEP_PULL_CODE")
-    echo "  ✓ 代码拉取: ${GREEN}$step_status${NC}"
+    echo -e "  ✓ 代码拉取: ${GREEN}$step_status${NC}"
     
     step_status=$(get_step_status "$STEP_TRANSFER_FILES")
-    echo "  ✓ 文件传输: ${GREEN}$step_status${NC}"
+    echo -e "  ✓ 文件传输: ${GREEN}$step_status${NC}"
     
     if [ "$MIGRATE_UPLOADS" = "yes" ]; then
-        echo "  ✓ 用户上传文件迁移: ${GREEN}completed${NC}"
+        echo -e "  ✓ 用户上传文件迁移: ${GREEN}completed${NC}"
     else
-        echo "  ⏭ 用户上传文件迁移: ${YELLOW}skipped${NC}"
+        echo -e "  ⏭ 用户上传文件迁移: ${YELLOW}skipped${NC}"
     fi
     
     step_status=$(get_step_status "$STEP_DEPLOY")
-    echo "  ✓ 项目部署: ${GREEN}$step_status${NC}"
+    echo -e "  ✓ 项目部署: ${GREEN}$step_status${NC}"
     
-    echo
-    echo "${GREEN}目标服务器信息:${NC}"
-    echo "  IP地址: $TARGET_IP"
-        echo "  端口: $TARGET_PORT"
-        echo "  用户名: $TARGET_USER"
-    echo "  项目路径: /opt/$CURRENT_DIR"
-    echo
+    echo -e ""
+    echo -e "${GREEN}目标服务器信息:${NC}"
+    echo -e "  IP地址: $TARGET_IP"
+    echo -e "  端口: $TARGET_PORT"
+    echo -e "  用户名: $TARGET_USER"
+    echo -e "  项目路径: $CURRENT_DIR/$extract_dir"
+    echo -e ""
     
     # 检查是否所有步骤都完成
     local all_completed=true
@@ -1288,13 +1288,13 @@ show_migration_summary() {
     done
     
     if [ "$all_completed" = true ]; then
-        echo "${GREEN}🎉 迁移已成功完成！${NC}"
-        echo "${YELLOW}请访问目标服务器验证服务是否正常运行。${NC}"
+        echo -e "${GREEN}🎉 迁移已成功完成！${NC}"
+        echo -e "${YELLOW}请访问目标服务器验证服务是否正常运行。${NC}"
     else
-        echo "${YELLOW}⚠️  迁移未完全完成，请检查失败的步骤。${NC}"
-        echo "${YELLOW}可以重新运行脚本继续未完成的步骤。${NC}"
+        echo -e "${YELLOW}⚠️  迁移未完全完成，请检查失败的步骤。${NC}"
+        echo -e "${YELLOW}可以重新运行脚本继续未完成的步骤。${NC}"
     fi
-    echo
+    echo -e ""
 }
 
 # 运行主函数
