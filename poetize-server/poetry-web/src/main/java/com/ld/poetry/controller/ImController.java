@@ -41,13 +41,13 @@ public class ImController {
             // 生成30分钟有效期的WebSocket临时token
             String wsToken = SecureTokenGenerator.generateWebSocketToken(
                 currentUser.getId(), 
-                currentUser.getUserType()
+                String.valueOf(currentUser.getUserType())
             );
 
             // 将临时token存储到缓存中，有效期30分钟
             cacheService.cacheWebSocketSession(wsToken, currentUser.getId(), 30 * 60);
 
-            return Result.ok("获取WebSocket token成功", wsToken);
+            return Result.success("获取WebSocket token成功", wsToken);
             
         } catch (Exception e) {
             return Result.fail("获取WebSocket token失败: " + e.getMessage());
@@ -76,7 +76,7 @@ public class ImController {
                 return Result.fail("Token已失效");
             }
 
-            return Result.ok("Token验证成功", true);
+            return Result.success("Token验证成功", true);
             
         } catch (Exception e) {
             return Result.fail("Token验证失败: " + e.getMessage());
@@ -118,7 +118,7 @@ public class ImController {
             // 删除旧token缓存（避免token堆积）
             cacheService.removeWebSocketSession(oldToken);
             
-            return Result.ok("Token续签成功", newToken);
+            return Result.success("Token续签成功", newToken);
             
         } catch (Exception e) {
             return Result.fail("Token续签失败: " + e.getMessage());
@@ -143,7 +143,7 @@ public class ImController {
                 return Result.fail("Token已过期");
             }
             
-            return Result.ok("获取token有效期成功", remainingMinutes);
+            return Result.success("获取token有效期成功", remainingMinutes);
             
         } catch (Exception e) {
             return Result.fail("检查token有效期失败: " + e.getMessage());
@@ -181,11 +181,11 @@ public class ImController {
                 // 删除旧token
                 cacheService.removeWebSocketSession(wsToken);
                 
-                return Result.ok("心跳检测成功，token已自动续签", newToken);
+                return Result.success("心跳检测成功，token已自动续签", newToken);
             } else {
                 // 更新缓存过期时间（重置为30分钟）
                 cacheService.cacheWebSocketSession(wsToken, userId, 30 * 60);
-                return Result.ok("心跳检测成功", wsToken);
+                return Result.success("心跳检测成功", wsToken);
             }
             
         } catch (Exception e) {
