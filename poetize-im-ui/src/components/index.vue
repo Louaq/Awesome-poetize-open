@@ -940,7 +940,7 @@
       }
 
       function getGroupOnlineCount(groupId) {
-        if (!groupId || groupId <= 0) {
+        if (groupId === null || groupId === undefined) {
           console.warn('无效的群组ID:', groupId);
           return;
         }
