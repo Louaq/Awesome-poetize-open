@@ -532,7 +532,7 @@
           // 获取WebSocket临时token
           const response = await this.$http.get(this.$constant.baseURL + "/im/getWsToken", {}, true);
           
-          if (response.flag && response.data) {
+          if (response.code === 200 && response.data) {
             const wsToken = response.data;
             // 使用临时token打开聊天室
             window.open(this.$constant.imBaseURL + "?token=" + wsToken + "&defaultStoreType=" + (this.$store.state.sysConfig['store.type'] || 'local'));
