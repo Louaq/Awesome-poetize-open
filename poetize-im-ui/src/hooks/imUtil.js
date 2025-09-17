@@ -45,10 +45,16 @@ export default function () {
   }
 
   function mobileRight() {
-    if (imUtilData.showBodyLeft && $common.mobile()) {
-      $(".body-right").addClass("mobile-right");
-    } else if (!imUtilData.showBodyLeft && $common.mobile()) {
-      $(".body-right").removeClass("mobile-right");
+    if ($common.mobile()) {
+      if (imUtilData.showBodyLeft) {
+        $(".body-left").removeClass("hidden");
+        $(".body-right").removeClass("full-width");
+        $(".body-right").removeClass("mobile-right");
+      } else {
+        $(".body-left").addClass("hidden");
+        $(".body-right").addClass("full-width");
+        $(".body-right").removeClass("mobile-right");
+      }
     }
   }
 

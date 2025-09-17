@@ -156,7 +156,7 @@
                 <div class="im-user-right">
                   <div>{{groups[item].groupName}}</div>
                   <div class="im-down" v-if="!$common.isEmpty(groupMessages[item])">
-                    {{groupMessages[item][groupMessages[item].length-1].content.substr(0, 8)}}
+                    {{getMessagePreview(groupMessages[item][groupMessages[item].length-1].content)}}
                   </div>
                 </div>
               </div>
@@ -178,7 +178,7 @@
                 <div class="im-user-right">
                   <div>{{friends[item].remark}}</div>
                   <div class="im-down" v-if="!$common.isEmpty(imMessages[item])">
-                    {{imMessages[item][imMessages[item].length-1].content.substr(0, 8)}}
+                    {{getMessagePreview(imMessages[item][imMessages[item].length-1].content)}}
                   </div>
                 </div>
               </div>
@@ -302,17 +302,26 @@
         </div>
 
         <!-- 聊天 -->
-        <chat class="body-right"
-              v-if="subType === 2 && (!$common.isEmpty(currentChatFriendId) || !$common.isEmpty(currentChatGroupId))"
-              :currentChatFriendId="currentChatFriendId"
-              :currentChatGroupId="currentChatGroupId"
-              :friends="friends"
-              :groups="groups"
-              :imageList="imageList"
-              :imMessages="imMessages"
-              :groupMessages="groupMessages"
-              @sendMsg="sendMsg"
-              @openFriendCircle="openFriendCircle"></chat>
+        <div class="body-right chat-container"
+             v-if="subType === 2 && (!$common.isEmpty(currentChatFriendId) || !$common.isEmpty(currentChatGroupId))">
+          <!-- 移动端返回按钮 -->
+          <div class="mobile-back-btn" v-if="$common.mobile() && !showBodyLeft" @click="showChatList()">
+            <svg viewBox="0 0 1024 1024" width="20" height="20">
+              <path d="M724 218.3V141c0-6.7-7.7-10.4-12.9-6.3L260.3 486.8a31.86 31.86 0 0 0 0 50.3l450.8 352.1c5.3 4.1 12.9 0.4 12.9-6.3v-77.3c0-4.9-2.3-9.6-6.1-12.6l-360-281 360-281.1c3.8-3 6.1-7.7 6.1-12.6z" fill="currentColor"/>
+            </svg>
+            <span>返回</span>
+          </div>
+          
+          <chat :currentChatFriendId="currentChatFriendId"
+                :currentChatGroupId="currentChatGroupId"
+                :friends="friends"
+                :groups="groups"
+                :imageList="imageList"
+                :imMessages="imMessages"
+                :groupMessages="groupMessages"
+                @sendMsg="sendMsg"
+                @openFriendCircle="openFriendCircle"></chat>
+        </div>
 
         <div class="body-right" v-if="subType === 3">
           <div style="height: 60px;background-color: var(--maxWhite)">
@@ -787,7 +796,15 @@
       }
 
       function isActive(e, className, type, subType, current, imType) {
+        // 检查是否是侧边栏按钮的重复点击
+        let isRepeatClick = false;
         if (!$common.isEmpty(type)) {
+          // 检查当前点击的按钮是否已经是激活状态
+          let currentElement = e instanceof HTMLElement ? e : e.currentTarget;
+          if (currentElement.classList.contains('aside-active') && data.type === type) {
+            isRepeatClick = true;
+          }
+          
           data.type = type;
           let actives = ["im-active", "friend-active", "im-group"];
           for (let activeClass of actives) {
@@ -826,6 +843,31 @@
             mobileRight();
             hiddenBodyLeft();
           });
+        }
+
+        // 处理侧边栏按钮的切换逻辑
+        if (!$common.isEmpty(type) && className === 'aside-active') {
+          if (isRepeatClick) {
+            // 重复点击同一个按钮，切换 body-left 显示状态
+            imUtilData.showBodyLeft = !imUtilData.showBodyLeft;
+            mobileRight();
+          } else {
+            // 点击不同按钮，在桌面端显示 body-left，移动端根据情况处理
+            if ($common.mobile()) {
+              // 移动端：如果是进入聊天界面，隐藏 body-left；其他情况显示
+              imUtilData.showBodyLeft = !(subType === 2);
+            } else {
+              // 桌面端：确保 body-left 显示
+              imUtilData.showBodyLeft = true;
+            }
+            mobileRight();
+          }
+        }
+
+        // 移动端特殊处理：当进入聊天界面时自动隐藏 body-left
+        if ($common.mobile() && subType === 2) {
+          imUtilData.showBodyLeft = false;
+          mobileRight();
         }
 
         for (const tab of document.getElementsByClassName(className)) {
@@ -999,6 +1041,48 @@
           });
       }
 
+      // 获取消息预览文本（去除HTML标签）
+      function getMessagePreview(content) {
+        if (!content) return '';
+        
+        // 创建临时DOM元素来解析HTML
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = content;
+        
+        // 获取纯文本内容
+        let textContent = tempDiv.textContent || tempDiv.innerText || '';
+        
+        // 处理表情符号，将[表情名]保留
+        textContent = textContent.replace(/\s+/g, ' ').trim();
+        
+        // 如果是图片消息，显示[图片]
+        if (content.includes('<img') && content.includes('src=')) {
+          // 检查是否是表情图片
+          if (content.includes('emoji/q') || content.match(/\[.*\]/)) {
+            // 尝试从title属性中提取表情名称
+            const titleMatch = content.match(/title="(\[.*?\])"/);
+            if (titleMatch) {
+              textContent = titleMatch[1];
+            } else {
+              textContent = '[表情]';
+            }
+          } else {
+            textContent = '[图片]';
+          }
+        }
+        
+        // 截取前8个字符
+        return textContent.length > 8 ? textContent.substr(0, 8) + '...' : textContent;
+      }
+
+      // 显示聊天列表（移动端返回功能）
+      function showChatList() {
+        if ($common.mobile()) {
+          imUtilData.showBodyLeft = true;
+          mobileRight();
+        }
+      }
+
       return {
         ...toRefs(data),
         ...toRefs(bindEmailData),
@@ -1028,7 +1112,9 @@
         getCode,
         submitDialog,
         exitGroup,
-        dissolveGroup
+        dissolveGroup,
+        getMessagePreview,
+        showChatList
       }
     }
   }
@@ -1265,6 +1351,35 @@
     cursor: pointer;
   }
 
+  .mobile-back-btn {
+    display: none;
+    align-items: center;
+    padding: 10px 15px;
+    background: var(--white);
+    border-bottom: 1px solid var(--maxLightGray);
+    cursor: pointer;
+    font-size: 16px;
+    color: var(--blue);
+  }
+
+  .mobile-back-btn svg {
+    margin-right: 8px;
+  }
+
+  .mobile-back-btn:hover {
+    background: var(--lightGray);
+  }
+
+  .chat-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+  }
+
+  .chat-container chat {
+    flex: 1;
+  }
+
   .pagination-wrap {
     display: flex;
     justify-content: center;
@@ -1326,14 +1441,39 @@
 
     .friend-bode {
       max-width: calc(100vw - 60px);
+      position: relative;
+    }
+
+    .body-left {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      z-index: 10;
+      background: var(--white);
+      transition: transform 0.3s ease;
+    }
+
+    .body-left.hidden {
+      transform: translateX(-100%);
     }
 
     .body-right {
+      width: 100%;
       max-width: calc(100vw - 60px);
+      transition: margin-left 0.3s ease;
+    }
+
+    .body-right.full-width {
+      margin-left: 0;
     }
 
     .treeHole-wrap {
       width: calc(100vw - 40px);
+    }
+
+    .mobile-back-btn {
+      display: flex !important;
     }
   }
 
