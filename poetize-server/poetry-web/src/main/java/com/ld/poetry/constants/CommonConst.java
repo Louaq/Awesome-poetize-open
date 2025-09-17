@@ -269,4 +269,16 @@ public class CommonConst {
      * 管理员IP白名单缓存键
      */
     public static final String ADMIN_IP_WHITELIST = "admin_ip_whitelist";
+
+    /**
+     * WebSocket消息类型
+     */
+    public static final int PRIVATE_MESSAGE_TYPE = 1;
+    public static final int GROUP_MESSAGE_TYPE = 2;
+    public static final int ONLINE_COUNT_MESSAGE_TYPE = 3;
+
+    /**
+     * 字符集
+     */
+    public static final String CHARSET_NAME = "UTF-8";
 }

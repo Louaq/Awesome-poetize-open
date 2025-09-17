@@ -769,6 +769,14 @@
               }
               imgShow();
             });
+          } else if (message.messageType === 3) {
+            // 处理在线用户数更新消息
+            if (message.groupId && message.onlineCount !== undefined) {
+              store.commit('updateOnlineUserCount', {
+                groupId: message.groupId,
+                count: message.onlineCount
+              });
+            }
           }
         }
       }
@@ -927,6 +935,41 @@
               });
             });
         }
+        // 获取群组在线用户数
+        getGroupOnlineCount(groupId);
+      }
+
+      function getGroupOnlineCount(groupId) {
+        if (!groupId || groupId <= 0) {
+          console.warn('无效的群组ID:', groupId);
+          return;
+        }
+        
+        $http.get($constant.baseURL + "/imChatGroup/getOnlineCount", {
+          groupId: groupId
+        })
+          .then((res) => {
+            if (res.data && res.data.code === 200 && typeof res.data.data === 'number') {
+              store.commit('updateOnlineUserCount', {
+                groupId: groupId,
+                count: Math.max(0, res.data.data) // 确保非负数
+              });
+            } else {
+              throw new Error('响应数据格式错误');
+            }
+          })
+          .catch((error) => {
+            console.error('获取在线用户数失败:', error);
+            // 用户友好提示
+            if (typeof ElMessage !== 'undefined') {
+              ElMessage.warning('获取在线人数失败，显示可能不准确');
+            }
+            // 设置默认值
+            store.commit('updateOnlineUserCount', {
+              groupId: groupId,
+              count: 0
+            });
+          });
       }
 
       return {

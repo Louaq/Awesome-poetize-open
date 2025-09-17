@@ -12,7 +12,7 @@
           {{groups[currentChatGroupId].groupName}}
         </span>
         <span style="line-height: 60px;margin-left: 20px;font-size: 12px;color: var(--greyFont)">
-          当前在线人数：4
+          当前在线人数：{{ getOnlineUserCount() }}
         </span>
       </template>
     </div>
@@ -591,6 +591,13 @@
         }
       }
 
+      function getOnlineUserCount() {
+        if (!$common.isEmpty(props.currentChatGroupId)) {
+          return store.state.onlineUserCount[props.currentChatGroupId] || 0;
+        }
+        return 0;
+      }
+
       return {
         ...toRefs(data),
         openFriendCircle,
@@ -600,7 +607,8 @@
         sendImage,
         sendPoetry,
         send,
-        doSend
+        doSend,
+        getOnlineUserCount
       }
     }
   }

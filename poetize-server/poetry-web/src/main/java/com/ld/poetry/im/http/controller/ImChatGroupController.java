@@ -33,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * <p>
@@ -42,6 +43,7 @@ import java.util.stream.Collectors;
  * @author sara
  * @since 2021-12-02
  */
+@Slf4j
 @RestController
 @RequestMapping("/imChatGroup")
 public class ImChatGroupController {
@@ -239,6 +241,40 @@ public class ImChatGroupController {
             return getGroupVO(imChatGroup, imChatGroupUser);
         }).collect(Collectors.toList());
         return PoetryResult.success(groupVOS);
+    }
+
+    /**
+     * 获取群组在线用户数
+     */
+    @GetMapping("/getOnlineCount")
+    @LoginCheck
+    public PoetryResult<Integer> getOnlineCount(@RequestParam("groupId") Integer groupId) {
+        // 参数验证
+        if (groupId == null || groupId <= 0) {
+            log.warn("获取在线用户数请求参数无效: groupId={}", groupId);
+            return PoetryResult.fail("无效的群组ID");
+        }
+        
+        try {
+            TioWebsocketStarter tioWebsocketStarter = TioUtil.getTio();
+            if (tioWebsocketStarter == null) {
+                log.warn("WebSocket服务未启动，groupId: {}", groupId);
+                return PoetryResult.success(0);
+            }
+            
+            // 获取群组在线用户数
+            int onlineCount = Tio.getByGroup(tioWebsocketStarter.getServerTioConfig(), String.valueOf(groupId)).size();
+            
+            // 记录访问日志
+            if (log.isDebugEnabled()) {
+                log.debug("获取群组{}在线用户数: {}", groupId, onlineCount);
+            }
+            
+            return PoetryResult.success(Math.max(0, onlineCount));
+        } catch (Exception e) {
+            log.error("获取群组在线用户数失败，groupId: {}", groupId, e);
+            return PoetryResult.fail("服务器内部错误，请稍后重试");
+        }
     }
 
     private GroupVO getGroupVO(ImChatGroup imChatGroup, ImChatGroupUser imChatGroupUser) {

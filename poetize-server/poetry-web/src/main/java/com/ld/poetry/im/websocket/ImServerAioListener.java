@@ -1,10 +1,18 @@
 package com.ld.poetry.im.websocket;
 
+import com.ld.poetry.constants.CommonConst;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.tio.core.ChannelContext;
+import org.tio.core.Tio;
 import org.tio.core.intf.Packet;
+import org.tio.websocket.common.WsResponse;
 import org.tio.websocket.server.WsServerAioListener;
+import com.ld.poetry.im.websocket.TioWebsocketStarter;
+import com.ld.poetry.im.websocket.TioUtil;
+import org.tio.utils.lock.SetWithLock;
+
+import java.util.Set;
 
 @Component
 @Slf4j
@@ -20,6 +28,12 @@ public class ImServerAioListener extends WsServerAioListener {
     @Override
     public void onAfterConnected(ChannelContext channelContext, boolean isConnected, boolean isReconnect) throws Exception {
         super.onAfterConnected(channelContext, isConnected, isReconnect);
+        if (log.isInfoEnabled()) {
+            log.info("onAfterConnected\r\n{}", channelContext);
+        }
+        
+        // 用户连接后，推送在线用户数更新
+        broadcastOnlineCountUpdate(channelContext);
     }
 
     /**
@@ -47,6 +61,13 @@ public class ImServerAioListener extends WsServerAioListener {
      */
     @Override
     public void onBeforeClose(ChannelContext channelContext, Throwable throwable, String remark, boolean isRemove) throws Exception {
+        if (log.isInfoEnabled()) {
+            log.info("onBeforeClose\r\n{}", channelContext);
+        }
+        
+        // 用户断开连接前，推送在线用户数更新（需要在super调用前处理，此时用户还在群组中）
+        broadcastOnlineCountUpdateOnLeave(channelContext);
+        
         super.onBeforeClose(channelContext, throwable, remark, isRemove);
     }
 
@@ -84,5 +105,80 @@ public class ImServerAioListener extends WsServerAioListener {
     @Override
     public boolean onHeartbeatTimeout(ChannelContext channelContext, Long interval, int heartbeatTimeoutCount) {
         return super.onHeartbeatTimeout(channelContext, interval, heartbeatTimeoutCount);
+    }
+
+    /**
+     * 广播在线用户数更新
+     */
+    private void broadcastOnlineCountUpdate(ChannelContext channelContext) {
+        try {
+            // 获取用户所在的群组
+            SetWithLock<String> groups = channelContext.getGroups();
+            if (groups != null && groups.size() > 0) {
+                TioWebsocketStarter tioWebsocketStarter = TioUtil.getTio();
+                if (tioWebsocketStarter == null) {
+                    return;
+                }
+                
+                for (String groupId : groups.getObj()) {
+                    // 获取群组在线用户数
+                    int onlineCount = Tio.getByGroup(tioWebsocketStarter.getServerTioConfig(), groupId).size();
+                    
+                    // 构建在线用户数消息
+                    ImMessage imMessage = new ImMessage();
+                    imMessage.setMessageType(CommonConst.ONLINE_COUNT_MESSAGE_TYPE);
+                    imMessage.setOnlineCount(onlineCount);
+                    imMessage.setGroupId(Integer.valueOf(groupId));
+                    
+                    // 向群组广播在线用户数
+                    WsResponse wsResponse = WsResponse.fromText(imMessage.toJsonString(), CommonConst.CHARSET_NAME);
+                    Tio.sendToGroup(tioWebsocketStarter.getServerTioConfig(), groupId, wsResponse);
+                    
+                    if (log.isDebugEnabled()) {
+                        log.debug("广播群组{}在线用户数更新: {}", groupId, onlineCount);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("广播在线用户数更新失败", e);
+        }
+    }
+
+    /**
+     * 用户离开时广播在线用户数更新（需要减1）
+     */
+    private void broadcastOnlineCountUpdateOnLeave(ChannelContext channelContext) {
+        try {
+            // 获取用户所在的群组
+            SetWithLock<String> groups = channelContext.getGroups();
+            if (groups != null && groups.size() > 0) {
+                TioWebsocketStarter tioWebsocketStarter = TioUtil.getTio();
+                if (tioWebsocketStarter == null) {
+                    return;
+                }
+                
+                for (String groupId : groups.getObj()) {
+                    // 获取群组在线用户数（当前用户还在群组中，所以需要减1）
+                    int currentCount = Tio.getByGroup(tioWebsocketStarter.getServerTioConfig(), groupId).size();
+                    int onlineCount = Math.max(0, currentCount - 1);
+                    
+                    // 构建在线用户数消息
+                    ImMessage imMessage = new ImMessage();
+                    imMessage.setMessageType(CommonConst.ONLINE_COUNT_MESSAGE_TYPE);
+                    imMessage.setOnlineCount(onlineCount);
+                    imMessage.setGroupId(Integer.valueOf(groupId));
+                    
+                    // 向群组广播在线用户数（排除当前即将离开的用户）
+                    WsResponse wsResponse = WsResponse.fromText(imMessage.toJsonString(), CommonConst.CHARSET_NAME);
+                    Tio.sendToGroup(tioWebsocketStarter.getServerTioConfig(), groupId, wsResponse);
+                    
+                    if (log.isDebugEnabled()) {
+                        log.debug("广播群组{}用户离开后在线用户数: {} -> {}", groupId, currentCount, onlineCount);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.error("广播用户离开时在线用户数更新失败", e);
+        }
     }
 }
