@@ -249,8 +249,8 @@ public class ImChatGroupController {
     @GetMapping("/getOnlineCount")
     @LoginCheck
     public PoetryResult<Integer> getOnlineCount(@RequestParam("groupId") Integer groupId) {
-        // 参数验证
-        if (groupId == null || groupId <= 0) {
+        // 参数验证 (允许-1作为公共聊天室ID)
+        if (groupId == null) {
             log.warn("获取在线用户数请求参数无效: groupId={}", groupId);
             return PoetryResult.fail("无效的群组ID");
         }
