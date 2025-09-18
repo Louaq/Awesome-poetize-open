@@ -826,14 +826,17 @@
           }
 
           if (subType === 2 && !$common.isEmpty(current) && !$common.isEmpty(imType)) {
+            console.log(`[${$common.mobile() ? '移动端' : 'PC端'}] 进入聊天界面 - imType: ${imType}, current: ${current}`);
             if (imType === 1) {
               data.currentChatFriendId = null;
               data.currentChatGroupId = current;
               data.groupMessageBadge[current] = 0;
+              console.log(`[${$common.mobile() ? '移动端' : 'PC端'}] 设置当前群聊ID: ${current}`);
             } else if (imType === 2) {
               data.currentChatGroupId = null;                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
               data.currentChatFriendId = current;
               data.imMessageBadge[current] = 0;
+              console.log(`[${$common.mobile() ? '移动端' : 'PC端'}] 设置当前好友ID: ${current}`);
             }
           }
           
@@ -906,9 +909,22 @@
         
         // 切换到聊天标签页
         isActive(document.getElementById('chat'), 'aside-active', 1);
-        // 进入聊天界面
-        isActive(document.getElementsByClassName('im-user-current')[0], 'im-active', null, 2, friendData.currentFriendId, 2);
-        getMessages(friendData.currentFriendId);
+        
+        // 等待DOM更新完成，确保v-show生效
+        await nextTick();
+        
+        // 使用setTimeout确保DOM完全渲染
+        setTimeout(() => {
+          // 查找对应的聊天项目元素（第一个元素，因为我们刚刚把它移到了数组开头）
+          const userElements = document.getElementsByClassName('im-user-current');
+          if (userElements && userElements.length > 0) {
+            // 进入聊天界面
+            isActive(userElements[0], 'im-active', null, 2, friendData.currentFriendId, 2);
+          } else {
+            console.warn('未找到聊天用户元素，当前type:', data.type);
+          }
+          getMessages(friendData.currentFriendId);
+        }, 50);
       }
 
       async function sendGroupMessage() {
@@ -923,12 +939,26 @@
         
         // 切换到聊天标签页
         isActive(document.getElementById('chat'), 'aside-active', 1);
-        // 进入群聊界面
-        isActive(document.getElementsByClassName('im-group-current')[0], 'im-active', null, 2, groupData.currentGroupId, 1);
-        getGroupMessages(groupData.currentGroupId);
-        if (groupData.groups[groupData.currentGroupId].groupType === 2) {
-          addGroupTopic();
-        }
+        
+        // 等待DOM更新完成，确保v-show生效
+        await nextTick();
+        
+        // 使用setTimeout确保DOM完全渲染
+        setTimeout(() => {
+          // 查找对应的群聊项目元素（第一个元素，因为我们刚刚把它移到了数组开头）
+          const groupElements = document.getElementsByClassName('im-group-current');
+          if (groupElements && groupElements.length > 0) {
+            // 进入群聊界面
+            isActive(groupElements[0], 'im-active', null, 2, groupData.currentGroupId, 1);
+          } else {
+            console.warn('未找到群聊元素，当前type:', data.type);
+          }
+          console.log(`[${$common.mobile() ? '移动端' : 'PC端'}] 准备获取群组消息，群组ID:`, groupData.currentGroupId);
+          getGroupMessages(groupData.currentGroupId);
+          if (groupData.groups[groupData.currentGroupId].groupType === 2) {
+            addGroupTopic();
+          }
+        }, 50);
       }
 
       function getMessages(friendId, current = 1, size = 100) {
@@ -1005,11 +1035,13 @@
           return;
         }
         
+        console.log(`[${$common.mobile() ? '移动端' : 'PC端'}] 开始获取群组 ${groupId} 的在线人数`);
+        
         $http.get($constant.baseURL + "/imChatGroup/getOnlineCount", {
           groupId: groupId
         })
           .then((res) => {
-            console.log('获取在线人数响应:', res); // 调试日志
+            console.log(`[${$common.mobile() ? '移动端' : 'PC端'}] 获取在线人数响应:`, res);
             
             // 验证响应结构: {code: 200, data: number|string, ...}
             if (res && res.code === 200 && res.hasOwnProperty('data')) {
@@ -1038,9 +1070,9 @@
                 groupId: groupId,
                 count: onlineCount
               });
-              console.log(`群组 ${groupId} 在线人数更新为: ${onlineCount}`);
+              console.log(`[${$common.mobile() ? '移动端' : 'PC端'}] 群组 ${groupId} 在线人数更新为: ${onlineCount}`);
             } else {
-              console.warn('响应格式异常:', res);
+              console.warn(`[${$common.mobile() ? '移动端' : 'PC端'}] 响应格式异常:`, res);
               // 设置默认值而不抛出错误
               store.commit('updateOnlineUserCount', {
                 groupId: groupId,
@@ -1049,7 +1081,7 @@
             }
           })
           .catch((error) => {
-            console.error('获取在线用户数失败:', error);
+            console.error(`[${$common.mobile() ? '移动端' : 'PC端'}] 获取在线用户数失败:`, error);
             
             // 设置默认值
             store.commit('updateOnlineUserCount', {
@@ -1385,8 +1417,6 @@
   }
 
   .mobile-back-btn {
-    display: none;
-    align-items: center;
     padding: 10px 15px;
     background: var(--white);
     border-bottom: 1px solid var(--maxLightGray);
@@ -1410,7 +1440,6 @@
   }
 
   .chat-container > * {
-    flex: 1;
     display: flex;
     flex-direction: column;
   }
