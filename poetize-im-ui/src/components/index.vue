@@ -1131,10 +1131,21 @@
       // 显示聊天列表（移动端返回功能）
       function showChatList() {
         if ($common.mobile()) {
-          imUtilData.showBodyLeft = true;
+          // 清除当前聊天状态
+          data.currentChatFriendId = null;
+          data.currentChatGroupId = null;
+          
           // 重置到聊天列表状态
           data.subType = 1;
+          
+          // 显示左侧面板（聊天列表）
+          imUtilData.showBodyLeft = true;
+          
+          // 更新移动端布局
           mobileRight();
+          
+          // 确保侧边栏聊天按钮处于激活状态
+          updateAsideActiveState(1);
         }
       }
 

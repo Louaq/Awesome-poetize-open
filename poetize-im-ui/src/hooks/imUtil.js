@@ -21,29 +21,62 @@ export default function () {
     systemMessages: [],
     showBodyLeft: true,
     //表情包
-    imageList: []
+    imageList: [],
+    // 存储事件监听器引用，避免重复绑定
+    bodyRightClickHandler: null
   })
 
   onMounted(() => {
     if ($common.mobile()) {
       const friendAside = document.querySelector(".friend-aside");
       if (friendAside) {
-        friendAside.addEventListener('click', () => {
-          imUtilData.showBodyLeft = true;
-          mobileRight();
-        });
+        // 确保不重复绑定
+        friendAside.removeEventListener('click', handleFriendAsideClick);
+        friendAside.addEventListener('click', handleFriendAsideClick);
       }
 
       const bodyRight = document.querySelector(".body-right");
       if (bodyRight) {
-        bodyRight.addEventListener('click', () => {
-          imUtilData.showBodyLeft = false;
-          mobileRight();
-        });
+        // 确保不重复绑定
+        bodyRight.removeEventListener('click', handleInitialBodyRightClick);
+        bodyRight.addEventListener('click', handleInitialBodyRightClick);
       }
     }
     mobileRight();
   })
+
+  onBeforeUnmount(() => {
+    if ($common.mobile()) {
+      // 清理事件监听器
+      const friendAside = document.querySelector(".friend-aside");
+      if (friendAside) {
+        friendAside.removeEventListener('click', handleFriendAsideClick);
+      }
+
+      const bodyRight = document.querySelector(".body-right");
+      if (bodyRight) {
+        bodyRight.removeEventListener('click', handleInitialBodyRightClick);
+      }
+
+      // 清理动态添加的事件监听器
+      if (imUtilData.bodyRightClickHandler) {
+        const bodyRightElements = document.querySelectorAll('.body-right');
+        bodyRightElements.forEach(element => {
+          element.removeEventListener('click', imUtilData.bodyRightClickHandler);
+        });
+      }
+    }
+  })
+
+  function handleFriendAsideClick() {
+    imUtilData.showBodyLeft = true;
+    mobileRight();
+  }
+
+  function handleInitialBodyRightClick() {
+    imUtilData.showBodyLeft = false;
+    mobileRight();
+  }
 
   function changeAside() {
     imUtilData.showBodyLeft = !imUtilData.showBodyLeft;
@@ -55,7 +88,10 @@ export default function () {
       const bodyLeft = document.querySelector(".body-left");
       const bodyRight = document.querySelector(".body-right");
       
+      console.log(`[移动端] mobileRight 调用 - showBodyLeft: ${imUtilData.showBodyLeft}`);
+      
       if (imUtilData.showBodyLeft) {
+        // 显示左侧面板（聊天列表）
         if (bodyLeft) {
           bodyLeft.classList.remove("hidden");
           // 添加进入动画
@@ -66,7 +102,9 @@ export default function () {
         if (bodyRight) {
           bodyRight.classList.remove("full-width", "mobile-right");
         }
+        console.log('[移动端] 显示左侧面板（聊天列表）');
       } else {
+        // 隐藏左侧面板，显示右侧内容
         if (bodyLeft) {
           bodyLeft.classList.add("hidden");
         }
@@ -76,6 +114,7 @@ export default function () {
           // 添加退出动画
           bodyRight.style.animation = 'slideInFromRight 0.3s ease-out';
         }
+        console.log('[移动端] 隐藏左侧面板，显示右侧内容');
       }
       
       // 清除动画，避免重复触发
@@ -124,18 +163,28 @@ export default function () {
   function hiddenBodyLeft() {
     if ($common.mobile()) {
       const bodyRightElements = document.querySelectorAll('.body-right');
+      
+      // 如果已经有处理器，先移除
+      if (imUtilData.bodyRightClickHandler) {
+        bodyRightElements.forEach(element => {
+          element.removeEventListener('click', imUtilData.bodyRightClickHandler);
+        });
+      }
+      
+      // 创建新的处理器
+      imUtilData.bodyRightClickHandler = function(event) {
+        // 只有在显示左侧面板时才处理点击
+        if (imUtilData.showBodyLeft) {
+          imUtilData.showBodyLeft = false;
+          mobileRight();
+        }
+      };
+      
+      // 添加事件监听器
       bodyRightElements.forEach(element => {
-        // 移除之前的事件监听器，避免重复绑定
-        element.removeEventListener('click', handleBodyRightClick);
-        // 添加新的事件监听器
-        element.addEventListener('click', handleBodyRightClick);
+        element.addEventListener('click', imUtilData.bodyRightClickHandler);
       });
     }
-  }
-  
-  function handleBodyRightClick() {
-    imUtilData.showBodyLeft = false;
-    mobileRight();
   }
 
   function imgShow() {
