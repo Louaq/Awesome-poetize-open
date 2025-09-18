@@ -26,8 +26,45 @@ export default function () {
     bodyRightClickHandler: null
   })
 
-  onMounted(() => {
+  // 状态持久化相关函数 - 与后端Redis同步
+  function saveShowBodyLeftState() {
     if ($common.mobile()) {
+      const userId = store.getters.currentUser?.id;
+      if (userId) {
+        // 异步保存到后端Redis，不阻塞UI
+        $http.post($constant.baseURL + "/im/saveUIState", {
+          showBodyLeft: imUtilData.showBodyLeft
+        }).catch(error => {
+          console.warn('[UI状态同步] 保存失败:', error);
+        });
+      }
+    }
+  }
+
+  async function loadShowBodyLeftState() {
+    if ($common.mobile()) {
+      const userId = store.getters.currentUser?.id;
+      if (userId) {
+        try {
+          const res = await $http.get($constant.baseURL + "/im/getUIState");
+          if (res.data && res.data.showBodyLeft !== undefined) {
+            imUtilData.showBodyLeft = res.data.showBodyLeft;
+            console.log('[UI状态同步] 加载状态:', imUtilData.showBodyLeft);
+          }
+        } catch (error) {
+          console.warn('[UI状态同步] 加载失败:', error);
+          // 降级到默认状态
+          imUtilData.showBodyLeft = true;
+        }
+      }
+    }
+  }
+
+  onMounted(async () => {
+    if ($common.mobile()) {
+      // 异步加载保存的状态
+      await loadShowBodyLeftState();
+      
       const friendAside = document.querySelector(".friend-aside");
       if (friendAside) {
         // 确保不重复绑定
@@ -42,7 +79,8 @@ export default function () {
         bodyRight.addEventListener('click', handleInitialBodyRightClick);
       }
     }
-    mobileRight();
+    // 应用加载的状态，跳过动画避免页面刷新时的闪烁
+    mobileRight(true);
   })
 
   onBeforeUnmount(() => {
@@ -80,24 +118,29 @@ export default function () {
 
   function changeAside() {
     imUtilData.showBodyLeft = !imUtilData.showBodyLeft;
+    console.log('[移动端] changeAside 调用 - showBodyLeft:', imUtilData.showBodyLeft);
     mobileRight();
+    // 同步状态到服务器
+    saveShowBodyLeftState();
   }
 
-  function mobileRight() {
+  function mobileRight(skipAnimation = false) {
     if ($common.mobile()) {
       const bodyLeft = document.querySelector(".body-left");
       const bodyRight = document.querySelector(".body-right");
       
-      console.log(`[移动端] mobileRight 调用 - showBodyLeft: ${imUtilData.showBodyLeft}`);
+      console.log(`[移动端] mobileRight 调用 - showBodyLeft: ${imUtilData.showBodyLeft}, skipAnimation: ${skipAnimation}`);
       
       if (imUtilData.showBodyLeft) {
         // 显示左侧面板（聊天列表）
         if (bodyLeft) {
           bodyLeft.classList.remove("hidden");
-          // 添加进入动画
-          setTimeout(() => {
-            bodyLeft.style.animation = 'slideInFromLeft 0.3s ease-out';
-          }, 10);
+          // 只在非跳过动画时添加进入动画
+          if (!skipAnimation) {
+            setTimeout(() => {
+              bodyLeft.style.animation = 'slideInFromLeft 0.3s ease-out';
+            }, 10);
+          }
         }
         if (bodyRight) {
           bodyRight.classList.remove("full-width", "mobile-right");
@@ -111,17 +154,24 @@ export default function () {
         if (bodyRight) {
           bodyRight.classList.add("full-width");
           bodyRight.classList.remove("mobile-right");
-          // 添加退出动画
-          bodyRight.style.animation = 'slideInFromRight 0.3s ease-out';
+          // 只在非跳过动画时添加退出动画
+          if (!skipAnimation) {
+            bodyRight.style.animation = 'slideInFromRight 0.3s ease-out';
+          }
         }
         console.log('[移动端] 隐藏左侧面板，显示右侧内容');
       }
       
-      // 清除动画，避免重复触发
-      setTimeout(() => {
-        if (bodyLeft) bodyLeft.style.animation = '';
-        if (bodyRight) bodyRight.style.animation = '';
-      }, 300);
+      // 保存状态到后端Redis
+      saveShowBodyLeftState();
+      
+      // 清除动画，避免重复触发（只在有动画时执行）
+      if (!skipAnimation) {
+        setTimeout(() => {
+          if (bodyLeft) bodyLeft.style.animation = '';
+          if (bodyRight) bodyRight.style.animation = '';
+        }, 300);
+      }
     }
   }
 
@@ -173,10 +223,25 @@ export default function () {
       
       // 创建新的处理器
       imUtilData.bodyRightClickHandler = function(event) {
-        // 只有在显示左侧面板时才处理点击
-        if (imUtilData.showBodyLeft) {
+        // 检查点击的是否是返回按钮或其子元素
+        const isBackButton = event.target.closest('.mobile-back-btn');
+        
+        // 检查点击的是否是聊天输入区域或消息区域
+        const isChatArea = event.target.closest('.chat-container, .msg-container, .chat-input');
+        
+        console.log('[移动端] bodyRight 点击事件:', {
+          isBackButton,
+          isChatArea,
+          showBodyLeft: imUtilData.showBodyLeft,
+          targetClass: event.target.className
+        });
+        
+        // 只有在显示左侧面板且不是点击返回按钮且不是聊天区域时才处理点击
+        if (imUtilData.showBodyLeft && !isBackButton && !isChatArea) {
+          console.log('[移动端] 隐藏左侧面板');
           imUtilData.showBodyLeft = false;
           mobileRight();
+          saveShowBodyLeftState();
         }
       };
       
@@ -295,6 +360,8 @@ export default function () {
     imgShow,
     getImageList,
     parseMessage,
-    updateAsideActiveState
+    updateAsideActiveState,
+    saveShowBodyLeftState,
+    loadShowBodyLeftState
   }
 }

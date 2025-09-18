@@ -1,28 +1,82 @@
 package com.ld.poetry.controller;
 
 import com.ld.poetry.aop.LoginCheck;
+import com.ld.poetry.config.PoetryResult;
 import com.ld.poetry.entity.User;
 import com.ld.poetry.service.CacheService;
+import com.ld.poetry.utils.PoetryUtil;
 import com.ld.poetry.utils.Result;
 import com.ld.poetry.utils.SecureTokenGenerator;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import jakarta.servlet.http.HttpServletRequest;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * WebSocket IM 控制器
  * 处理聊天室相关的API请求
  */
+@Slf4j
 @RestController
 @RequestMapping("/im")
 public class ImController {
 
     @Autowired
     private CacheService cacheService;
+    
+    /**
+     * 保存用户界面状态到后端
+     */
+    @PostMapping("/saveUIState")
+    public PoetryResult<String> saveUIState(@RequestBody Map<String, Object> request) {
+        try {
+            Integer userId = PoetryUtil.getUserId();
+            if (userId == null) {
+                return PoetryResult.fail("用户未登录");
+            }
+            
+            Boolean showBodyLeft = (Boolean) request.get("showBodyLeft");
+            if (showBodyLeft != null) {
+                cacheService.cacheUserUIState(userId, showBodyLeft);
+                log.info("同步用户界面状态成功: userId={}, showBodyLeft={}", userId, showBodyLeft);
+                return PoetryResult.success("界面状态同步成功");
+            }
+            
+            return PoetryResult.fail("参数错误");
+        } catch (Exception e) {
+            log.error("同步用户界面状态失败", e);
+            return PoetryResult.fail("同步失败");
+        }
+    }
+    
+    /**
+     * 获取用户界面状态
+     */
+    @GetMapping("/getUIState")
+    public PoetryResult<Map<String, Object>> getUIState() {
+        try {
+            Integer userId = PoetryUtil.getUserId();
+            if (userId == null) {
+                return PoetryResult.fail("用户未登录");
+            }
+            
+            Map<String, Object> uiState = cacheService.getUserUIState(userId);
+            if (uiState == null) {
+                // 返回默认状态
+                uiState = new HashMap<>();
+                uiState.put("showBodyLeft", true); // 默认显示聊天列表
+            }
+            
+            return PoetryResult.success(uiState);
+        } catch (Exception e) {
+            log.error("获取用户界面状态失败", e);
+            return PoetryResult.fail("获取失败");
+        }
+    }
 
     /**
      * 获取WebSocket连接临时token

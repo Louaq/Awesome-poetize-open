@@ -1447,6 +1447,66 @@ public class CacheService {
         return result;
     }
 
+    // ==================== 用户界面状态缓存方法 ====================
+    
+    /**
+     * 用户界面状态缓存前缀
+     */
+    private static final String USER_UI_STATE_PREFIX = "user_ui_state:";
+    
+    /**
+     * 缓存用户界面状态（移动端聊天列表显示状态）
+     *
+     * @param userId 用户ID
+     * @param showBodyLeft 是否显示左侧面板
+     */
+    public void cacheUserUIState(Integer userId, Boolean showBodyLeft) {
+        if (userId != null) {
+            String key = USER_UI_STATE_PREFIX + userId;
+            Map<String, Object> uiState = new HashMap<>();
+            uiState.put("showBodyLeft", showBodyLeft);
+            uiState.put("timestamp", System.currentTimeMillis());
+            
+            // 缓存24小时
+            redisUtil.set(key, uiState, 24 * 60 * 60);
+            log.debug("缓存用户界面状态: userId={}, showBodyLeft={}", userId, showBodyLeft);
+        }
+    }
+    
+    /**
+     * 获取用户界面状态
+     *
+     * @param userId 用户ID
+     * @return 界面状态Map，包含showBodyLeft等信息
+     */
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> getUserUIState(Integer userId) {
+        if (userId == null) return null;
+        
+        String key = USER_UI_STATE_PREFIX + userId;
+        Object cached = redisUtil.get(key);
+        
+        if (cached instanceof Map) {
+            log.debug("从缓存获取用户界面状态: userId={}", userId);
+            return (Map<String, Object>) cached;
+        }
+        
+        return null;
+    }
+    
+    /**
+     * 删除用户界面状态缓存
+     *
+     * @param userId 用户ID
+     */
+    public void removeUserUIState(Integer userId) {
+        if (userId != null) {
+            String key = USER_UI_STATE_PREFIX + userId;
+            redisUtil.del(key);
+            log.debug("删除用户界面状态缓存: userId={}", userId);
+        }
+    }
+
     // ==================== WebSocket会话缓存方法 ====================
     
     /**

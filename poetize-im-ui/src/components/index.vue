@@ -701,7 +701,19 @@
         im.tio.ws.onmessage = function (event) {
           let message = JSON.parse(event.data);
           message.content = parseMessage(message.content);
+          
+          // 处理UI状态同步消息
+          if (message.messageType === 4) {
+            console.log('[WebSocket] 收到UI状态同步消息:', message);
+            if (message.showBodyLeft !== undefined) {
+              imUtilData.showBodyLeft = message.showBodyLeft;
+              mobileRight(true); // 跳过动画，避免闪烁
+            }
+            return;
+          }
+          
           if (message.messageType === 1) {
+=======
             if (message.fromId === store.state.currentUser.id && (friendData.friends[message.toId] !== null && friendData.friends[message.toId] !== undefined)) {
               if (data.imMessages[message.toId] === null || data.imMessages[message.toId] === undefined) {
                 data.imMessages[message.toId] = [];
@@ -736,6 +748,13 @@
                 } else {
                   data.imMessageBadge[message.fromId] = data.imMessageBadge[message.fromId] + 1;
                 }
+                
+                // 移动端收到新消息时，如果当前不在聊天界面，显示左侧面板
+                if ($common.mobile() && data.subType !== 2) {
+                  imUtilData.showBodyLeft = true;
+                  mobileRight(true); // 跳过动画
+                  saveShowBodyLeftState();
+                }
               }
             }
 
@@ -768,6 +787,13 @@
                 data.groupMessageBadge[message.groupId] = 1;
               } else {
                 data.groupMessageBadge[message.groupId] = data.groupMessageBadge[message.groupId] + 1;
+              }
+              
+              // 移动端收到新群消息时，如果当前不在聊天界面，显示左侧面板
+              if ($common.mobile() && data.subType !== 2) {
+                imUtilData.showBodyLeft = true;
+                mobileRight(true); // 跳过动画
+                saveShowBodyLeftState();
               }
             }
 
@@ -857,7 +883,12 @@
               msgContainer[0].scrollTop = msgContainer[0].scrollHeight;
             }
             imgShow();
-            mobileRight();
+            // 进入聊天界面时跳过动画，避免消息发送后的页面进入动画
+            if (subType === 2 && $common.mobile()) {
+              mobileRight(true);
+            } else {
+              mobileRight();
+            }
             hiddenBodyLeft();
           });
         }
@@ -1131,6 +1162,14 @@
       // 显示聊天列表（移动端返回功能）
       function showChatList() {
         if ($common.mobile()) {
+          console.log('[移动端] showChatList 调用 - 当前状态:', {
+            showBodyLeft: imUtilData.showBodyLeft,
+            subType: data.subType
+          });
+          
+          // 防止事件冒泡导致的重复调用
+          event?.stopPropagation();
+          
           // 清除当前聊天状态
           data.currentChatFriendId = null;
           data.currentChatGroupId = null;
@@ -1141,11 +1180,16 @@
           // 显示左侧面板（聊天列表）
           imUtilData.showBodyLeft = true;
           
-          // 更新移动端布局
-          mobileRight();
+          // 更新移动端布局，使用动画
+          mobileRight(false);
           
           // 确保侧边栏聊天按钮处于激活状态
           updateAsideActiveState(1);
+          
+          console.log('[移动端] showChatList 完成 - 新状态:', {
+            showBodyLeft: imUtilData.showBodyLeft,
+            subType: data.subType
+          });
         }
       }
 
