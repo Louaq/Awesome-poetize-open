@@ -26,15 +26,21 @@ export default function () {
 
   onMounted(() => {
     if ($common.mobile()) {
-      $(".friend-aside").click(function () {
-        imUtilData.showBodyLeft = true;
-        mobileRight();
-      });
+      const friendAside = document.querySelector(".friend-aside");
+      if (friendAside) {
+        friendAside.addEventListener('click', () => {
+          imUtilData.showBodyLeft = true;
+          mobileRight();
+        });
+      }
 
-      $(".body-right").click(function () {
-        imUtilData.showBodyLeft = false;
-        mobileRight();
-      });
+      const bodyRight = document.querySelector(".body-right");
+      if (bodyRight) {
+        bodyRight.addEventListener('click', () => {
+          imUtilData.showBodyLeft = false;
+          mobileRight();
+        });
+      }
     }
     mobileRight();
   })
@@ -46,28 +52,36 @@ export default function () {
 
   function mobileRight() {
     if ($common.mobile()) {
+      const bodyLeft = document.querySelector(".body-left");
+      const bodyRight = document.querySelector(".body-right");
+      
       if (imUtilData.showBodyLeft) {
-        $(".body-left").removeClass("hidden");
-        $(".body-right").removeClass("full-width");
-        $(".body-right").removeClass("mobile-right");
-        
-        // 添加进入动画
-        setTimeout(() => {
-          $(".body-left").css('animation', 'slideInFromLeft 0.3s ease-out');
-        }, 10);
+        if (bodyLeft) {
+          bodyLeft.classList.remove("hidden");
+          // 添加进入动画
+          setTimeout(() => {
+            bodyLeft.style.animation = 'slideInFromLeft 0.3s ease-out';
+          }, 10);
+        }
+        if (bodyRight) {
+          bodyRight.classList.remove("full-width", "mobile-right");
+        }
       } else {
-        $(".body-left").addClass("hidden");
-        $(".body-right").addClass("full-width");
-        $(".body-right").removeClass("mobile-right");
-        
-        // 添加退出动画
-        $(".body-right").css('animation', 'slideInFromRight 0.3s ease-out');
+        if (bodyLeft) {
+          bodyLeft.classList.add("hidden");
+        }
+        if (bodyRight) {
+          bodyRight.classList.add("full-width");
+          bodyRight.classList.remove("mobile-right");
+          // 添加退出动画
+          bodyRight.style.animation = 'slideInFromRight 0.3s ease-out';
+        }
       }
       
       // 清除动画，避免重复触发
       setTimeout(() => {
-        $(".body-left").css('animation', '');
-        $(".body-right").css('animation', '');
+        if (bodyLeft) bodyLeft.style.animation = '';
+        if (bodyRight) bodyRight.style.animation = '';
       }, 300);
     }
   }
