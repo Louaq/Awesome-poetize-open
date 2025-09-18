@@ -50,10 +50,44 @@ export default function () {
         $(".body-left").removeClass("hidden");
         $(".body-right").removeClass("full-width");
         $(".body-right").removeClass("mobile-right");
+        
+        // 添加进入动画
+        setTimeout(() => {
+          $(".body-left").css('animation', 'slideInFromLeft 0.3s ease-out');
+        }, 10);
       } else {
         $(".body-left").addClass("hidden");
         $(".body-right").addClass("full-width");
         $(".body-right").removeClass("mobile-right");
+        
+        // 添加退出动画
+        $(".body-right").css('animation', 'slideInFromRight 0.3s ease-out');
+      }
+      
+      // 清除动画，避免重复触发
+      setTimeout(() => {
+        $(".body-left").css('animation', '');
+        $(".body-right").css('animation', '');
+      }, 300);
+    }
+  }
+
+  // 确保侧边栏按钮状态正确更新
+  function updateAsideActiveState(targetType) {
+    // 清除所有侧边栏按钮的激活状态
+    document.querySelectorAll('.friend-chat').forEach(btn => {
+      btn.classList.remove('aside-active');
+    });
+    
+    // 根据类型设置对应按钮为激活状态
+    const buttons = document.querySelectorAll('.friend-chat');
+    if (buttons.length >= 3) {
+      if (targetType === 1) {
+        buttons[0].classList.add('aside-active'); // 聊天按钮
+      } else if (targetType === 2) {
+        buttons[1].classList.add('aside-active'); // 好友按钮
+      } else if (targetType === 3) {
+        buttons[2].classList.add('aside-active'); // 群聊按钮
       }
     }
   }
@@ -154,6 +188,7 @@ export default function () {
     hiddenBodyLeft,
     imgShow,
     getImageList,
-    parseMessage
+    parseMessage,
+    updateAsideActiveState
   }
 }

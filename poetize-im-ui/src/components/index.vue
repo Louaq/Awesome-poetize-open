@@ -624,7 +624,7 @@
       const {friendCircleData, launch, openFriendCircle, deleteTreeHole, submitWeiYan, pageWeiYan, cleanFriendCircle, addFriend} = friendCircle();
       const {friendData, getImFriend, removeFriend, getFriendRequests, changeFriendStatus} = friend();
       const {groupData, getImGroup, addGroupTopic, exitGroup, dissolveGroup} = group();
-      const {imUtilData, changeAside, mobileRight, getSystemMessages, hiddenBodyLeft, imgShow, getImageList, parseMessage} = imUtil();
+      const {imUtilData, changeAside, mobileRight, getSystemMessages, hiddenBodyLeft, imgShow, getImageList, parseMessage, updateAsideActiveState} = imUtil();
       const {changeDataData, changeAvatar, changeDataType, submitAvatar, submitChange} = changeData(friendData, groupData);
 
       let data = reactive({
@@ -806,6 +806,8 @@
           }
           
           data.type = type;
+          
+          // 先清除所有内容区域的激活状态
           let actives = ["im-active", "friend-active", "im-group"];
           for (let activeClass of actives) {
             for (let tab of document.getElementsByClassName(activeClass)) {
@@ -829,11 +831,23 @@
               data.currentChatGroupId = current;
               data.groupMessageBadge[current] = 0;
             } else if (imType === 2) {
-              data.currentChatGroupId = null;
+              data.currentChatGroupId = null;                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
               data.currentChatFriendId = current;
               data.imMessageBadge[current] = 0;
             }
           }
+          
+          // 移动端界面切换逻辑优化
+          if ($common.mobile()) {
+            if (subType === 2) {
+              // 进入聊天界面时隐藏左侧面板
+              imUtilData.showBodyLeft = false;
+            } else if (subType === 3 || subType === 4 || subType === 5) {
+              // 进入好友请求、好友详情、群详情时显示右侧面板，隐藏左侧面板
+              imUtilData.showBodyLeft = false;
+            }
+          }
+          
           nextTick(() => {
             let msgContainer = document.getElementsByClassName('msg-container');
             if (msgContainer && msgContainer.length > 0) {
@@ -847,38 +861,36 @@
 
         // 处理侧边栏按钮的切换逻辑
         if (!$common.isEmpty(type) && className === 'aside-active') {
-          if (isRepeatClick) {
-            // 重复点击同一个按钮，切换 body-left 显示状态
+          // 使用专门的函数更新侧边栏按钮状态
+          updateAsideActiveState(type);
+          
+          if (isRepeatClick && $common.mobile()) {
+            // 移动端重复点击同一个按钮，切换 body-left 显示状态
             imUtilData.showBodyLeft = !imUtilData.showBodyLeft;
-            mobileRight();
           } else {
-            // 点击不同按钮，在桌面端显示 body-left，移动端根据情况处理
+            // 点击不同按钮或桌面端
             if ($common.mobile()) {
-              // 移动端：如果是进入聊天界面，隐藏 body-left；其他情况显示
-              imUtilData.showBodyLeft = !(subType === 2);
+              // 移动端：点击侧边栏按钮时显示左侧面板
+              imUtilData.showBodyLeft = true;
             } else {
               // 桌面端：确保 body-left 显示
               imUtilData.showBodyLeft = true;
             }
-            mobileRight();
           }
-        }
-
-        // 移动端特殊处理：当进入聊天界面时自动隐藏 body-left
-        if ($common.mobile() && subType === 2) {
-          imUtilData.showBodyLeft = false;
           mobileRight();
-        }
-
-        for (const tab of document.getElementsByClassName(className)) {
-          tab.classList.remove(className);
-        }
-
-        if (e instanceof HTMLElement) {
-          e.classList.add(className);
         } else {
-          let node = e.currentTarget;
-          node.classList.add(className);
+          // 为内容区域项目添加激活状态
+          for (const tab of document.getElementsByClassName(className)) {
+            tab.classList.remove(className);
+          }
+          
+          // 添加激活状态到当前元素
+          if (e instanceof HTMLElement) {
+            e.classList.add(className);
+          } else {
+            let node = e.currentTarget;
+            node.classList.add(className);
+          }
         }
       }
 
@@ -891,7 +903,10 @@
         }
         data.imChats.splice(0, 0, friendData.currentFriendId);
         await nextTick();
+        
+        // 切换到聊天标签页
         isActive(document.getElementById('chat'), 'aside-active', 1);
+        // 进入聊天界面
         isActive(document.getElementsByClassName('im-user-current')[0], 'im-active', null, 2, friendData.currentFriendId, 2);
         getMessages(friendData.currentFriendId);
       }
@@ -905,7 +920,10 @@
         }
         data.groupChats.splice(0, 0, groupData.currentGroupId);
         await nextTick();
+        
+        // 切换到聊天标签页
         isActive(document.getElementById('chat'), 'aside-active', 1);
+        // 进入群聊界面
         isActive(document.getElementsByClassName('im-group-current')[0], 'im-active', null, 2, groupData.currentGroupId, 1);
         getGroupMessages(groupData.currentGroupId);
         if (groupData.groups[groupData.currentGroupId].groupType === 2) {
@@ -1079,6 +1097,8 @@
       function showChatList() {
         if ($common.mobile()) {
           imUtilData.showBodyLeft = true;
+          // 重置到聊天列表状态
+          data.subType = 1;
           mobileRight();
         }
       }
@@ -1232,6 +1252,19 @@
   .aside-active {
     color: var(--blue);
     font-weight: 800;
+    position: relative;
+  }
+
+  .aside-active::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 20px;
+    background: var(--blue);
+    border-radius: 2px;
   }
 
   .im-friend {
@@ -1444,6 +1477,7 @@
     .friend-bode {
       max-width: calc(100vw - 60px);
       position: relative;
+      overflow: hidden;
     }
 
     .body-left {
@@ -1453,7 +1487,8 @@
       height: 100%;
       z-index: 10;
       background: var(--white);
-      transition: transform 0.3s ease;
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
     }
 
     .body-left.hidden {
@@ -1463,7 +1498,8 @@
     .body-right {
       width: 100%;
       max-width: calc(100vw - 60px);
-      transition: margin-left 0.3s ease;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      background: var(--white);
     }
 
     .body-right.full-width {
@@ -1476,6 +1512,80 @@
 
     .mobile-back-btn {
       display: flex !important;
+      animation: slideInFromLeft 0.3s ease-out;
+    }
+
+    /* 移动端动画效果 */
+    @keyframes slideInFromLeft {
+      from {
+        opacity: 0;
+        transform: translateX(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    @keyframes slideInFromRight {
+      from {
+        opacity: 0;
+        transform: translateX(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    /* 侧边栏按钮点击效果 */
+    .friend-chat {
+      transition: all 0.2s ease;
+      position: relative;
+    }
+
+    .friend-chat:active {
+      transform: scale(0.95);
+      background-color: rgba(0, 0, 0, 0.05);
+    }
+
+    .friend-chat.aside-active::after {
+      content: '';
+      position: absolute;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 3px;
+      height: 20px;
+      background: var(--blue);
+      border-radius: 2px;
+      animation: slideInFromRight 0.3s ease-out;
+    }
+
+    /* 列表项点击效果 */
+    .im-user, .im-user-group {
+      transition: all 0.2s ease;
+    }
+
+    .im-user:active, .im-user-group:active {
+      transform: scale(0.98);
+      background-color: rgba(0, 0, 0, 0.03);
+    }
+
+    /* 聊天界面进入动画 */
+    .chat-container {
+      animation: slideInFromRight 0.3s ease-out;
+    }
+
+    /* 优化滚动性能 */
+    .aside-list {
+      -webkit-overflow-scrolling: touch;
+      scroll-behavior: smooth;
+    }
+
+    .msg-container {
+      -webkit-overflow-scrolling: touch;
+      scroll-behavior: smooth;
     }
   }
 

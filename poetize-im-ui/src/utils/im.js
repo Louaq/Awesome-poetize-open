@@ -38,27 +38,99 @@ export default function () {
       console.log('WebSocket连接成功');
       this.startTokenRenewalCheck();
       this.startHeartbeat();
+      
+      // 显示连接成功提示
+      ElMessage({
+        message: "连接成功！",
+        type: 'success',
+        duration: 2000
+      });
     };
     
     // WebSocket连接关闭时清理定时器
-    this.tio.onclose = () => {
-      console.log('WebSocket连接关闭');
+    this.tio.onclose = (event) => {
+      console.log('WebSocket连接关闭', event);
       this.stopTokenRenewalCheck();
       this.stopHeartbeat();
+      
+      // 如果不是正常关闭，显示提示
+      if (event.code !== 1000) {
+        ElMessage({
+          message: "连接已断开，正在尝试重连...",
+          type: 'warning',
+          duration: 3000
+        });
+      }
+    };
+    
+    // WebSocket连接错误处理
+    this.tio.onerror = (event) => {
+      console.error('WebSocket连接错误:', event);
+      ElMessage({
+        message: "连接出现错误，请检查网络！",
+        type: 'error',
+        duration: 3000
+      });
     };
   }
 
   this.sendMsg = (value) => {
-    if (this.tio && this.tio.ws && this.tio.ws.readyState === 1) {
-      this.tio.send(value);
-      return true;
-    } else {
+    if (!this.tio) {
       ElMessage({
-        message: "发送失败，请重试！",
+        message: "WebSocket未初始化，请刷新页面重试！",
         type: 'error'
       });
       return false;
     }
+
+    // 检查连接状态
+    if (!this.tio.isReady()) {
+      const readyState = this.tio.getReadyState();
+      let message = "连接异常，请重试！";
+      
+      switch (readyState) {
+        case WebSocket.CONNECTING:
+          message = "正在连接中，请稍后重试！";
+          break;
+        case WebSocket.CLOSING:
+          message = "连接正在关闭，请稍后重试！";
+          break;
+        case WebSocket.CLOSED:
+          message = "连接已断开，正在重新连接...";
+          // 尝试重新连接
+          this.reconnect();
+          break;
+      }
+      
+      ElMessage({
+        message: message,
+        type: 'warning'
+      });
+      return false;
+    }
+
+    // 发送消息
+    const success = this.tio.send(value);
+    if (!success) {
+      ElMessage({
+        message: "发送失败，请重试！",
+        type: 'error'
+      });
+    }
+    return success;
+  }
+
+  // 重新连接方法
+  this.reconnect = () => {
+    console.log('尝试重新连接WebSocket...');
+    if (this.tio) {
+      this.tio.close();
+    }
+    
+    // 延迟重连，避免频繁连接
+    setTimeout(() => {
+      this.initWs();
+    }, 1000);
   }
 
   // ==================== Token续签相关方法 ====================
