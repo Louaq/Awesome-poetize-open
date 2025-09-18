@@ -75,7 +75,10 @@ export default function () {
   }
 
   this.sendMsg = (value) => {
+    console.log('准备发送消息:', value);
+    
     if (!this.tio) {
+      console.error('WebSocket未初始化');
       ElMessage({
         message: "WebSocket未初始化，请刷新页面重试！",
         type: 'error'
@@ -84,22 +87,29 @@ export default function () {
     }
 
     // 检查连接状态
+    const readyState = this.tio.getReadyState();
+    console.log('当前WebSocket状态:', readyState);
+    
     if (!this.tio.isReady()) {
-      const readyState = this.tio.getReadyState();
       let message = "连接异常，请重试！";
       
       switch (readyState) {
         case WebSocket.CONNECTING:
           message = "正在连接中，请稍后重试！";
+          console.warn('WebSocket正在连接中');
           break;
         case WebSocket.CLOSING:
           message = "连接正在关闭，请稍后重试！";
+          console.warn('WebSocket正在关闭');
           break;
         case WebSocket.CLOSED:
           message = "连接已断开，正在重新连接...";
+          console.warn('WebSocket连接已断开');
           // 尝试重新连接
           this.reconnect();
           break;
+        default:
+          console.warn('WebSocket状态异常:', readyState);
       }
       
       ElMessage({
@@ -109,15 +119,37 @@ export default function () {
       return false;
     }
 
-    // 发送消息
-    const success = this.tio.send(value);
-    if (!success) {
+    // 发送消息前再次确认连接状态
+    if (this.tio.ws && this.tio.ws.readyState === WebSocket.OPEN) {
+      console.log('WebSocket连接正常，开始发送消息');
+      try {
+        const success = this.tio.send(value);
+        if (success) {
+          console.log('消息发送成功');
+        } else {
+          console.error('消息发送失败');
+          ElMessage({
+            message: "发送失败，请重试！",
+            type: 'error'
+          });
+        }
+        return success;
+      } catch (error) {
+        console.error('发送消息时出现异常:', error);
+        ElMessage({
+          message: "发送异常，请重试！",
+          type: 'error'
+        });
+        return false;
+      }
+    } else {
+      console.error('WebSocket连接状态异常，实际状态:', this.tio.ws ? this.tio.ws.readyState : 'ws对象不存在');
       ElMessage({
-        message: "发送失败，请重试！",
+        message: "连接状态异常，请刷新页面重试！",
         type: 'error'
       });
+      return false;
     }
-    return success;
   }
 
   // 重新连接方法
@@ -149,10 +181,10 @@ export default function () {
       this.checkAndRenewToken();
     }, 5 * 60 * 1000);
     
-    // 立即执行一次检查
+    // 延迟30秒后再执行第一次检查，给WebSocket连接充分的时间稳定
     setTimeout(() => {
       this.checkAndRenewToken();
-    }, 1000);
+    }, 30000);
   }
 
   /**
@@ -175,26 +207,40 @@ export default function () {
     }
 
     try {
+      console.log('开始检查token有效期...');
       // 检查token剩余有效期
       const response = await fetch(`${constant.baseURL}/im/checkWsTokenExpiry?wsToken=${this.currentToken}`);
       const result = await response.json();
       
-      if (result.flag && result.data) {
+      console.log('Token检查响应:', result);
+      
+      if (result.flag && result.data !== null && result.data !== undefined) {
         const remainingMinutes = result.data;
         console.log(`Token剩余有效期: ${remainingMinutes}分钟`);
         
-        // 如果剩余时间少于10分钟，进行续签
+        // 只有当剩余时间少于10分钟时才进行续签
         if (remainingMinutes <= 10) {
           console.log('Token即将过期，开始续签...');
-          await this.renewToken();
+          const renewSuccess = await this.renewToken();
+          if (!renewSuccess) {
+            console.error('Token续签失败');
+          }
+        } else {
+          console.log('Token有效期充足，无需续签');
         }
       } else {
-        console.warn('检查token有效期失败:', result.message);
-        // token可能已经无效，尝试续签
-        await this.renewToken();
+        console.warn('检查token有效期失败:', result.message || '未知错误');
+        // 只有在明确token无效时才尝试续签，避免误判
+        if (result.message && result.message.includes('无效') || result.message && result.message.includes('过期')) {
+          console.log('Token确实无效，尝试续签...');
+          await this.renewToken();
+        } else {
+          console.log('Token检查失败但可能是网络问题，暂不续签');
+        }
       }
     } catch (error) {
-      console.error('检查token有效期时发生错误:', error);
+      console.error('检查token有效期时发生网络错误:', error);
+      // 网络错误时不进行续签，避免误操作
     }
   }
 
@@ -208,33 +254,55 @@ export default function () {
     }
 
     try {
+      console.log('开始续签token...');
       const response = await fetch(`${constant.baseURL}/im/renewWsToken?oldToken=${this.currentToken}`);
       const result = await response.json();
       
+      console.log('Token续签响应:', result);
+      
       if (result.flag && result.data) {
         const newToken = result.data;
-        console.log('Token续签成功');
+        console.log('Token续签成功，新token:', newToken.substring(0, 20) + '...');
         
         // 更新当前token
         this.currentToken = newToken;
         this.paramStr = 'token=' + newToken;
         
         // 可选：更新URL参数（如果需要）
-        const url = new URL(window.location);
-        url.searchParams.set('token', newToken);
-        window.history.replaceState({}, '', url);
+        try {
+          const url = new URL(window.location);
+          url.searchParams.set('token', newToken);
+          window.history.replaceState({}, '', url);
+        } catch (urlError) {
+          console.warn('更新URL参数失败:', urlError);
+        }
+        
+        ElMessage({
+          message: "会话已自动续期",
+          type: 'success',
+          duration: 2000
+        });
         
         return true;
       } else {
-        console.error('Token续签失败:', result.message);
-        ElMessage({
-          message: "会话即将过期，请刷新页面重新登录",
-          type: 'warning'
-        });
+        console.error('Token续签失败:', result.message || '未知错误');
+        
+        // 只有在确实需要用户重新登录时才显示警告
+        if (result.message && (result.message.includes('登录') || result.message.includes('认证'))) {
+          ElMessage({
+            message: "会话已过期，请刷新页面重新登录",
+            type: 'warning',
+            duration: 5000
+          });
+        } else {
+          console.log('Token续签失败，但可能是临时问题，不提示用户');
+        }
+        
         return false;
       }
     } catch (error) {
-      console.error('续签token时发生错误:', error);
+      console.error('续签token时发生网络错误:', error);
+      // 网络错误时不提示用户，避免误导
       return false;
     }
   }
@@ -243,14 +311,25 @@ export default function () {
 
   /**
    * 启动心跳检测
-   * 每2分钟发送一次心跳，保持连接活跃并自动续签
+   * 每30秒发送一次WebSocket心跳，每2分钟进行HTTP心跳检测
    */
   this.startHeartbeat = () => {
     if (this.heartbeatTimer) {
       clearInterval(this.heartbeatTimer);
     }
+    if (this.wsHeartbeatTimer) {
+      clearInterval(this.wsHeartbeatTimer);
+    }
     
-    // 每2分钟发送一次心跳
+    // 记录最后一次心跳响应时间
+    this.lastHeartbeatResponse = Date.now();
+    
+    // WebSocket心跳：每30秒发送一次
+    this.wsHeartbeatTimer = setInterval(() => {
+      this.sendWebSocketHeartbeat();
+    }, 30000);
+    
+    // HTTP心跳：每2分钟发送一次，用于token续签
     this.heartbeatTimer = setInterval(() => {
       this.sendHeartbeat();
     }, 2 * 60 * 1000);
@@ -264,10 +343,73 @@ export default function () {
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
     }
+    if (this.wsHeartbeatTimer) {
+      clearInterval(this.wsHeartbeatTimer);
+      this.wsHeartbeatTimer = null;
+    }
   }
 
   /**
-   * 发送心跳并处理token续签
+   * 发送WebSocket心跳包
+   */
+  this.sendWebSocketHeartbeat = () => {
+    if (this.tio && this.tio.isReady()) {
+      const heartbeatMsg = JSON.stringify({
+        messageType: 0, // 心跳消息类型
+        content: 'heartbeat',
+        fromId: store?.state?.currentUser?.id || 0,
+        timestamp: Date.now()
+      });
+      
+      console.log('发送WebSocket心跳包');
+      const success = this.tio.send(heartbeatMsg);
+      
+      if (!success) {
+        console.error('WebSocket心跳包发送失败，连接可能异常');
+        this.handleConnectionError();
+      } else {
+        // 检查是否长时间没有收到任何消息
+        const now = Date.now();
+        if (now - this.lastHeartbeatResponse > 90000) { // 90秒没有任何响应
+          console.warn('长时间没有收到服务器响应，可能连接异常');
+          this.handleConnectionError();
+        }
+      }
+    } else {
+      console.warn('WebSocket连接不可用，无法发送心跳包');
+      this.handleConnectionError();
+    }
+  }
+
+  /**
+   * 处理连接错误
+   */
+  this.handleConnectionError = () => {
+    console.log('检测到连接异常，准备重新连接');
+    this.stopHeartbeat();
+    this.stopTokenRenewalCheck();
+    
+    ElMessage({
+      message: "检测到连接异常，正在重新连接...",
+      type: 'warning',
+      duration: 3000
+    });
+    
+    // 延迟重连，避免频繁连接
+    setTimeout(() => {
+      this.reconnect();
+    }, 2000);
+  }
+
+  /**
+   * 更新心跳响应时间（在收到任何消息时调用）
+   */
+  this.updateHeartbeatResponse = () => {
+    this.lastHeartbeatResponse = Date.now();
+  }
+
+  /**
+   * 发送HTTP心跳并处理token续签
    */
   this.sendHeartbeat = async () => {
     if (!this.currentToken) {
@@ -294,12 +436,13 @@ export default function () {
           window.history.replaceState({}, '', url);
         }
         
-        console.log('心跳检测成功');
+        console.log('HTTP心跳检测成功');
+        this.updateHeartbeatResponse(); // 更新响应时间
       } else {
-        console.warn('心跳检测失败:', result.message);
+        console.warn('HTTP心跳检测失败:', result.message);
       }
     } catch (error) {
-      console.error('心跳检测时发生错误:', error);
+      console.error('HTTP心跳检测时发生错误:', error);
     }
   }
 
@@ -314,5 +457,10 @@ export default function () {
     if (this.tio) {
       this.tio.close();
     }
+  }
+
+  // 在WebSocket消息处理中调用此方法来更新心跳响应时间
+  this.onMessageReceived = () => {
+    this.updateHeartbeatResponse();
   }
 }

@@ -88,22 +88,45 @@ export default function (ws_protocol, ip, port, paramStr, binaryType) {
       return false;
     }
 
-    if (this.ws.readyState === WebSocket.CONNECTING) {
+    const currentState = this.ws.readyState;
+    console.log('发送消息时WebSocket状态:', currentState, '消息内容:', data);
+
+    if (currentState === WebSocket.CONNECTING) {
       console.warn('WebSocket正在连接中，请稍后重试');
       return false;
     }
 
-    if (this.ws.readyState === WebSocket.OPEN) {
+    if (currentState === WebSocket.OPEN) {
       try {
+        // 检查连接是否真的可用
+        if (this.ws.bufferedAmount > 0) {
+          console.warn('WebSocket发送缓冲区不为空，可能存在网络问题');
+        }
+        
         this.ws.send(data);
         console.log('消息发送成功:', data);
+        
+        // 发送后检查缓冲区
+        setTimeout(() => {
+          if (this.ws && this.ws.bufferedAmount > 0) {
+            console.warn('消息发送后缓冲区仍有数据，可能发送失败');
+          }
+        }, 100);
+        
         return true;
       } catch (error) {
         console.error('发送消息时出错:', error);
         return false;
       }
     } else {
-      console.error('WebSocket连接未就绪，当前状态:', this.ws.readyState);
+      console.error('WebSocket连接未就绪，当前状态:', currentState);
+      const stateNames = {
+        0: 'CONNECTING',
+        1: 'OPEN', 
+        2: 'CLOSING',
+        3: 'CLOSED'
+      };
+      console.error('状态说明:', stateNames[currentState] || '未知状态');
       return false;
     }
   }
