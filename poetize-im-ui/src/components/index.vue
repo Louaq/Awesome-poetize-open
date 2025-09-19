@@ -144,7 +144,10 @@
                    v-for="(item, index) in groupChats"
                    :key="index"
                    v-show="groups[item].groupName.includes(showFriendValue) || $common.isEmpty(showFriendValue)"
-                   @click="isActive($event, 'im-active', null, 2, item, 1)">
+                   @click="handleGroupChatClick($event, item)"
+                   @touchstart="handleTouchStart($event, item)"
+                   @touchend="handleTouchEnd($event, item)"
+                   @contextmenu="handleContextMenu($event, item)">
                 <div>
                   <n-badge :value="groupMessageBadge[item]" :max="99">
                     <n-avatar object-fit="cover"
@@ -158,6 +161,15 @@
                   <div class="im-down" v-if="!$common.isEmpty(groupMessages[item])">
                     {{getMessagePreview(groupMessages[item][groupMessages[item].length-1].content)}}
                   </div>
+                </div>
+                <!-- 删除群聊按钮 - PC端悬停显示 -->
+                <div class="chat-item-delete" 
+                     @click.stop="removeGroupFromList(item)" 
+                     title="从列表中删除"
+                     v-if="!$common.mobile()">
+                  <svg viewBox="0 0 1024 1024" width="16" height="16">
+                    <path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64z m165.4 618.2l-66-.3L512 563.4l-99.3 118.4-66.1.3c-4.4 0-8-3.5-8-8 0-1.9.7-3.7 1.9-5.2l130.1-155L340.5 359a8.32 8.32 0 0 1-1.9-5.2c0-4.4 3.6-8 8-8l66.1.3L512 464.6l99.3-118.4 66-.3c4.4 0 8 3.5 8 8 0 1.9-.7 3.7-1.9 5.2L553.5 514l130 155c1.2 1.5 1.9 3.3 1.9 5.2 0 4.4-3.6 8-8 8z" fill="#ff4757"/>
+                  </svg>
                 </div>
               </div>
 
@@ -624,7 +636,7 @@
       const {bindEmailData, getCode, submitDialog} = bindEmail();
       const {friendCircleData, launch, openFriendCircle, deleteTreeHole, submitWeiYan, pageWeiYan, cleanFriendCircle, addFriend} = friendCircle();
       const {friendData, getImFriend, removeFriend, getFriendRequests, changeFriendStatus} = friend();
-      const {groupData, getImGroup, addGroupTopic, exitGroup, dissolveGroup} = group();
+      const {groupData, getImGroup, addGroupTopic, exitGroup, dissolveGroup, removeGroupFromList} = group();
       const {imUtilData, changeAside, mobileRight, getSystemMessages, hiddenBodyLeft, imgShow, getImageList, parseMessage, updateAsideActiveState, saveShowBodyLeftState} = imUtil();
       const {changeDataData, changeAvatar, changeDataType, submitAvatar, submitChange} = changeData(friendData, groupData);
 
@@ -1207,6 +1219,83 @@
         }
       }
 
+      // 移动端长按和PC端右键菜单相关变量
+      let touchTimer = null;
+      let touchStartTime = 0;
+      const LONG_PRESS_DURATION = 800; // 长按时间阈值（毫秒）
+
+      // 处理群聊项点击（区分普通点击和长按）
+      function handleGroupChatClick(event, groupId) {
+        // 如果是移动端且刚刚完成长按，则不执行点击
+        if ($common.mobile() && touchTimer === 'completed') {
+          touchTimer = null;
+          return;
+        }
+        
+        // 正常的群聊点击逻辑
+        isActive(event, 'im-active', null, 2, groupId, 1);
+      }
+
+      // 处理触摸开始（移动端长按检测）
+      function handleTouchStart(event, groupId) {
+        if (!$common.mobile()) return;
+        
+        touchStartTime = Date.now();
+        touchTimer = setTimeout(() => {
+          // 长按触发删除菜单
+          showGroupDeleteMenu(event, groupId);
+          touchTimer = 'completed';
+          
+          // 添加触觉反馈（如果支持）
+          if (navigator.vibrate) {
+            navigator.vibrate(50);
+          }
+        }, LONG_PRESS_DURATION);
+      }
+
+      // 处理触摸结束
+      function handleTouchEnd(event, groupId) {
+        if (!$common.mobile()) return;
+        
+        const touchDuration = Date.now() - touchStartTime;
+        
+        if (touchTimer && touchTimer !== 'completed') {
+          clearTimeout(touchTimer);
+          touchTimer = null;
+          
+          // 如果触摸时间很短，认为是正常点击
+          if (touchDuration < LONG_PRESS_DURATION) {
+            // 延迟一点执行，确保长按逻辑不会干扰
+            setTimeout(() => {
+              handleGroupChatClick(event, groupId);
+            }, 50);
+          }
+        }
+      }
+
+      // 处理右键菜单（PC端）
+      function handleContextMenu(event, groupId) {
+        if ($common.mobile()) return;
+        
+        event.preventDefault(); // 阻止默认右键菜单
+        showGroupDeleteMenu(event, groupId);
+      }
+
+      // 显示群聊删除菜单
+      function showGroupDeleteMenu(event, groupId) {
+        const groupName = groupData.groups[groupId]?.groupName || '未知群聊';
+        
+        dialog.warning({
+          title: '群聊操作',
+          content: `对群聊"${groupName}"执行什么操作？`,
+          positiveText: '从列表删除',
+          negativeText: '取消',
+          onPositiveClick: () => {
+            removeGroupFromList(groupId);
+          }
+        });
+      }
+
       return {
         ...toRefs(data),
         ...toRefs(bindEmailData),
@@ -1245,8 +1334,14 @@
         submitDialog,
         exitGroup,
         dissolveGroup,
+        removeGroupFromList,
         getMessagePreview,
-        showChatList
+        showChatList,
+        handleGroupChatClick,
+        handleTouchStart,
+        handleTouchEnd,
+        handleContextMenu,
+        showGroupDeleteMenu
       }
     }
   }
@@ -1332,6 +1427,83 @@
     cursor: pointer;
     height: 60px;
     box-sizing: border-box;
+    position: relative;
+  }
+
+  /* 删除按钮样式 */
+  .chat-item-delete {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background-color: rgba(255, 71, 87, 0.1);
+    opacity: 0;
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+
+  .chat-item-delete:hover {
+    background-color: rgba(255, 71, 87, 0.2);
+    transform: translateY(-50%) scale(1.1);
+  }
+
+  .im-user:hover .chat-item-delete {
+    opacity: 1;
+  }
+
+  /* 🆕 移动端长按反馈样式 */
+  @media (max-width: 768px) {
+    .im-user {
+      -webkit-user-select: none;
+      -moz-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+    }
+    
+    .im-user:active {
+      background-color: rgba(0, 0, 0, 0.05);
+      transform: scale(0.98);
+    }
+    
+    /* 移动端不显示删除按钮，改用长按 */
+    .chat-item-delete {
+      display: none;
+    }
+  }
+
+  /* PC端右键菜单提示 */
+  @media (min-width: 769px) {
+    .im-user {
+      position: relative;
+    }
+    
+    .im-user::after {
+      content: '右键删除';
+      position: absolute;
+      right: 50px;
+      top: 50%;
+      transform: translateY(-50%);
+      font-size: 12px;
+      color: var(--greyFont);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      pointer-events: none;
+    }
+    
+    .im-user:hover::after {
+      opacity: 0.6;
+    }
+    
+    .im-user:hover .chat-item-delete ~ ::after {
+      opacity: 0;
+    }
   }
 
   .im-user-group {
