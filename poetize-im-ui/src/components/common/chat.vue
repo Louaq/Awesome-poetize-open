@@ -347,7 +347,9 @@
             </textarea>
       <!-- 发送 -->
       <div class="message-send">
-        <span style="color: var(--greyFont);margin-right: 15px;font-size: 12px">Ctrl+Enter：换行 | Enter：发送</span>
+        <span style="color: var(--greyFont);margin-right: 15px;font-size: 12px">
+          {{ isMobile() ? 'Enter：换行 | 点击按钮发送' : 'Ctrl+Enter：换行 | Enter：发送' }}
+        </span>
         <n-button @click="doSend()" type="info">
           发送
         </n-button>
@@ -377,6 +379,12 @@
   import emoji from "./emoji";
   import uploadPicture from "./uploadPicture";
   import {reactive, getCurrentInstance, onMounted, onBeforeUnmount, watchEffect, toRefs} from 'vue';
+
+  // 检测是否为移动设备
+  const isMobile = () => {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
+           window.innerWidth <= 768;
+  };
 
   export default {
     components: {
@@ -543,6 +551,17 @@
       }
 
       function send(e) {
+        // 移动端禁用回车发送，只允许通过按钮发送
+        if (isMobile()) {
+          // 移动端允许回车换行，但不发送消息
+          if (e && e.keyCode === 13) {
+            e.returnValue = false;
+            data.msg = data.msg + '\n';
+          }
+          return;
+        }
+        
+        // PC端保持原有逻辑
         if (e && (e.ctrlKey || e.shiftKey) && e.keyCode === 13) {
           e.returnValue = false;
           data.msg = data.msg + '\n';
@@ -608,7 +627,8 @@
         sendPoetry,
         send,
         doSend,
-        getOnlineUserCount
+        getOnlineUserCount,
+        isMobile
       }
     }
   }

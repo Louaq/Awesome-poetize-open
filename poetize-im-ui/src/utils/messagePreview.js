@@ -58,7 +58,7 @@ export function getMessagePreview(content) {
   }
   
   // 截取前20个字符（增加显示长度以更好展示混合内容）
-  return previewText.length > 20 ? previewText.substr(0, 20) + '...' : previewText;
+  return previewText.length > 10 ? previewText.substr(0, 10) + '...' : previewText;
 }
 
 /**
