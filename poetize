@@ -945,29 +945,8 @@ create_full_backup() {
     else
         info "未找到Redis数据volume，跳过备份"
     fi
-    
-    # 7. 备份Prerender预渲染文件（仅备份prerender目录，不备份前端构建文件）
-    info "备份Prerender预渲染文件..."
-    local ui_dist_volume="${project_name}_poetize_ui_dist"
-    local actual_ui_dist_volume=$(sudo docker volume ls --format "{{.Name}}" | grep "poetize_ui_dist" | head -1)
-    if [ -n "$actual_ui_dist_volume" ]; then
-        info "找到UI构建文件volume: $actual_ui_dist_volume"
-        # 检查volume中是否有预渲染文件目录
-        if sudo docker run --rm -v "$actual_ui_dist_volume":/data alpine sh -c "[ -d /data/prerender ] && [ \"\$(ls -A /data/prerender 2>/dev/null)\" ]"; then
-            info "导出预渲染文件（仅prerender目录）..."
-            if sudo docker run --rm -v "$actual_ui_dist_volume":/data -v "$BACKUP_DIR":/backup alpine tar -czf "/backup/prerender_backup.tar.gz" -C /data prerender; then
-                success "预渲染文件备份完成"
-            else
-                warning "预渲染文件备份失败"
-            fi
-        else
-            info "预渲染文件目录为空或不存在，跳过备份"
-        fi
-    else
-        info "未找到UI构建文件volume，跳过预渲染文件备份"
-    fi
 
-    # 8. 备份nginx配置中的域名信息
+    # 7. 备份nginx配置中的域名信息
     info "备份域名配置信息..."
     local extracted_domains=$(extract_domains_from_nginx_config 2>/dev/null || echo "")
     if [ -n "$extracted_domains" ]; then
@@ -1251,39 +1230,18 @@ restore_full_backup() {
         info "备份中未找到Redis数据"
     fi
     
-    # 4. 恢复预渲染文件
-    info "恢复预渲染文件..."
-    if [ -f "$latest_backup/prerender_backup.tar.gz" ]; then
-        local project_name=$(basename "$(pwd)" | tr '[:upper:]' '[:lower:]')
-        local ui_dist_volume="${project_name}_poetize_ui_dist"
-        
-        # 等待并确保ui_dist volume存在
-        local actual_ui_dist_volume=$(sudo docker volume ls --format "{{.Name}}" | grep "poetize_ui_dist" | head -1)
-        if [ -z "$actual_ui_dist_volume" ]; then
-            info "创建UI构建文件volume: $ui_dist_volume"
-            sudo docker volume create "$ui_dist_volume"
-            actual_ui_dist_volume="$ui_dist_volume"
-        fi
-        
-        info "恢复预渲染文件到volume: $actual_ui_dist_volume"
-        if sudo docker run --rm -v "$actual_ui_dist_volume":/data -v "$latest_backup":/backup alpine sh -c "cd /data && tar -xzf /backup/prerender_backup.tar.gz"; then
-            success "预渲染文件恢复完成"
-        else
-            warning "预渲染文件恢复失败"
-        fi
+    # 4. 重启相关服务以应用恢复的配置（不重启前端构建容器以避免文件名变化）
+    info "重启相关服务以应用恢复的配置..."
+    
+    # 只重启需要应用配置的服务，不重启前端构建容器
+    local services_to_restart="nginx java-backend python-backend mysql redis prerender"
+    if $DOCKER_COMPOSE_CMD restart $services_to_restart; then
+        success "相关服务重启完成"
     else
-        info "备份中未找到预渲染文件"
+        warning "部分服务重启失败，可能需要手动重启"
     fi
     
-    # 5. 重启服务以应用恢复的配置
-    info "重启服务以应用恢复的配置..."
-    if $DOCKER_COMPOSE_CMD restart; then
-        success "服务重启完成"
-    else
-        warning "服务重启失败，可能需要手动重启"
-    fi
-    
-    # 6. 清理备份目录
+    # 5. 清理备份目录
     info "清理临时备份目录..."
     if [ -n "$latest_backup" ] && [ -d "$latest_backup" ]; then
         rm -rf "$latest_backup"

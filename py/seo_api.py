@@ -1547,13 +1547,11 @@ def register_seo_api(app: FastAPI):
         try:
             config = await get_seo_config()
             
-            # 如果SEO配置中没有site_address，自动检测并填充
+            # 如果SEO配置中没有site_address，自动检测并填充（但不立即保存，避免覆盖恢复的配置）
             if not config.get('site_address'):
                 detected_url = detect_frontend_url_from_request(request)
                 config['site_address'] = detected_url
-                # 保存更新后的配置
-                save_seo_config(config)
-                logger.info(f"SEO配置中没有网站地址，自动检测并设置为: {detected_url}")
+                logger.info(f"SEO配置中没有网站地址，临时设置为: {detected_url}（不保存到文件，避免覆盖恢复的配置）")
             
             logger.info(f"成功获取SEO配置，返回配置项数量: {len(config) if config else 0}, 开关状态: {config.get('enable', False)}")
             return JSONResponse({
