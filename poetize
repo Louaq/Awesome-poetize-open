@@ -1,8 +1,8 @@
 #!/bin/bash
 ## 作者: LeapYa
-## 修改时间: 2025-09-19
+## 修改时间: 2025-09-20
 ## 描述: Poetize 博客系统全局管理命令
-## 版本: 1.4.1
+## 版本: 1.5.0
 
 # 定义颜色
 RED='\033[0;31m'
@@ -1101,12 +1101,84 @@ pull_code_on_target() {
     fi
 }
 
+# 检查并更新poetize命令本身
+update_poetize_command() {
+    info "检查poetize命令是否需要更新..."
+    
+    # 下载最新的poetize脚本到临时文件
+    local temp_poetize="/tmp/poetize_new_$$"
+    local current_poetize="/usr/local/bin/poetize"
+    
+    # 从项目中获取最新的poetize脚本
+    if [ -f "poetize" ]; then
+        cp "poetize" "$temp_poetize"
+    else
+        warning "未找到新版本的poetize脚本，跳过命令更新"
+        return 0
+    fi
+    
+    # 比较版本或文件差异
+    if [ -f "$current_poetize" ] && cmp -s "$current_poetize" "$temp_poetize"; then
+        info "poetize命令已是最新版本"
+        rm -f "$temp_poetize"
+        return 0
+    fi
+    
+    info "发现poetize命令需要更新，准备自更新..."
+    
+    # 创建自更新脚本
+    local self_update_script="/tmp/poetize_self_update_$$.sh"
+    cat > "$self_update_script" << 'EOF'
+#!/bin/bash
+# poetize自更新脚本
+
+# 等待原进程结束
+sleep 2
+
+# 备份原文件
+if [ -f "/usr/local/bin/poetize" ]; then
+    cp "/usr/local/bin/poetize" "/usr/local/bin/poetize.backup.$(date +%Y%m%d_%H%M%S)"
+fi
+
+# 更新poetize命令
+if [ -f "$1" ]; then
+    cp "$1" "/usr/local/bin/poetize"
+    chmod +x "/usr/local/bin/poetize"
+    echo -e "\033[0;32m[成功]\033[0m poetize命令已更新到最新版本"
+    
+    # 清理临时文件
+    rm -f "$1"
+    rm -f "$0"
+    
+    echo -e "\033[0;33m[提示]\033[0m 请重新运行 'poetize -update' 以继续更新过程"
+else
+    echo -e "\033[0;31m[失败]\033[0m 更新文件不存在: $1"
+    rm -f "$0"
+    exit 1
+fi
+EOF
+    
+    chmod +x "$self_update_script"
+    
+    info "启动自更新进程..."
+    nohup "$self_update_script" "$temp_poetize" > /dev/null 2>&1 &
+    
+    success "poetize命令自更新已启动，当前进程即将退出"
+    info "请等待几秒后重新运行 'poetize -update' 以继续更新"
+    
+    exit 0
+}
+
 # 重新安装最新系统
 reinstall_latest_system() {
     info "开始重新安装最新版本的POETIZE系统..."
 
     # 拉取项目
     pull_code_on_target
+    
+    # 检查并更新poetize命令本身
+    update_poetize_command
+    
     # 恢复数据库
     cp $BACKUP_DIR/poetry.sql poetize-server/sql/poetry.sql
     # 恢复Python文件配置

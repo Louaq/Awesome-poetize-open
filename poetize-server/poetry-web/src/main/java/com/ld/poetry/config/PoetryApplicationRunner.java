@@ -3,12 +3,15 @@ package com.ld.poetry.config;
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.ld.poetry.dao.HistoryInfoMapper;
 import com.ld.poetry.dao.WebInfoMapper;
+import com.ld.poetry.dao.ArticleMapper;
+import com.ld.poetry.dao.SortMapper;
 import com.ld.poetry.entity.*;
 import com.ld.poetry.im.websocket.TioUtil;
 import com.ld.poetry.im.websocket.TioWebsocketStarter;
 import com.ld.poetry.service.CacheService;
 import com.ld.poetry.service.FamilyService;
 import com.ld.poetry.service.UserService;
+import com.ld.poetry.utils.PrerenderClient;
 import com.ld.poetry.constants.CommonConst;
 import com.ld.poetry.enums.PoetryEnum;
 import lombok.extern.slf4j.Slf4j;
@@ -48,6 +51,27 @@ public class PoetryApplicationRunner implements ApplicationRunner {
 
     @Autowired
     private CacheService cacheService;
+
+    @Autowired
+    private PrerenderClient prerenderClient;
+
+    @Autowired
+    private ArticleMapper articleMapper;
+
+    @Autowired
+    private SortMapper sortMapper;
+
+    @Value("${prerender.startup.enabled:true}")
+    private boolean prerenderStartupEnabled;
+
+    @Value("${prerender.startup.delay:10}")
+    private int prerenderStartupDelay;
+
+    @Value("${prerender.startup.health-check.max-retries:5}")
+    private int prerenderHealthCheckMaxRetries;
+
+    @Value("${prerender.startup.health-check.base-delay:60}")
+    private int prerenderHealthCheckBaseDelay;
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
@@ -118,6 +142,196 @@ public class PoetryApplicationRunner implements ApplicationRunner {
         TioWebsocketStarter websocketStarter = TioUtil.getTio();
         if (websocketStarter != null) {
             websocketStarter.start();
+        }
+
+        // 启动时自动预渲染
+        if (prerenderStartupEnabled) {
+            log.info("启动时预渲染已启用，将在{}秒后开始执行预渲染任务", prerenderStartupDelay);
+            executeStartupPrerender();
+        } else {
+            log.info("启动时预渲染已禁用，跳过预渲染任务");
+        }
+    }
+
+    /**
+     * 执行启动时预渲染任务
+     */
+    private void executeStartupPrerender() {
+        // 异步执行预渲染，避免阻塞应用启动
+        new Thread(() -> {
+            try {
+                // 延迟执行，确保应用完全启动
+                Thread.sleep(prerenderStartupDelay * 1000L);
+                
+                log.info("开始执行启动时预渲染任务...");
+                
+                // 1. 检查预渲染服务健康状态（带退避策略）
+                if (!checkPrerenderHealthWithRetry()) {
+                    log.warn("预渲染服务健康检查最终失败，跳过预渲染任务");
+                    return;
+                }
+                
+                // 2. 预渲染主要页面（首页、百宝箱、分类索引）
+                renderMainPages();
+                
+                // 3. 预渲染所有分类详情页面
+                renderAllCategoryPages();
+                
+                // 4. 预渲染所有已发布的文章
+                renderAllPublishedArticles();
+                
+                log.info("启动时预渲染任务执行完成");
+                
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("启动时预渲染任务被中断: {}", e.getMessage());
+            } catch (Exception e) {
+                log.error("启动时预渲染任务执行失败: {}", e.getMessage(), e);
+            }
+        }, "startup-prerender-thread").start();
+    }
+
+    /**
+     * 带退避策略的预渲染服务健康检查
+     * @return true 如果健康检查通过，false 如果所有重试都失败
+     */
+    private boolean checkPrerenderHealthWithRetry() {
+        for (int attempt = 1; attempt <= prerenderHealthCheckMaxRetries; attempt++) {
+            try {
+                prerenderClient.checkHealth();
+                log.info("预渲染服务健康检查通过（第{}次尝试）", attempt);
+                return true;
+            } catch (Exception e) {
+                log.warn("预渲染服务健康检查失败（第{}/{}次尝试）: {}", 
+                    attempt, prerenderHealthCheckMaxRetries, e.getMessage());
+                
+                // 如果不是最后一次尝试，则等待后重试
+                if (attempt < prerenderHealthCheckMaxRetries) {
+                    // 计算退避延迟时间：第1次失败等待1分钟，第2次等待3分钟，第3次等待5分钟，第4次等待7分钟
+                    int delayMinutes = prerenderHealthCheckBaseDelay + (attempt - 1) * 120; // 基础60秒 + 递增120秒
+                    int delaySeconds = delayMinutes;
+                    
+                    log.info("预渲染服务暂不可用，{}秒后进行第{}次重试...", delaySeconds, attempt + 1);
+                    
+                    try {
+                        Thread.sleep(delaySeconds * 1000L);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        log.warn("预渲染服务健康检查重试被中断");
+                        return false;
+                    }
+                } else {
+                    log.error("预渲染服务健康检查失败，已达到最大重试次数（{}次）", prerenderHealthCheckMaxRetries);
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 预渲染主要页面
+     */
+    private void renderMainPages() {
+        try {
+            log.info("开始预渲染主要页面...");
+            
+            // 预渲染首页
+            prerenderClient.renderHomePage();
+            Thread.sleep(1000); // 避免并发过高
+            
+            // 预渲染百宝箱页面
+            prerenderClient.renderFavoritePage();
+            Thread.sleep(1000);
+            
+            // 预渲染分类索引页面
+            prerenderClient.renderSortIndexPage();
+            
+            log.info("主要页面预渲染完成");
+        } catch (Exception e) {
+            log.error("主要页面预渲染失败: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 预渲染所有分类详情页面
+     */
+    private void renderAllCategoryPages() {
+        try {
+            log.info("开始预渲染所有分类详情页面...");
+            
+            // 获取所有分类ID
+            List<Sort> sorts = new LambdaQueryChainWrapper<>(sortMapper).list();
+            if (!CollectionUtils.isEmpty(sorts)) {
+                List<Integer> sortIds = sorts.stream()
+                    .map(Sort::getId)
+                    .collect(Collectors.toList());
+                
+                log.info("找到{}个分类，开始批量预渲染", sortIds.size());
+                
+                // 批量预渲染所有分类页面
+                prerenderClient.renderAllCategoryPages(sortIds);
+                
+                log.info("所有分类详情页面预渲染完成，共{}个分类", sortIds.size());
+            } else {
+                log.info("未找到任何分类，跳过分类页面预渲染");
+            }
+        } catch (Exception e) {
+            log.error("分类详情页面预渲染失败: {}", e.getMessage(), e);
+        }
+    }
+
+    /**
+     * 预渲染所有已发布的文章
+     */
+    private void renderAllPublishedArticles() {
+        try {
+            log.info("开始预渲染所有已发布的文章...");
+            
+            // 获取所有已发布的文章ID
+            List<Article> articles = new LambdaQueryChainWrapper<>(articleMapper)
+                .select(Article::getId)
+                .eq(Article::getViewStatus, PoetryEnum.PUBLIC.getCode()) // 只预渲染公开文章
+                .orderByDesc(Article::getCreateTime) // 按创建时间倒序，优先渲染最新文章
+                .list();
+            
+            if (!CollectionUtils.isEmpty(articles)) {
+                List<Integer> articleIds = articles.stream()
+                    .map(Article::getId)
+                    .collect(Collectors.toList());
+                
+                log.info("找到{}篇已发布文章，开始分批预渲染", articleIds.size());
+                
+                // 分批处理，避免一次性提交过多文章导致超时
+                int batchSize = 20; // 每批处理20篇文章
+                int totalBatches = (articleIds.size() + batchSize - 1) / batchSize;
+                
+                for (int i = 0; i < totalBatches; i++) {
+                    int startIndex = i * batchSize;
+                    int endIndex = Math.min(startIndex + batchSize, articleIds.size());
+                    List<Integer> batchIds = articleIds.subList(startIndex, endIndex);
+                    
+                    log.info("预渲染第{}/{}批文章，包含{}篇文章", i + 1, totalBatches, batchIds.size());
+                    
+                    try {
+                        // 渲染当前批次的文章（默认渲染中文版本）
+                        prerenderClient.renderArticles(batchIds);
+                        
+                        // 批次间延迟，避免对预渲染服务造成过大压力
+                        if (i < totalBatches - 1) {
+                            Thread.sleep(2000); // 批次间延迟2秒
+                        }
+                    } catch (Exception e) {
+                        log.warn("第{}/{}批文章预渲染失败: {}", i + 1, totalBatches, e.getMessage());
+                        // 继续处理下一批，不因单批失败而中断整个流程
+                    }
+                }
+                
+                log.info("所有已发布文章预渲染完成，共{}篇文章，分{}批处理", articleIds.size(), totalBatches);
+            } else {
+                log.info("未找到任何已发布文章，跳过文章预渲染");
+            }
+        } catch (Exception e) {
+            log.error("文章预渲染失败: {}", e.getMessage(), e);
         }
     }
 }

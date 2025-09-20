@@ -9,6 +9,20 @@ server:
     max-http-form-post-size: 120MB
     connection-timeout: 60000
 
+# 预渲染配置
+prerender:
+  startup:
+    # 是否在应用启动时自动执行预渲染
+    enabled: true
+    # 启动后延迟多少秒开始预渲染（确保应用完全启动）
+    delay: 10
+    # 健康检查配置
+    health-check:
+      # 最大重试次数
+      max-retries: 5
+      # 基础延迟时间（秒），第1次失败等待60秒，第2次等待180秒，第3次等待300秒...
+      base-delay: 60
+
 mybatis-plus:
   mapper-locations: classpath*:mapper/**/*.xml
 #  configuration:
