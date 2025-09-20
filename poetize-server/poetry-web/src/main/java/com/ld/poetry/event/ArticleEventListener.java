@@ -105,7 +105,7 @@ public class ArticleEventListener {
                     log.info("新建文章后已重新渲染首页: ID={}", articleId);
                     
                     // 重新渲染分类索引页面（显示所有分类的文章统计）
-                    prerenderClient.renderCategoryIndexPage();
+                    prerenderClient.renderSortIndexPage();
                     log.info("新建文章后已重新渲染分类索引页面: ID={}", articleId);
                     
                     // 如果有分类ID，重新渲染对应的分类页面
@@ -127,7 +127,7 @@ public class ArticleEventListener {
                     log.info("文章更新后已重新渲染首页: ID={}", articleId);
                     
                     // 重新渲染分类索引页面（显示所有分类的文章统计）
-                    prerenderClient.renderCategoryIndexPage();
+                    prerenderClient.renderSortIndexPage();
                     log.info("文章更新后已重新渲染分类索引页面: ID={}", articleId);
                     
                     // 如果有分类ID，重新渲染对应的分类页面
@@ -150,7 +150,7 @@ public class ArticleEventListener {
                     log.info("删除文章后已重新渲染首页: ID={}", articleId);
                     
                     // 重新渲染分类索引页面（显示所有分类的文章统计）
-                    prerenderClient.renderCategoryIndexPage();
+                    prerenderClient.renderSortIndexPage();
                     log.info("删除文章后已重新渲染分类索引页面: ID={}", articleId);
                     
                     // 如果有分类ID，重新渲染对应的分类页面
