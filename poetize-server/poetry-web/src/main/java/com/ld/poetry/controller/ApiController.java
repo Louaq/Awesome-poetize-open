@@ -347,7 +347,7 @@ public class ApiController {
     /**
      * API获取文章详情
      */
-    @GetMapping("/article/{id}")
+    @GetMapping("/article/{id:\\d+}")
     public PoetryResult getArticleDetail(@PathVariable("id") Integer id, HttpServletRequest request) {
         try {
             // 验证API密钥
