@@ -913,7 +913,7 @@ create_full_backup() {
         # 检查volume中是否有数据
         if sudo docker run --rm -v "$actual_uploads_volume":/data alpine sh -c "[ -d /data/. ] && [ \"\$(ls -A /data/. 2>/dev/null)\" ]"; then
             info "导出用户上传文件..."
-            if sudo docker run --rm -v "$actual_uploads_volume":/data -v "$(pwd)/$BACKUP_DIR":/backup alpine tar -czf "/backup/uploads_backup.tar.gz" -C /data .; then
+            if sudo docker run --rm -v "$actual_uploads_volume":/data -v "$BACKUP_DIR":/backup alpine tar -czf "/backup/uploads_backup.tar.gz" -C /data .; then
                 success "用户上传文件备份完成"
             else
                 warning "用户上传文件备份失败"
@@ -934,7 +934,7 @@ create_full_backup() {
         # 检查volume中是否有数据
         if sudo docker run --rm -v "$actual_redis_volume":/data alpine sh -c "[ -d /data/. ] && [ \"\$(ls -A /data/. 2>/dev/null)\" ]"; then
             info "导出Redis数据..."
-            if sudo docker run --rm -v "$actual_redis_volume":/data -v "$(pwd)/$BACKUP_DIR":/backup alpine tar -czf "/backup/redis_backup.tar.gz" -C /data .; then
+            if sudo docker run --rm -v "$actual_redis_volume":/data -v "$BACKUP_DIR":/backup alpine tar -czf "/backup/redis_backup.tar.gz" -C /data .; then
                 success "Redis数据备份完成"
             else
                 warning "Redis数据备份失败"
@@ -955,7 +955,7 @@ create_full_backup() {
         # 检查volume中是否有预渲染文件目录
         if sudo docker run --rm -v "$actual_ui_dist_volume":/data alpine sh -c "[ -d /data/prerender ] && [ \"\$(ls -A /data/prerender 2>/dev/null)\" ]"; then
             info "导出预渲染文件（仅prerender目录）..."
-            if sudo docker run --rm -v "$actual_ui_dist_volume":/data -v "$(pwd)/$BACKUP_DIR":/backup alpine tar -czf "/backup/prerender_backup.tar.gz" -C /data prerender; then
+            if sudo docker run --rm -v "$actual_ui_dist_volume":/data -v "$BACKUP_DIR":/backup alpine tar -czf "/backup/prerender_backup.tar.gz" -C /data prerender; then
                 success "预渲染文件备份完成"
             else
                 warning "预渲染文件备份失败"
