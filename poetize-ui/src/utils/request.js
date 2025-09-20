@@ -61,7 +61,7 @@ axios.defaults.timeout = 60000; // 设置60秒超时，从15秒改为60秒
 // 添加请求拦截器
 axios.interceptors.request.use(function (config) {
   // 对Python API请求特殊处理，增加重试次数和超时设置
-  if (config.url && config.url.includes('/python/seo/')) {
+  if (config.url && config.url.includes('/seo/')) {
     config.timeout = 30000; // 增加SEO API超时时间
     config.retry = 3; // 最大重试次数
     config.retryDelay = 1000; // 重试间隔时间

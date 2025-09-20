@@ -1032,7 +1032,7 @@ async function loadWidget(config) {
     // 获取AI聊天配置
     let aiConfig = null;
     try {
-      const response = await fetch(`${constant.pythonBaseURL}/python/ai/chat/getConfig`);
+      const response = await fetch(`${constant.pythonBaseURL}/ai/chat/getConfig`);
       if (response.ok) {
         const result = await response.json();
         if (result.flag && result.data) {
@@ -1852,7 +1852,7 @@ async function loadWidget(config) {
       let enableTypingIndicator = true;
       
       try {
-        const response = await fetch(`${constant.pythonBaseURL}/python/ai/chat/getConfig`);
+        const response = await fetch(`${constant.pythonBaseURL}/ai/chat/getConfig`);
         if (response.ok) {
           const result = await response.json();
           if (result.flag && result.data) {
@@ -2614,7 +2614,7 @@ async function loadWidget(config) {
   // 获取流式响应配置
   async function getStreamingConfig() {
     try {
-      const response = await fetch(`${constant.pythonBaseURL}/python/ai/chat/getStreamingConfig`);
+      const response = await fetch(`${constant.pythonBaseURL}/ai/chat/getStreamingConfig`);
       if (response.ok) {
         return await response.json();
       } else {
@@ -2713,7 +2713,7 @@ async function loadWidget(config) {
         enhancedMessage = `${message}${webAccessHint}\n\n[页面上下文信息]\n${pageContent}`;
       }
       
-      const apiUrl = `${constant.pythonBaseURL}/python/ai/chat/sendStreamMessage`;
+      const apiUrl = `${constant.pythonBaseURL}/ai/chat/sendStreamMessage`;
       
       return new Promise((resolve, reject) => {
         // 创建 EventSource 连接
@@ -3648,7 +3648,7 @@ ${formInfo.map(form => `- 表单 (${form.method} ${form.action}): ${form.fields.
     // 获取AI聊天配置
     let aiConfig = null;
     try {
-      const response = await fetch(`${constant.pythonBaseURL}/python/ai/chat/getConfig`);
+      const response = await fetch(`${constant.pythonBaseURL}/ai/chat/getConfig`);
       if (response.ok) {
         aiConfig = await response.json();
       }
@@ -3977,7 +3977,7 @@ ${formInfo.map(form => `- 表单 (${form.method} ${form.action}): ${form.fields.
         enhancedMessage = `${message}${webAccessHint}\n\n[页面上下文信息]\n${pageContent}`;
       }
       
-      const apiUrl = `${constant.pythonBaseURL}/python/ai/chat/sendMessage`;
+      const apiUrl = `${constant.pythonBaseURL}/ai/chat/sendMessage`;
       
       const response = await fetch(apiUrl, {
         method: 'POST',

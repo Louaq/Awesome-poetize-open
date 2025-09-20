@@ -269,7 +269,7 @@ end
 local article_id = validate_numeric_id(ngx.var.article_id)
 if article_id then
     -- ngx.log(ngx.INFO, "检测到有效文章ID: ", article_id)
-    local data = fetch_api("/python/seo/getArticleMeta", {
+    local data = fetch_api("/seo/getArticleMeta", {
         id = article_id
     })
     
@@ -286,7 +286,7 @@ if not ngx.ctx.seo_data or ngx.ctx.seo_data == "" then
     local category_id = validate_numeric_id(ngx.var.category_id)
     if category_id then
         -- ngx.log(ngx.INFO, "检测到有效分类ID: ", category_id)
-        local data = fetch_api("/python/seo/getCategoryMeta", {
+        local data = fetch_api("/seo/getCategoryMeta", {
             id = category_id
         })
         
@@ -357,7 +357,7 @@ if need_icons then
         local httpc = http.new()
         httpc:set_timeout(3000) -- 3秒超时，比默认更短
         
-        local res, err = httpc:request_uri("http://poetize-python:5000/python/seo/getSeoConfig", {
+        local res, err = httpc:request_uri("http://poetize-python:5000/seo/getSeoConfig", {
             method = "GET",
             headers = {
                 ["Host"] = ngx.var.host,

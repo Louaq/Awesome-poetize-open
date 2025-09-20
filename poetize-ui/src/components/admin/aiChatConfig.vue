@@ -512,7 +512,7 @@ export default {
     // 加载所有配置
     async loadConfigs() {
       try {
-        const response = await this.$http.get(this.$constant.pythonBaseURL + "/python/ai/chat/getConfig", {}, true);
+        const response = await this.$http.get(this.$constant.pythonBaseURL + "/ai/chat/getConfig", {}, true);
         if (response.flag && response.data) {
           // 从后端API获取配置数据
           const config = response.data;
@@ -619,7 +619,7 @@ export default {
         }
         // 如果API密钥是隐藏格式，不发送api_key字段，让后端保持原有密钥不变
 
-        const response = await this.$http.post(this.$constant.pythonBaseURL + '/python/ai/chat/saveConfig', saveData, true);
+        const response = await this.$http.post(this.$constant.pythonBaseURL + '/ai/chat/saveConfig', saveData, true);
         
         if (response.flag) {
           this.$message.success('配置保存成功');
@@ -661,7 +661,7 @@ export default {
         // 检查是否使用的是隐藏的密钥
         if (this.isApiKeyMasked || (this.modelConfig.apiKey && this.modelConfig.apiKey.includes('*'))) {
           // 如果密钥被隐藏，使用保存的配置进行测试（不发送密钥）
-          const response = await this.$http.post(this.$constant.pythonBaseURL + '/python/ai/chat/testConnection', {
+          const response = await this.$http.post(this.$constant.pythonBaseURL + '/ai/chat/testConnection', {
             provider: this.modelConfig.provider,
             api_base: this.modelConfig.baseUrl,
             model: this.modelConfig.model,
@@ -690,7 +690,7 @@ export default {
             model: this.modelConfig.model
           };
 
-          const response = await this.$http.post(this.$constant.pythonBaseURL + '/python/ai/chat/testConnection', testData, true);
+          const response = await this.$http.post(this.$constant.pythonBaseURL + '/ai/chat/testConnection', testData, true);
 
           if (response.flag) {
             this.testResult = {
@@ -820,7 +820,7 @@ export default {
       
       try {
         // 使用正确的API端点进行测试
-        const response = await this.$http.post(this.$constant.pythonBaseURL + "/python/ai/chat/sendMessage", {
+        const response = await this.$http.post(this.$constant.pythonBaseURL + "/ai/chat/sendMessage", {
           message: this.testInput,
           conversationId: `test_${Date.now()}`
         }, false); // 聊天API不需要管理员权限
@@ -856,7 +856,7 @@ export default {
     // 加载配置
     async loadConfig() {
       try {
-        const response = await this.$http.get(this.$constant.pythonBaseURL + "/python/ai/chat/getConfig", {}, true);
+        const response = await this.$http.get(this.$constant.pythonBaseURL + "/ai/chat/getConfig", {}, true);
         if (response.flag && response.data) {
           // 更新各个配置对象
           if (response.data.provider) this.modelConfig.provider = response.data.provider;

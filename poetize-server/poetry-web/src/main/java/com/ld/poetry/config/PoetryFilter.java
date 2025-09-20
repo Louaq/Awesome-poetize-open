@@ -94,7 +94,7 @@ public class PoetryFilter extends OncePerRequestFilter {
         }
         
         // 排除其他服务
-        if (requestURI.startsWith("/python/")) {
+        if (requestURI.startsWith("/seo/") || requestURI.startsWith("/translation/")) {
             return false;
         }
         

@@ -81,7 +81,7 @@ public class SeoService {
             HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestData, headers);
             
             // 发送请求到Python SEO服务
-            String url = pythonServerUrl + "/python/seo/submitArticle";
+            String url = pythonServerUrl + "/seo/submitArticle";
             log.info("发送SEO推送请求到Python服务: {}, 请求数据: {}", url, new ObjectMapper().writeValueAsString(requestData));
             System.out.println("【SEO服务】发送SEO推送请求到Python服务: " + url);
             System.out.println("【SEO服务】请求数据: " + new ObjectMapper().writeValueAsString(requestData));

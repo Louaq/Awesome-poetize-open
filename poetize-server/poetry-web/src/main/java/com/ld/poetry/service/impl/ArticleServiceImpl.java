@@ -413,7 +413,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                             
                             // 调用专门的sitemap更新接口
                             String pythonServerUrl = System.getenv().getOrDefault("PYTHON_SERVICE_URL", "http://localhost:5000");
-                            String sitemapApiUrl = pythonServerUrl + "/python/seo/updateArticleSitemap";
+                            String sitemapApiUrl = pythonServerUrl + "/seo/updateArticleSitemap";
                             
                             try {
                                 @SuppressWarnings("unchecked")
@@ -1511,7 +1511,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                             
                             // 调用专门的sitemap更新接口
                             String pythonServerUrl = System.getenv().getOrDefault("PYTHON_SERVICE_URL", "http://localhost:5000");
-                            String sitemapApiUrl = pythonServerUrl + "/python/seo/updateArticleSitemap";
+                            String sitemapApiUrl = pythonServerUrl + "/seo/updateArticleSitemap";
                             
                             try {
                                 @SuppressWarnings("unchecked")

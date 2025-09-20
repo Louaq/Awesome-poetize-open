@@ -94,7 +94,7 @@ public class AdminController {
         log.info("收到SEO配置更新请求: {}", seoConfig);
         try {
             String pythonServerUrl = env.getProperty("PYTHON_SERVICE_URL", "http://localhost:5000");
-            String seoApiUrl = pythonServerUrl + "/python/seo/updateSeoConfig";
+            String seoApiUrl = pythonServerUrl + "/seo/updateSeoConfig";
             
             // 设置请求头
             HttpHeaders headers = new HttpHeaders();

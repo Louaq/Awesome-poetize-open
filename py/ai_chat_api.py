@@ -423,7 +423,7 @@ def register_ai_chat_api(app: FastAPI):
     get_ai_config = get_ai_chat_config
     
     # 获取AI聊天配置
-    @app.get('/python/ai/chat/getConfig')
+    @app.get('/ai/chat/getConfig')
     async def get_ai_chat_config_route(request: Request, _: bool = Depends(admin_required)):
         try:
             decrypted_config, display_config = get_ai_chat_config()
@@ -455,7 +455,7 @@ def register_ai_chat_api(app: FastAPI):
             })
     
     # 保存AI聊天配置
-    @app.post('/python/ai/chat/saveConfig')
+    @app.post('/ai/chat/saveConfig')
     async def save_ai_chat_config_route(request: Request, _: bool = Depends(admin_required)):
         try:
             config = await request.json()
@@ -514,7 +514,7 @@ def register_ai_chat_api(app: FastAPI):
             })
     
     # 测试AI聊天连接
-    @app.post('/python/ai/chat/testConnection')
+    @app.post('/ai/chat/testConnection')
     async def test_ai_chat_connection_route(request: Request, _: bool = Depends(admin_required)):
         try:
             config = await request.json()
@@ -568,7 +568,7 @@ def register_ai_chat_api(app: FastAPI):
             })
     
     # 检查AI聊天配置状态
-    @app.get('/python/ai/chat/checkStatus')
+    @app.get('/ai/chat/checkStatus')
     async def check_ai_chat_status_route(request: Request, _: bool = Depends(admin_required)):
         try:
             decrypted_config, display_config = get_ai_chat_config()
@@ -610,7 +610,7 @@ def register_ai_chat_api(app: FastAPI):
             })
     
     # 启用/禁用AI聊天
-    @app.post('/python/ai/chat/toggleStatus')
+    @app.post('/ai/chat/toggleStatus')
     async def toggle_ai_chat_status_route(request: Request, _: bool = Depends(admin_required)):
         """切换AI聊天服务状态"""
         try:
@@ -642,7 +642,7 @@ def register_ai_chat_api(app: FastAPI):
                 content={"error": "切换状态失败"}
             )
 
-    @app.get('/python/ai/chat/getStreamingConfig')
+    @app.get('/ai/chat/getStreamingConfig')
     async def get_streaming_config_route(request: Request):
         """获取流式响应配置（不需要管理员权限）"""
         try:
@@ -671,7 +671,7 @@ def register_ai_chat_api(app: FastAPI):
                 "configured": False
             })
 
-    @app.post("/python/ai/chat/sendMessage")
+    @app.post("/ai/chat/sendMessage")
     async def send_chat_message(request: Request):
         """发送聊天消息到AI"""
         try:
@@ -762,7 +762,7 @@ def register_ai_chat_api(app: FastAPI):
                 content={"flag": False, "code": 500, "message": f"AI聊天失败: {str(e)}", "data": None}
             )
 
-    @app.post("/python/ai/chat/sendMessageStream")
+    @app.post("/ai/chat/sendMessageStream")
     async def send_chat_message_stream(request: Request):
         """发送聊天消息到AI（流式响应）"""
         try:
@@ -838,7 +838,7 @@ def register_ai_chat_api(app: FastAPI):
                 content={"flag": False, "code": 500, "message": f"AI聊天失败: {str(e)}", "data": None}
             )
 
-    @app.get("/python/ai/chat/sendStreamMessage")
+    @app.get("/ai/chat/sendStreamMessage")
     async def send_stream_message(request: Request):
         """发送聊天消息并获取流式响应"""
         try:

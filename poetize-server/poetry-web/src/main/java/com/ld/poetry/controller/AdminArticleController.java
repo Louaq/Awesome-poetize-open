@@ -105,7 +105,7 @@ public class AdminArticleController {
                     
                     // 调用专门的sitemap更新接口
                     String pythonServerUrl = System.getenv().getOrDefault("PYTHON_SERVICE_URL", "http://poetize-python:5000");
-                    String sitemapApiUrl = pythonServerUrl + "/python/seo/updateArticleSitemap";
+                    String sitemapApiUrl = pythonServerUrl + "/seo/updateArticleSitemap";
                     
                     try {
                         @SuppressWarnings("unchecked")

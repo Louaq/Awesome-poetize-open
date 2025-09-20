@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const MarkdownIt = require('markdown-it');
-const cheerio = require('cheerio');
+const { JSDOM } = require('jsdom');
 const { decode: decodeHtmlEntities } = require('html-entities');
 
 const app = express();
@@ -38,7 +38,7 @@ class Logger {
         fs.mkdirSync(this.logDir, { recursive: true });
       }
     } catch (error) {
-      console.error('Failed to create log directory:', error);
+      console.error('创建日志目录失败:', error);
     }
   }
 
@@ -62,7 +62,7 @@ class Logger {
       const logLine = JSON.stringify(logEntry) + '\n';
       fs.appendFileSync(logFile, logLine);
     } catch (error) {
-      console.error('Failed to write log to file:', error);
+      console.error('写入日志文件失败:', error);
     }
   }
 
@@ -145,7 +145,7 @@ class Logger {
         .sort((a, b) => b.modified - a.modified);
       return files;
     } catch (error) {
-      console.error('Failed to get log files:', error);
+      console.error('获取日志文件失败:', error);
       return [];
     }
   }
@@ -177,7 +177,7 @@ class Logger {
       
       return logs;
     } catch (error) {
-      console.error('Failed to read log file:', error);
+      console.error('读取日志文件失败:', error);
       return [];
     }
   }
@@ -359,7 +359,7 @@ class ServiceMonitor {
 
   recordRequest(type = 'unknown') {
     this.stats.totalRequests++;
-    logger.debug('Request recorded', { type, total: this.stats.totalRequests });
+    logger.debug('请求已记录', { type, total: this.stats.totalRequests });
   }
 
   recordRenderStart(taskId, type, params = {}) {
@@ -371,7 +371,7 @@ class ServiceMonitor {
       status: 'running'
     };
     this.stats.currentTasks.set(taskId, task);
-    logger.info('Render task started', { 
+    logger.info('渲染任务已开始', { 
       taskId, 
       type, 
       params, 
@@ -430,7 +430,7 @@ class ServiceMonitor {
       }
       
       this.stats.currentTasks.delete(taskId);
-      logger.info('Render task completed successfully', { 
+      logger.info('渲染任务成功完成', { 
         taskId, 
         duration: `${duration}ms`, 
         type: task.type,
@@ -502,7 +502,7 @@ class ServiceMonitor {
       }
       
       this.stats.currentTasks.delete(taskId);
-      logger.error('Render task failed', errorRecord);
+      logger.error('渲染任务失败', errorRecord);
     }
   }
 
@@ -583,7 +583,7 @@ const md = new MarkdownIt({breaks: true}).use(require('markdown-it-multimd-table
  */
 async function getSourceLanguage() {
   try {
-    logger.debug('Fetching source language configuration from Java backend');
+    logger.debug('从Java后端获取源语言配置');
     const res = await axios.get(`${JAVA_BACKEND_URL}/article/getTranslationConfig`, {
       timeout: 5000,
       headers: INTERNAL_SERVICE_HEADERS
@@ -592,7 +592,7 @@ async function getSourceLanguage() {
     if (res.data && res.data.code === 200 && res.data.data) {
       const sourceLanguage = res.data.data.source || 'zh';
 
-      logger.debug('Source language configuration fetched from Java backend', {
+      logger.debug('已从Java后端获取源语言配置', {
         sourceLanguage,
         responseCode: res.data.code,
         fullConfig: res.data.data
@@ -600,13 +600,13 @@ async function getSourceLanguage() {
 
       return sourceLanguage;
     } else {
-      logger.warn('Invalid response format from Java translation config API', {
+      logger.warn('Java翻译配置API响应格式无效', {
         responseCode: res.data?.code,
         hasData: !!res.data?.data
       });
     }
   } catch (error) {
-    logger.warn('Failed to fetch source language configuration from Java backend, using default', {
+    logger.warn('从Java后端获取源语言配置失败，使用默认配置', {
       error: error.message,
       status: error.response?.status,
       statusText: error.response?.statusText,
@@ -616,7 +616,7 @@ async function getSourceLanguage() {
 
   // 返回默认源语言
   const defaultSourceLanguage = 'zh';
-  logger.info('Using default source language', { sourceLanguage: defaultSourceLanguage });
+  logger.info('使用默认源语言', { sourceLanguage: defaultSourceLanguage });
   return defaultSourceLanguage;
 }
 
@@ -682,18 +682,18 @@ const INTERNAL_SERVICE_HEADERS = {
 // ===== 文章相关函数 =====
 async function fetchArticle(id) {
   try {
-    logger.debug('Fetching article', { id });
+    logger.debug('获取文章', { id });
     const res = await axios.get(`${JAVA_BACKEND_URL}/article/getArticleByIdNoCount`, { 
       params: { id },
       timeout: 10000,
       headers: INTERNAL_SERVICE_HEADERS
     });
     const article = (res.data && res.data.data) || null;
-    logger.debug('Article fetched', { id, found: !!article });
+    logger.debug('文章已获取', { id, found: !!article });
     return article;
   } catch (error) {
-    logger.error('Failed to fetch article', { id, error: error.message, stack: error.stack });
-    throw new Error(`Failed to fetch article ${id}: ${error.message}`);
+    logger.error('获取文章失败', { id, error: error.message, stack: error.stack });
+    throw new Error(`获取文章${id}失败: ${error.message}`);
   }
 }
 
@@ -703,7 +703,7 @@ async function fetchTranslation(id, lang) {
 
   // 如果请求的语言与源语言相同，不需要翻译
   if (lang === sourceLanguage) {
-    logger.debug('Requested language matches source language, no translation needed', {
+    logger.debug('请求语言与源语言匹配，无需翻译', {
       id,
       requestedLang: lang,
       sourceLanguage
@@ -712,7 +712,7 @@ async function fetchTranslation(id, lang) {
   }
 
   try {
-    logger.debug('Fetching translation', {
+    logger.debug('获取翻译', {
       id,
       lang,
       sourceLanguage,
@@ -733,7 +733,7 @@ async function fetchTranslation(id, lang) {
       ? res.data.data
       : null;
 
-    logger.debug('Translation fetched', {
+    logger.debug('翻译已获取', {
       id,
       lang,
       sourceLanguage,
@@ -743,7 +743,7 @@ async function fetchTranslation(id, lang) {
     });
     return translation;
   } catch (error) {
-    logger.warn('Failed to fetch translation, using original content', {
+    logger.warn('获取翻译失败，使用原始内容', {
       id,
       lang,
       sourceLanguage,
@@ -755,12 +755,12 @@ async function fetchTranslation(id, lang) {
 
 async function fetchMeta(id, lang) {
   try {
-    logger.debug('Fetching meta', { id, lang });
+    logger.debug('获取元数据', { id, lang });
     
     // 并行获取文章元数据和SEO配置
     const [articleMetaRes, seoConfigRes] = await Promise.all([
-      axios.get(`${PYTHON_BACKEND_URL}/python/seo/getArticleMeta`, { 
-        params: { id },
+      axios.get(`${PYTHON_BACKEND_URL}/seo/getArticleMeta`, { 
+        params: { id, lang },
         timeout: 5000,
         headers: INTERNAL_SERVICE_HEADERS
       }),
@@ -772,7 +772,7 @@ async function fetchMeta(id, lang) {
     
     // 获取文章元数据
     const meta = (articleMetaRes.data && articleMetaRes.data.status === 'success') ? (articleMetaRes.data.data || {}) : {};
-    logger.debug('Meta fetched', { id, lang, keysCount: Object.keys(meta).length });
+    logger.debug('元数据已获取', { id, lang, keysCount: Object.keys(meta).length });
     
     // 获取SEO配置
     const seoConfig = (seoConfigRes.data && seoConfigRes.data.code === 200) ? (seoConfigRes.data.data || {}) : {};
@@ -780,14 +780,15 @@ async function fetchMeta(id, lang) {
     // 使用通用函数添加图标字段
     addSeoIconFieldsToMeta(meta, seoConfig);
     
-    logger.debug('Added icon fields from SEO config to article meta', { 
+    logger.debug('已添加图标字段到文章元数据', { 
       articleId: id, 
+      lang,
       hasSiteIcon: !!meta.site_icon
     });
     
     return meta;
   } catch (error) {
-    logger.warn('Failed to fetch meta, using defaults', { 
+    logger.warn('获取元数据失败，使用默认值', { 
       id, 
       lang, 
       error: error.message 
@@ -800,7 +801,7 @@ async function fetchMeta(id, lang) {
 
 async function fetchWebInfo() {
   try {
-    logger.debug('Fetching web info');
+    logger.debug('获取网站信息');
     const res = await axios.get(`${JAVA_BACKEND_URL}/webInfo/getWebInfo`, { 
       timeout: 5000,
       headers: INTERNAL_SERVICE_HEADERS
@@ -808,7 +809,7 @@ async function fetchWebInfo() {
     const webInfo = (res.data && res.data.data) || {};
     
     // 详细记录获取到的webInfo数据
-    logger.info('Web info fetched successfully', { 
+    logger.info('网站信息获取成功', { 
       status: res.status,
       dataExists: !!res.data,
       webInfoExists: !!res.data?.data,
@@ -822,7 +823,7 @@ async function fetchWebInfo() {
     
     return webInfo;
   } catch (error) {
-    logger.error('Failed to fetch web info', { 
+    logger.error('获取网站信息失败', { 
       error: error.message,
       status: error.response?.status,
       statusText: error.response?.statusText,
@@ -843,14 +844,14 @@ async function fetchSeoConfig() {
   // 检查缓存是否有效
   const now = Date.now();
   if (seoConfigCache.data && (now - seoConfigCache.lastFetch) < seoConfigCache.cacheDuration) {
-    logger.debug('Using cached SEO config', { 
+    logger.debug('使用缓存的SEO配置', { 
       cacheAge: Math.round((now - seoConfigCache.lastFetch) / 1000) + 's'
     });
     return seoConfigCache.data;
   }
 
   try {
-    logger.debug('Fetching SEO config from server');
+    logger.debug('从服务器获取SEO配置');
     const res = await axios.get(`${PYTHON_BACKEND_URL}/seo/getSeoConfig`, { 
       timeout: 5000,
       headers: INTERNAL_SERVICE_HEADERS
@@ -862,7 +863,7 @@ async function fetchSeoConfig() {
     seoConfigCache.lastFetch = now;
     
     // 详细记录获取到的SEO配置数据
-    logger.info('SEO config fetched and cached successfully', { 
+    logger.info('SEO配置获取并缓存成功', { 
       status: res.status,
       responseCode: res.data?.code,
       dataExists: !!res.data?.data,
@@ -881,7 +882,7 @@ async function fetchSeoConfig() {
     
     return seoConfig;
   } catch (error) {
-    logger.warn('Failed to fetch SEO config, using defaults', { 
+    logger.warn('获取SEO配置失败，使用默认值', { 
       error: error.message, 
       status: error.response?.status,
       statusText: error.response?.statusText,
@@ -890,7 +891,7 @@ async function fetchSeoConfig() {
     
     // 如果有缓存数据，即使过期也先用着
     if (seoConfigCache.data) {
-      logger.info('Using expired cached SEO config as fallback');
+      logger.info('使用过期的缓存SEO配置作为备用');
       return seoConfigCache.data;
     }
     
@@ -900,23 +901,23 @@ async function fetchSeoConfig() {
 
 async function fetchSortInfo() {
   try {
-    logger.debug('Fetching sort info');
+    logger.debug('获取分类信息');
     const res = await axios.get(`${JAVA_BACKEND_URL}/webInfo/listSortForPrerender`, { 
       timeout: 5000,
       headers: INTERNAL_SERVICE_HEADERS
     });
     const sortInfo = (res.data && res.data.data) || [];
-    logger.debug('Sort info fetched', { count: sortInfo.length });
+    logger.debug('分类信息已获取', { count: sortInfo.length });
     return sortInfo;
   } catch (error) {
-    logger.warn('Failed to fetch sort info, using empty array', { error: error.message });
+    logger.warn('获取分类信息失败，使用空数组', { error: error.message });
     return [];
   }
 }
 
 async function fetchRecentArticles(limit = 5) {
   try {
-    logger.debug('Fetching recent articles', { limit });
+    logger.debug('获取最新文章', { limit });
     const res = await axios.post(`${JAVA_BACKEND_URL}/article/listArticle`, {
       current: 1,
       size: limit
@@ -925,10 +926,10 @@ async function fetchRecentArticles(limit = 5) {
       headers: INTERNAL_SERVICE_HEADERS
     });
     const articles = (res.data && res.data.data && res.data.data.records) || [];
-    logger.debug('Recent articles fetched', { count: articles.length, limit });
+    logger.debug('最新文章已获取', { count: articles.length, limit });
     return articles;
   } catch (error) {
-    logger.warn('Failed to fetch recent articles, using empty array', { 
+    logger.warn('获取最新文章失败，使用空数组', { 
       limit, 
       error: error.message 
     });
@@ -938,39 +939,39 @@ async function fetchRecentArticles(limit = 5) {
 
 async function fetchCollects() {
   try {
-    logger.debug('Fetching collects');
+    logger.debug('获取收藏信息');
     const res = await axios.get(`${JAVA_BACKEND_URL}/webInfo/listCollect`, { 
       timeout: 5000,
       headers: INTERNAL_SERVICE_HEADERS
     });
     const collects = (res.data && res.data.data) || {};
-    logger.debug('Collects fetched', { categories: Object.keys(collects).length });
+    logger.debug('收藏信息已获取', { categories: Object.keys(collects).length });
     return collects;
   } catch (error) {
-    logger.warn('Failed to fetch collects, using empty object', { error: error.message });
+    logger.warn('获取收藏信息失败，使用空对象', { error: error.message });
     return {};
   }
 }
 
 async function fetchFriends() {
   try {
-    logger.debug('Fetching friends');
+    logger.debug('获取友链信息');
     const res = await axios.get(`${JAVA_BACKEND_URL}/webInfo/listFriend`, { 
       timeout: 5000,
       headers: INTERNAL_SERVICE_HEADERS
     });
     const friends = (res.data && res.data.data) || {};
-    logger.debug('Friends fetched', { categories: Object.keys(friends).length });
+    logger.debug('友链信息已获取', { categories: Object.keys(friends).length });
     return friends;
   } catch (error) {
-    logger.warn('Failed to fetch friends, using empty object', { error: error.message });
+    logger.warn('获取友链信息失败，使用空对象', { error: error.message });
     return {};
   }
 }
 
 async function fetchSiteInfo() {
   try {
-    logger.debug('Fetching site info from resource aggregation');
+    logger.debug('从资源聚合获取站点信息');
     const res = await axios.get(`${JAVA_BACKEND_URL}/webInfo/getSiteInfo`, { 
       timeout: 5000,
       headers: INTERNAL_SERVICE_HEADERS
@@ -1001,7 +1002,7 @@ async function fetchSiteInfo() {
 
 async function fetchSortById(sortId) {
   try {
-    logger.debug('Fetching sort by ID', { sortId });
+    logger.debug('根据ID获取分类', { sortId });
     // 修改为使用现有的API: /webInfo/getSortInfo 或 /webInfo/listSortForPrerender
     const res = await axios.get(`${JAVA_BACKEND_URL}/webInfo/listSortForPrerender`, { 
       timeout: 5000,
@@ -1012,17 +1013,17 @@ async function fetchSortById(sortId) {
     const sortList = (res.data && res.data.data) || [];
     const sort = Array.isArray(sortList) ? sortList.find(s => s.id === parseInt(sortId)) : null;
     
-    logger.debug('Sort fetched by ID', { sortId, found: !!sort, totalSorts: sortList.length });
+    logger.debug('根据ID获取分类完成', { sortId, found: !!sort, totalSorts: sortList.length });
     return sort;
   } catch (error) {
-    logger.error('Failed to fetch sort by ID', { sortId, error: error.message });
+    logger.error('根据ID获取分类失败', { sortId, error: error.message });
     return null;
   }
 }
 
 async function fetchArticlesBySort(sortId, labelId = null, limit = 10) {
   try {
-    logger.debug('Fetching articles by sort', { sortId, labelId, limit });
+    logger.debug('根据分类获取文章', { sortId, labelId, limit });
     const params = { current: 1, size: limit, sortId };
     if (labelId) params.labelId = labelId;
     
@@ -1058,34 +1059,43 @@ function buildHtmlTemplate({ title, meta, content, lang, pageType = 'article' })
     // 如果挂载路径不存在，尝试相对路径作为fallback
     const fallbackPath = path.resolve(__dirname, './dist/index.html');
     if (!fs.existsSync(fallbackPath)) {
-      throw new Error(`SPA template not found at ${templatePath} or ${fallbackPath}. Please ensure poetize-ui has been built and volumes are properly mounted.`);
+      throw new Error(`在${templatePath}或${fallbackPath}找不到SPA模板。请确保poetize-ui已构建且卷已正确挂载。`);
     }
-    console.warn(`Using fallback template path: ${fallbackPath}`);
+    console.warn(`使用备用模板路径: ${fallbackPath}`);
     templateHtml = fs.readFileSync(fallbackPath, 'utf8');
   } else {
     templateHtml = fs.readFileSync(templatePath, 'utf8');
   }
   
-  const $ = cheerio.load(templateHtml, {
-    decodeEntities: false, // 避免编码HTML实体
-    xmlMode: false,        // 使用HTML模式
-    normalizeWhitespace: false // 不规范化空白
-  });
+  // 使用 JSDOM 解析 HTML
+  const dom = new JSDOM(templateHtml);
+  const document = dom.window.document;
 
-  $('html').attr('lang', lang);
-  $('head title').text(title);
+  // 设置语言属性
+  document.documentElement.setAttribute('lang', lang);
+  
+  // 设置标题
+  const titleElement = document.querySelector('head title');
+  if (titleElement) {
+    titleElement.textContent = title;
+  }
 
   // 清理占位符/旧meta，更彻底
-  $('head meta[name="description"]').remove();
-  $('head meta[name="keywords"]').remove();
-  $('head meta[name="author"]').remove();
-  $('head meta[property^="og:"]').remove();
-  $('head meta[property^="twitter:"]').remove();
-  $('head meta[property^="article:"]').remove();
-  $('head link[rel="canonical"]').remove();
+  const removeElements = (selector) => {
+    const elements = document.querySelectorAll(selector);
+    elements.forEach(el => el.remove());
+  };
+  
+  removeElements('head meta[name="description"]');
+  removeElements('head meta[name="keywords"]');
+  removeElements('head meta[name="author"]');
+  removeElements('head meta[property^="og:"]');
+  removeElements('head meta[property^="twitter:"]');
+  removeElements('head meta[property^="article:"]');
+  removeElements('head link[rel="canonical"]');
 
   // 调试：检查meta对象
-  console.log('buildHtmlTemplate meta debug:', {
+  console.log('buildHtmlTemplate 元数据调试:', {
     metaType: typeof meta,
     metaIsObject: typeof meta === 'object' && meta !== null,
     metaKeys: meta ? Object.keys(meta) : 'null',
@@ -1103,9 +1113,9 @@ function buildHtmlTemplate({ title, meta, content, lang, pageType = 'article' })
   
   // 如果有site_icon，移除默认的favicon
   if (meta && meta.site_icon) {
-    $('head link[rel="icon"]').remove();
-    $('head link[id="default-favicon"]').remove();
-    logger.info('Removed default favicon for replacement');
+    removeElements('head link[rel="icon"]');
+    removeElements('head link[id="default-favicon"]');
+    logger.info('已移除默认favicon以便替换');
   }
   
   // 添加各种图标
@@ -1113,18 +1123,16 @@ function buildHtmlTemplate({ title, meta, content, lang, pageType = 'article' })
     Object.keys(iconMapping).forEach(field => {
       if (meta[field]) {
         const attrs = iconMapping[field];
-        const $link = $('<link>');
-        $link.attr('href', meta[field]);
+        const linkElement = document.createElement('link');
+        linkElement.href = meta[field];
         
         // 添加所有属性
         Object.keys(attrs).forEach(attr => {
-          $link.attr(attr, attrs[attr]);
+          linkElement.setAttribute(attr, attrs[attr]);
         });
         
-        // 添加换行和缩进
-        $('head').append('\n  ');
-        $('head').append($link);
-        logger.debug(`Added ${field} icon to HTML`, { url: meta[field] });
+        document.head.appendChild(linkElement);
+        logger.debug(`已添加${field}图标到HTML`, { url: meta[field] });
       }
     });
   }
@@ -1143,28 +1151,33 @@ function buildHtmlTemplate({ title, meta, content, lang, pageType = 'article' })
         // 图标已在上面处理
         continue;
       } else if (key.startsWith('hreflang')) {
-        // hreflang 已经是完整的 <link> 标签
-        $('head').append('\n  ');
-        $('head').append(meta[key]);
+        // hreflang 已经是完整的 <link> 标签，直接插入HTML
+        document.head.insertAdjacentHTML('beforeend', meta[key]);
       } else if (key === 'canonical') {
-        $('head').append('\n  ');
-        $('head').append(`<link rel="canonical" href="${value}">`);
+        const canonicalLink = document.createElement('link');
+        canonicalLink.rel = 'canonical';
+        canonicalLink.href = value;
+        document.head.appendChild(canonicalLink);
       } else if (['description', 'keywords', 'author'].includes(key)) {
-        $('head').append('\n  ');
-        $('head').append(`<meta name="${key}" content="${value}">`);
+        const metaElement = document.createElement('meta');
+        metaElement.name = key;
+        metaElement.content = value;
+        document.head.appendChild(metaElement);
       } else {
         // 处理 og:, twitter:, article: 等属性
-        $('head').append('\n  ');
-        $('head').append(`<meta property="${key}" content="${value}">`);
+        const metaElement = document.createElement('meta');
+        metaElement.setAttribute('property', key);
+        metaElement.content = value;
+        document.head.appendChild(metaElement);
       }
     }
   } else {
-    console.error('Meta is not a valid object:', meta);
+    console.error('元数据不是有效对象:', meta);
   }
 
   // 添加页面类型标识
-  $('body').attr('data-prerender-type', pageType);
-  $('body').attr('data-prerender-lang', lang);
+  document.body.setAttribute('data-prerender-type', pageType);
+  document.body.setAttribute('data-prerender-lang', lang);
 
   // 添加防止FOUC的关键内联样式
   const criticalCSS = `
@@ -1254,18 +1267,36 @@ function buildHtmlTemplate({ title, meta, content, lang, pageType = 'article' })
     </style>
   `;
   
-  $('head').append('\n  ');
-  $('head').append(criticalCSS);
+  document.head.insertAdjacentHTML('beforeend', criticalCSS);
 
-  // 添加资源预加载优化
-  $('head').prepend(`
+  // 添加资源预加载优化 - 在viewport meta标签之后插入
+  const viewportMeta = document.querySelector('meta[name="viewport"]');
+  if (viewportMeta) {
+    viewportMeta.insertAdjacentHTML('afterend', `
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="dns-prefetch" href="//cdn.jsdelivr.net">
   `);
+  }
 
   // 注入渲染好的内容
-  $('#app').html(content);
+  const appElement = document.getElementById('app');
+  if (appElement) {
+    appElement.innerHTML = content;
+    
+    // 根据页面类型给#app添加相应的CSS类
+    if (pageType === 'article') {
+      appElement.classList.add('article-detail');
+    } else if (pageType === 'home') {
+      appElement.classList.add('home-prerender');
+    } else if (pageType === 'favorite') {
+      appElement.classList.add('favorite-prerender');
+    } else if (pageType === 'sort') {
+      appElement.classList.add('sort-prerender');
+    } else if (pageType === 'sort-list') {
+      appElement.classList.add('sort-list-prerender');
+    }
+  }
 
   // 添加加载状态管理脚本
   const loadingScript = `
@@ -1346,11 +1377,10 @@ function buildHtmlTemplate({ title, meta, content, lang, pageType = 'article' })
     </script>
   `;
   
-  $('body').append('\n  ');
-  $('body').append(loadingScript);
+  document.body.insertAdjacentHTML('beforeend', loadingScript);
   
   // 确保生成的HTML具有良好的格式
-  let html = $.html();
+  let html = dom.serialize();
   
   // 优化HTML输出格式，确保meta标签等有换行
   html = html.replace(/<meta/g, '\n  <meta');
@@ -1364,13 +1394,17 @@ function buildHtmlTemplate({ title, meta, content, lang, pageType = 'article' })
   html = html.replace(/<\/head>/g, '\n</head>');
   html = html.replace(/<\/body>/g, '\n</body>');
   
+  // 清理多余的连续空行
+  html = html.replace(/\n{3,}/g, '\n\n');
+  html = html.replace(/\n\s*\n\s*\n/g, '\n\n');
+  
   return html;
 }
 
 // ===== 文章页面渲染函数 =====
 function buildHtml({ title, meta, content, lang }) {
   // 调试：确保参数格式正确
-  console.log('buildHtml parameters:', {
+  console.log('buildHtml 参数:', {
     title: typeof title,
     meta: typeof meta,
     content: typeof content,
@@ -1378,13 +1412,11 @@ function buildHtml({ title, meta, content, lang }) {
     metaKeys: meta ? Object.keys(meta) : 'null'
   });
 
-  const articleContent = `<main class="article-detail">${content}</main>`;
-  
   // 确保meta是一个有效的对象
   const safeMeta = (typeof meta === 'object' && meta !== null) ? meta : {};
   
   // 记录是否包含图标字段
-  logger.debug('Article meta contains icon fields:', {
+  logger.debug('文章元数据包含图标字段:', {
     hasSiteIcon: !!safeMeta.site_icon,
     hasAppleTouchIcon: !!safeMeta.apple_touch_icon,
     hasSiteIcon192: !!safeMeta.site_icon_192,
@@ -1394,7 +1426,7 @@ function buildHtml({ title, meta, content, lang }) {
   return buildHtmlTemplate({ 
     title: title || 'Poetize', 
     meta: safeMeta, 
-    content: articleContent, 
+    content: content, // 直接使用内容，不额外包装
     lang: lang || 'zh', 
     pageType: 'article' 
   });
@@ -1437,48 +1469,46 @@ async function renderHomePage(lang = 'zh') {
 
     // 构建首页内容（只包含静态SEO内容，动态内容由客户端加载）
     const homeContent = `
-      <div class="home-prerender">
-        <div class="home-hero">
-          <h1>${webInfo.webName || 'Poetize'}</h1>
-          <p>${description}</p>
-        </div>
-        <div class="home-categories">
-          <h2>文章分类</h2>
-          <ul>
-            ${sortInfo.map(sort => `
-              <li>
-                <a href="/sort?sortId=${sort.id}" title="${sort.sortDescription || sort.sortName}">
-                  ${sort.sortName}
-                </a>
-              </li>
-            `).join('')}
-          </ul>
-        </div>
-        <div class="home-recent-articles">
-          <h2>最新文章</h2>
-          <ul>
-            ${recentArticles.map(article => `
-              <li>
-                <a href="/article/${article.id}" title="${article.articleTitle}">
-                  <h3>${article.articleTitle}</h3>
-                  ${article.summary ? `<p>${article.summary}</p>` : ''}
-                  <time>${article.createTime}</time>
-                </a>
-              </li>
-            `).join('')}
-          </ul>
-        </div>
-        <!-- 动态内容占位符，由客户端JavaScript填充 -->
-        <div id="dynamic-content-placeholder" style="display:none;">
-          <script>
-            // 标记这是预渲染页面，客户端需要动态加载内容
-            window.PRERENDER_DATA = {
-              type: 'home',
-              lang: '${lang}',
-              timestamp: ${Date.now()}
-            };
-          </script>
-        </div>
+      <div class="home-hero">
+        <h1>${webInfo.webName || 'Poetize'}</h1>
+        <p>${description}</p>
+      </div>
+      <div class="home-categories">
+        <h2>文章分类</h2>
+        <ul>
+          ${sortInfo.map(sort => `
+            <li>
+              <a href="/sort?sortId=${sort.id}" title="${sort.sortDescription || sort.sortName}">
+                ${sort.sortName}
+              </a>
+            </li>
+          `).join('')}
+        </ul>
+      </div>
+      <div class="home-recent-articles">
+        <h2>最新文章</h2>
+        <ul>
+          ${recentArticles.map(article => `
+            <li>
+              <a href="/article/${article.id}" title="${article.articleTitle}">
+                <h3>${article.articleTitle}</h3>
+                ${article.summary ? `<p>${article.summary}</p>` : ''}
+                <time>${article.createTime}</time>
+              </a>
+            </li>
+          `).join('')}
+        </ul>
+      </div>
+      <!-- 动态内容占位符，由客户端JavaScript填充 -->
+      <div id="dynamic-content-placeholder" style="display:none;">
+        <script>
+          // 标记这是预渲染页面，客户端需要动态加载内容
+          window.PRERENDER_DATA = {
+            type: 'home',
+            lang: '${lang}',
+            timestamp: ${Date.now()}
+          };
+        </script>
       </div>
     `;
 
@@ -1490,7 +1520,7 @@ async function renderHomePage(lang = 'zh') {
       pageType: 'home' 
     });
   } catch (error) {
-    console.error('Failed to render home page:', error);
+    console.error('渲染首页失败:', error);
     throw error;
   }
 }
@@ -1507,7 +1537,7 @@ async function renderFavoritePage(lang = 'zh') {
     ]);
 
     // 调试：记录获取到的数据
-    logger.info('Favorite page data fetched', {
+    logger.info('收藏页数据已获取', {
       webInfoKeys: Object.keys(webInfo),
       webName: webInfo.webName,
       webTitle: webInfo.webTitle,
@@ -1555,90 +1585,88 @@ async function renderFavoritePage(lang = 'zh') {
 
     // 构建百宝箱内容
     const favoriteContent = `
-      <div class="favorite-prerender">
-        <div class="favorite-hero">
-          <h1>百宝箱</h1>
-          <p>收藏夹、友人帐、音乐欣赏</p>
-        </div>
-        
-        <div class="favorite-sections">
-          <section class="collect-section">
-            <h2>收藏夹</h2>
-            <p>精选网站收藏</p>
-            ${Object.keys(collects).length > 0 ? Object.keys(collects).map(category => `
-              <div class="collect-category">
-                <h3>${category}</h3>
-                <ul>
-                  ${collects[category].map(item => `
-                    <li>
-                      <a href="${item.url}" target="_blank" rel="noopener" title="${item.introduction}">
-                        <img src="${item.cover}" alt="${item.title}" width="32" height="32" loading="lazy">
-                        <span>${item.title}</span>
-                        <small>${item.introduction}</small>
-                      </a>
-                    </li>
-                  `).join('')}
-                </ul>
-              </div>
-            `).join('') : '<p>暂无收藏夹</p>'}
-          </section>
-          
-          <section class="friend-section">
-            <h2>友人帐</h2>
-            <p>留下你的网站，与更多朋友交流</p>
-            
-            <!-- 本站信息 -->
-            <div class="site-info">
-              <h3>🌸本站信息</h3>
-              <blockquote>
-                <div>网站名称: ${siteInfo.title || webInfo.webName || 'POETIZE'}</div>
-                <div>网址: ${siteInfo.url || baseUrl}</div>
-                <div>头像: ${siteInfo.cover || webInfo.avatar || 'https://s1.ax1x.com/2022/11/10/z9E7X4.jpg'}</div>
-                <div>描述: ${siteInfo.introduction || webInfo.webTitle || '这是一个 Vue2 Vue3 与 SpringBoot 结合的产物～'}</div>
-                <div>网站封面: ${siteInfo.remark || webInfo.backgroundImage || 'https://s1.ax1x.com/2022/11/10/z9VlHs.png'}</div>
-              </blockquote>
-            </div>
-            
-            <!-- 友链列表 -->
-            ${Object.keys(friends).length > 0 ? `
-              <div class="friends-list">
-                <h3>友情链接</h3>
-                ${Object.keys(friends).map(category => `
-                  <div class="friend-category">
-                    <h4>${category}</h4>
-                    <ul>
-                      ${friends[category].map(friend => `
-                        <li>
-                          <a href="${friend.url}" target="_blank" rel="noopener" title="${friend.introduction}">
-                            <img src="${friend.cover}" alt="${friend.title}" width="32" height="32" loading="lazy">
-                            <span>${friend.title}</span>
-                            <small>${friend.introduction}</small>
-                          </a>
-                        </li>
-                      `).join('')}
-                    </ul>
-                  </div>
+      <div class="favorite-hero">
+        <h1>百宝箱</h1>
+        <p>收藏夹、友人帐、音乐欣赏</p>
+      </div>
+      
+      <div class="favorite-sections">
+        <section class="collect-section">
+          <h2>收藏夹</h2>
+          <p>精选网站收藏</p>
+          ${Object.keys(collects).length > 0 ? Object.keys(collects).map(category => `
+            <div class="collect-category">
+              <h3>${category}</h3>
+              <ul>
+                ${collects[category].map(item => `
+                  <li>
+                    <a href="${item.url}" target="_blank" rel="noopener" title="${item.introduction}">
+                      <img src="${item.cover}" alt="${item.title}" width="32" height="32" loading="lazy">
+                      <span>${item.title}</span>
+                      <small>${item.introduction}</small>
+                    </a>
+                  </li>
                 `).join('')}
-              </div>
-            ` : '<p>暂无友链，欢迎交换友链</p>'}
-          </section>
-          
-          <section class="music-section">
-            <h2>曲乐</h2>
-            <p>一曲肝肠断，天涯何处觅知音</p>
-          </section>
-        </div>
+              </ul>
+            </div>
+          `).join('') : '<p>暂无收藏夹</p>'}
+        </section>
         
-        <!-- 动态内容占位符 -->
-        <div id="dynamic-content-placeholder" style="display:none;">
-          <script>
-            window.PRERENDER_DATA = {
-              type: 'favorite',
-              lang: '${lang}',
-              timestamp: ${Date.now()}
-            };
-          </script>
-        </div>
+        <section class="friend-section">
+          <h2>友人帐</h2>
+          <p>留下你的网站，与更多朋友交流</p>
+          
+          <!-- 本站信息 -->
+          <div class="site-info">
+            <h3>🌸本站信息</h3>
+            <blockquote>
+              <div>网站名称: ${siteInfo.title || webInfo.webName || 'POETIZE'}</div>
+              <div>网址: ${siteInfo.url || baseUrl}</div>
+              <div>头像: ${siteInfo.cover || webInfo.avatar || 'https://s1.ax1x.com/2022/11/10/z9E7X4.jpg'}</div>
+              <div>描述: ${siteInfo.introduction || webInfo.webTitle || '这是一个 Vue2 Vue3 与 SpringBoot 结合的产物～'}</div>
+              <div>网站封面: ${siteInfo.remark || webInfo.backgroundImage || 'https://s1.ax1x.com/2022/11/10/z9VlHs.png'}</div>
+            </blockquote>
+          </div>
+          
+          <!-- 友链列表 -->
+          ${Object.keys(friends).length > 0 ? `
+            <div class="friends-list">
+              <h3>友情链接</h3>
+              ${Object.keys(friends).map(category => `
+                <div class="friend-category">
+                  <h4>${category}</h4>
+                  <ul>
+                    ${friends[category].map(friend => `
+                      <li>
+                        <a href="${friend.url}" target="_blank" rel="noopener" title="${friend.introduction}">
+                          <img src="${friend.cover}" alt="${friend.title}" width="32" height="32" loading="lazy">
+                          <span>${friend.title}</span>
+                          <small>${friend.introduction}</small>
+                        </a>
+                      </li>
+                    `).join('')}
+                  </ul>
+                </div>
+              `).join('')}
+            </div>
+          ` : '<p>暂无友链，欢迎交换友链</p>'}
+        </section>
+        
+        <section class="music-section">
+          <h2>曲乐</h2>
+          <p>一曲肝肠断，天涯何处觅知音</p>
+        </section>
+      </div>
+      
+      <!-- 动态内容占位符 -->
+      <div id="dynamic-content-placeholder" style="display:none;">
+        <script>
+          window.PRERENDER_DATA = {
+            type: 'favorite',
+            lang: '${lang}',
+            timestamp: ${Date.now()}
+          };
+        </script>
       </div>
     `;
 
@@ -1650,7 +1678,7 @@ async function renderFavoritePage(lang = 'zh') {
       pageType: 'favorite' 
     });
   } catch (error) {
-    console.error('Failed to render favorite page:', error);
+    console.error('渲染收藏页失败:', error);
     throw error;
   }
 }
@@ -1695,49 +1723,47 @@ async function renderDefaultSortPage(lang = 'zh') {
 
     // 构建默认分类页面内容
     const defaultSortContent = `
-      <div class="sort-list-prerender">
-        <div class="sort-hero">
-          <h1>文章分类</h1>
-          <p>探索不同主题的文章内容</p>
-        </div>
-        
-        <div class="sort-categories">
-          ${Array.isArray(sortList) && sortList.length > 0 ? `
-            <div class="categories-grid">
-              ${sortList.map(sort => `
-                <div class="category-card">
-                  <a href="/sort?sortId=${sort.id}" title="${sort.sortDescription || sort.sortName}">
-                    <h3>${sort.sortName}</h3>
-                    <p>${sort.sortDescription || '暂无描述'}</p>
-                    <div class="category-stats">
-                      <span class="article-count">${sort.countOfSort || 0} 篇文章</span>
-                      ${sort.labels && sort.labels.length > 0 ? `<span class="label-count">${sort.labels.length} 个标签</span>` : ''}
+      <div class="sort-hero">
+        <h1>文章分类</h1>
+        <p>探索不同主题的文章内容</p>
+      </div>
+      
+      <div class="sort-categories">
+        ${Array.isArray(sortList) && sortList.length > 0 ? `
+          <div class="categories-grid">
+            ${sortList.map(sort => `
+              <div class="category-card">
+                <a href="/sort?sortId=${sort.id}" title="${sort.sortDescription || sort.sortName}">
+                  <h3>${sort.sortName}</h3>
+                  <p>${sort.sortDescription || '暂无描述'}</p>
+                  <div class="category-stats">
+                    <span class="article-count">${sort.countOfSort || 0} 篇文章</span>
+                    ${sort.labels && sort.labels.length > 0 ? `<span class="label-count">${sort.labels.length} 个标签</span>` : ''}
+                  </div>
+                  ${sort.labels && sort.labels.length > 0 ? `
+                    <div class="category-labels">
+                      ${sort.labels.slice(0, 3).map(label => `
+                        <span class="label-tag">${label.labelName}</span>
+                      `).join('')}
+                      ${sort.labels.length > 3 ? '<span class="label-more">...</span>' : ''}
                     </div>
-                    ${sort.labels && sort.labels.length > 0 ? `
-                      <div class="category-labels">
-                        ${sort.labels.slice(0, 3).map(label => `
-                          <span class="label-tag">${label.labelName}</span>
-                        `).join('')}
-                        ${sort.labels.length > 3 ? '<span class="label-more">...</span>' : ''}
-                      </div>
-                    ` : ''}
-                  </a>
-                </div>
-              `).join('')}
-            </div>
-          ` : '<p class="no-categories">暂无分类</p>'}
-        </div>
-        
-        <!-- 动态内容占位符 -->
-        <div id="dynamic-content-placeholder" style="display:none;">
-          <script>
-            window.PRERENDER_DATA = {
-              type: 'sort-list',
-              lang: '${lang}',
-              timestamp: ${Date.now()}
-            };
-          </script>
-        </div>
+                  ` : ''}
+                </a>
+              </div>
+            `).join('')}
+          </div>
+        ` : '<p class="no-categories">暂无分类</p>'}
+      </div>
+      
+      <!-- 动态内容占位符 -->
+      <div id="dynamic-content-placeholder" style="display:none;">
+        <script>
+          window.PRERENDER_DATA = {
+            type: 'sort-list',
+            lang: '${lang}',
+            timestamp: ${Date.now()}
+          };
+        </script>
       </div>
     `;
 
@@ -1749,7 +1775,7 @@ async function renderDefaultSortPage(lang = 'zh') {
       pageType: 'sort-list' 
     });
   } catch (error) {
-    console.error('Failed to render default sort page:', error);
+    console.error('渲染默认分类页失败:', error);
     throw error;
   }
 }
@@ -1766,7 +1792,7 @@ async function renderSortPage(sortId, labelId = null, lang = 'zh') {
     ]);
 
     if (!sortData) {
-      throw new Error(`Sort ${sortId} not found`);
+      throw new Error(`分类${sortId}未找到`);
     }
 
     const siteName = seoConfig.site_title || webInfo.webName || 'Poetize';
@@ -1800,64 +1826,62 @@ async function renderSortPage(sortId, labelId = null, lang = 'zh') {
 
     // 构建分类页面内容
     const sortContent = `
-      <div class="sort-prerender">
-        <div class="sort-hero">
-          <h1>${sortData.sortName}</h1>
-          <p>${sortData.sortDescription || ''}</p>
-        </div>
-        
-        <div class="sort-articles">
-          <h2>文章列表</h2>
-          ${articles.length > 0 ? `
-            <ul class="article-list">
-              ${articles.map(article => `
-                <li class="article-item">
-                  <a href="/article/${article.id}" title="${article.articleTitle}">
-                    ${article.articleCover ? `<img src="${article.articleCover}" alt="${article.articleTitle}" loading="lazy">` : ''}
-                    <div class="article-info">
-                      <h3>${article.articleTitle}</h3>
-                      ${article.summary ? `<p>${article.summary}</p>` : ''}
-                      <div class="article-meta">
-                        <time>${article.createTime}</time>
-                        <span class="view-count">阅读 ${article.viewCount || 0}</span>
-                        ${article.label ? `<span class="label">${article.label.labelName}</span>` : ''}
-                      </div>
+      <div class="sort-hero">
+        <h1>${sortData.sortName}</h1>
+        <p>${sortData.sortDescription || ''}</p>
+      </div>
+      
+      <div class="sort-articles">
+        <h2>文章列表</h2>
+        ${articles.length > 0 ? `
+          <ul class="article-list">
+            ${articles.map(article => `
+              <li class="article-item">
+                <a href="/article/${article.id}" title="${article.articleTitle}">
+                  ${article.articleCover ? `<img src="${article.articleCover}" alt="${article.articleTitle}" loading="lazy">` : ''}
+                  <div class="article-info">
+                    <h3>${article.articleTitle}</h3>
+                    ${article.summary ? `<p>${article.summary}</p>` : ''}
+                    <div class="article-meta">
+                      <time>${article.createTime}</time>
+                      <span class="view-count">阅读 ${article.viewCount || 0}</span>
+                      ${article.label ? `<span class="label">${article.label.labelName}</span>` : ''}
                     </div>
-                  </a>
-                </li>
-              `).join('')}
-            </ul>
-          ` : '<p>暂无文章</p>'}
+                  </div>
+                </a>
+              </li>
+            `).join('')}
+          </ul>
+        ` : '<p>暂无文章</p>'}
+      </div>
+      
+      <!-- 标签筛选 -->
+      ${sortData.labels && sortData.labels.length > 0 ? `
+        <div class="sort-labels">
+          <h3>标签筛选</h3>
+          <ul>
+            ${sortData.labels.map(label => `
+              <li>
+                <a href="/sort?sortId=${sortId}&labelId=${label.id}" title="${label.labelDescription || label.labelName}">
+                  ${label.labelName} (${label.countOfLabel || 0})
+                </a>
+              </li>
+            `).join('')}
+          </ul>
         </div>
-        
-        <!-- 标签筛选 -->
-        ${sortData.labels && sortData.labels.length > 0 ? `
-          <div class="sort-labels">
-            <h3>标签筛选</h3>
-            <ul>
-              ${sortData.labels.map(label => `
-                <li>
-                  <a href="/sort?sortId=${sortId}&labelId=${label.id}" title="${label.labelDescription || label.labelName}">
-                    ${label.labelName} (${label.countOfLabel || 0})
-                  </a>
-                </li>
-              `).join('')}
-            </ul>
-          </div>
-        ` : ''}
-        
-        <!-- 动态内容占位符 -->
-        <div id="dynamic-content-placeholder" style="display:none;">
-          <script>
-            window.PRERENDER_DATA = {
-              type: 'sort',
-              sortId: ${sortId},
-              labelId: ${labelId || 'null'},
-              lang: '${lang}',
-              timestamp: ${Date.now()}
-            };
-          </script>
-        </div>
+      ` : ''}
+      
+      <!-- 动态内容占位符 -->
+      <div id="dynamic-content-placeholder" style="display:none;">
+        <script>
+          window.PRERENDER_DATA = {
+            type: 'sort',
+            sortId: ${sortId},
+            labelId: ${labelId || 'null'},
+            lang: '${lang}',
+            timestamp: ${Date.now()}
+          };
+        </script>
       </div>
     `;
 
@@ -1869,7 +1893,7 @@ async function renderSortPage(sortId, labelId = null, lang = 'zh') {
       pageType: 'sort' 
     });
   } catch (error) {
-    console.error(`Failed to render sort page ${sortId}:`, error);
+    console.error(`渲染分类页${sortId}失败:`, error);
     throw error;
   }
 }
@@ -1877,7 +1901,7 @@ async function renderSortPage(sortId, labelId = null, lang = 'zh') {
 // ===== 文章渲染函数 =====
 async function renderIds(ids = [], options = {}) {
   if (!Array.isArray(ids) || ids.length === 0) {
-    throw new Error('ids must be a non-empty array');
+    throw new Error('ids必须是非空数组');
   }
 
   const taskId = generateTaskId();
@@ -1894,11 +1918,11 @@ async function renderIds(ids = [], options = {}) {
   // 验证传入的语言是否支持
   const validLanguages = languagesToRender.filter(lang => ALL_SUPPORTED_LANGUAGES.includes(lang));
   if (validLanguages.length === 0) {
-    throw new Error(`No supported languages found in: ${languagesToRender.join(', ')}. Supported: ${ALL_SUPPORTED_LANGUAGES.join(', ')}`);
+    throw new Error(`在以下语言中未找到支持的语言: ${languagesToRender.join(', ')}。支持的语言: ${ALL_SUPPORTED_LANGUAGES.join(', ')}`);
   }
 
   try {
-    logger.info('Starting article rendering', {
+    logger.info('开始文章渲染', {
       taskId,
       articleCount: ids.length,
       requestedLanguages: languagesToRender,
@@ -1906,7 +1930,7 @@ async function renderIds(ids = [], options = {}) {
     });
 
     const assets = await getFrontEndAssets(options.frontendHost || 'nginx');
-    logger.debug('Frontend assets loaded', { taskId, assets });
+    logger.debug('前端资源已加载', { taskId, assets });
 
     // 获取SEO配置和网站信息，所有文章共用
     const [seoConfig, webInfo] = await Promise.all([
@@ -1915,7 +1939,7 @@ async function renderIds(ids = [], options = {}) {
     ]);
     
     // 调试：记录获取到的webInfo数据
-    logger.debug('WebInfo data for articles', { 
+    logger.debug('文章的网站信息数据', { 
       taskId, 
       webInfoKeys: Object.keys(webInfo),
       webName: webInfo.webName,
@@ -1926,7 +1950,7 @@ async function renderIds(ids = [], options = {}) {
     // 调试：检查CSS文件是否存在
     const distPath = '/app/dist';
     const staticCssPath = path.join(distPath, 'static', 'css');
-    logger.info('Checking CSS files availability', {
+    logger.info('检查CSS文件可用性', {
       taskId,
       distPathExists: fs.existsSync(distPath),
       staticCssPathExists: fs.existsSync(staticCssPath),
@@ -1941,11 +1965,11 @@ async function renderIds(ids = [], options = {}) {
     for (const id of ids) {
       for (const lang of validLanguages) {
         try {
-          logger.debug('Rendering article', { taskId, articleId: id, lang });
+          logger.debug('渲染文章', { taskId, articleId: id, lang });
 
           const article = await fetchArticle(id);
           if (!article) { 
-            logger.warn('Article not found, skipping', { taskId, articleId: id });
+            logger.warn('文章未找到，跳过', { taskId, articleId: id });
             continue; 
           }
 
@@ -1957,7 +1981,7 @@ async function renderIds(ids = [], options = {}) {
           if (t) {
             if (t.content) contentHtml = t.content;
             if (t.title) articleTitle = t.title;
-            logger.debug('Translation applied', { taskId, articleId: id, lang });
+            logger.debug('翻译已应用', { taskId, articleId: id, lang });
           }
 
           // 对内容进行 HTML 实体解码，避免 &gt; 等导致 markdown 失效
@@ -1965,7 +1989,7 @@ async function renderIds(ids = [], options = {}) {
 
           // markdown -> html
           contentHtml = md.render(contentHtml);
-          logger.debug('Markdown content rendered to HTML', { taskId, articleId: id, lang });
+          logger.debug('Markdown内容已渲染为HTML', { taskId, articleId: id, lang });
 
           // 获取文章特定的meta信息
           const articleMeta = await fetchMeta(id, lang);
@@ -1990,7 +2014,7 @@ async function renderIds(ids = [], options = {}) {
           };
 
           // 调试：检查meta对象的格式
-          logger.info('Meta object before buildHtml', { 
+          logger.info('buildHtml前的元数据对象', { 
             taskId, 
             articleId: id, 
             lang, 
@@ -2011,7 +2035,7 @@ async function renderIds(ids = [], options = {}) {
           fs.writeFileSync(filePath, html, 'utf8');
           
           successCount++;
-          logger.debug('Article rendered successfully', { 
+          logger.debug('文章渲染成功', { 
             taskId, 
             articleId: id, 
             lang, 
@@ -2022,7 +2046,7 @@ async function renderIds(ids = [], options = {}) {
         } catch (err) {
           failCount++;
           errors.push({ articleId: id, lang, error: err.message });
-          logger.error('Failed to render article', { 
+          logger.error('文章渲染失败', { 
             taskId, 
             articleId: id, 
             lang, 
@@ -2034,7 +2058,7 @@ async function renderIds(ids = [], options = {}) {
     }
 
     if (errors.length > 0 && successCount === 0) {
-      throw new Error(`All renders failed. Errors: ${JSON.stringify(errors)}`);
+      throw new Error(`所有渲染都失败了。错误: ${JSON.stringify(errors)}`);
     }
 
     monitor.recordRenderSuccess(taskId, {
@@ -2044,7 +2068,7 @@ async function renderIds(ids = [], options = {}) {
       languages: validLanguages.length
     });
 
-    logger.info('Article rendering completed', {
+    logger.info('文章渲染已完成', {
       taskId,
       totalArticles: ids.length,
       renderedLanguages: validLanguages,
@@ -2077,7 +2101,7 @@ async function renderSingleSortPage(sortId, parentTaskId = null) {
     const filePath = path.join(outputPath, filename);
     fs.writeFileSync(filePath, html, 'utf8');
     
-    logger.debug('Sort page rendered', { 
+    logger.debug('分类页面已渲染', { 
       parentTaskId, 
       sortId, 
       lang, 
@@ -2096,7 +2120,7 @@ async function renderPages(type, params = {}) {
   const langs = ['zh'];
   
   try {
-    logger.info('Starting page rendering', { taskId, type, params, langs });
+    logger.info('开始页面渲染', { taskId, type, params, langs });
 
     let successCount = 0;
     let failCount = 0;
@@ -2104,7 +2128,7 @@ async function renderPages(type, params = {}) {
 
     for (const lang of langs) {
       try {
-        logger.debug('Rendering page', { taskId, type, lang, params });
+        logger.debug('渲染页面', { taskId, type, lang, params });
 
         let html;
         let outputPath;
@@ -2135,7 +2159,7 @@ async function renderPages(type, params = {}) {
             break;
             
           default:
-            throw new Error(`Unknown page type: ${type}`);
+            throw new Error(`未知页面类型: ${type}`);
         }
 
         fs.mkdirSync(outputPath, { recursive: true });
@@ -2146,7 +2170,7 @@ async function renderPages(type, params = {}) {
         successCount++;
         results.push({ lang, path: `${outputPath}/${filename}`, size: `${(html.length / 1024).toFixed(1)}KB` });
         
-        logger.debug('Page rendered successfully', { 
+        logger.debug('页面渲染成功', { 
           taskId, 
           type, 
           lang, 
@@ -2156,7 +2180,7 @@ async function renderPages(type, params = {}) {
 
       } catch (err) {
         failCount++;
-        logger.error('Failed to render page', { 
+        logger.error('页面渲染失败', { 
           taskId, 
           type, 
           lang, 
@@ -2168,7 +2192,7 @@ async function renderPages(type, params = {}) {
     }
 
     if (failCount > 0 && successCount === 0) {
-      throw new Error(`All page renders failed for type: ${type}`);
+      throw new Error(`类型${type}的所有页面渲染都失败了`);
     }
 
     monitor.recordRenderSuccess(taskId, { 
@@ -2240,21 +2264,21 @@ app.post('/render', async (req, res) => {
   const requestId = req.requestId;
   const { ids, languages } = req.body;
 
-  logger.info('Render request received', { requestId, ids, languages });
+  logger.info('收到渲染请求', { requestId, ids, languages });
 
   if (!Array.isArray(ids) || ids.length === 0) {
-    logger.warn('Invalid render request - ids array required', { requestId, body: req.body });
+    logger.warn('无效的渲染请求 - 需要ids数组', { requestId, body: req.body });
     return res.status(400).json({
-      message: 'ids array required',
+      message: '需要ids数组',
       requestId,
       timestamp: new Date().toISOString()
     });
   }
 
   if (ids.length > 50) {
-    logger.warn('Too many articles in single request', { requestId, count: ids.length });
+    logger.warn('单次请求文章数量过多', { requestId, count: ids.length });
     return res.status(400).json({
-      message: 'Too many articles. Maximum 50 per request.',
+      message: '文章数量过多。每次请求最多50篇。',
       requestId,
       received: ids.length,
       maximum: 50
@@ -2313,12 +2337,12 @@ app.post('/render/article', async (req, res) => {
   const requestId = req.requestId;
   const { id, languages } = req.body;
 
-  logger.info('Article render request received', { requestId, articleId: id, languages });
+  logger.info('收到文章渲染请求', { requestId, articleId: id, languages });
 
   if (!id) {
-    logger.warn('Invalid article render request - id required', { requestId, body: req.body });
+    logger.warn('无效的文章渲染请求 - 需要id参数', { requestId, body: req.body });
     return res.status(400).json({
-      message: 'Article id is required',
+      message: '需要文章ID',
       requestId,
       timestamp: new Date().toISOString()
     });
@@ -2329,7 +2353,7 @@ app.post('/render/article', async (req, res) => {
   if (!Array.isArray(languagesToRender) || languagesToRender.length === 0) {
     // 如果没有指定语言，默认渲染中文
     languagesToRender = ['zh'];
-    logger.warn('No languages specified for article, defaulting to Chinese', {
+    logger.warn('文章未指定语言，默认使用中文', {
       requestId,
       articleId: id
     });
@@ -2340,7 +2364,7 @@ app.post('/render/article', async (req, res) => {
     await renderIds([id], { languages: languagesToRender });
     const duration = Date.now() - startTime;
 
-    logger.info('Article render completed successfully', {
+    logger.info('文章渲染成功完成', {
       requestId,
       articleId: id,
       languages: languagesToRender,
@@ -2349,7 +2373,7 @@ app.post('/render/article', async (req, res) => {
 
     res.json({
       success: true,
-      message: `Article ${id} rendered successfully in languages: ${languagesToRender.join(', ')}`,
+      message: `文章${id}在以下语言中渲染成功: ${languagesToRender.join(', ')}`,
       articleId: id,
       renderedLanguages: languagesToRender,
       requestId,
@@ -2357,7 +2381,7 @@ app.post('/render/article', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (e) {
-    logger.error('Article render failed', {
+    logger.error('文章渲染失败', {
       requestId,
       articleId: id,
       languages: languagesToRender,
@@ -2379,12 +2403,12 @@ app.post('/render/pages', async (req, res) => {
   const requestId = req.requestId;
   const { type, params = {} } = req.body;
   
-  logger.info('Page render request received', { requestId, type, params });
+  logger.info('收到页面渲染请求', { requestId, type, params });
   
   if (!type) {
-    logger.warn('Invalid page render request - type required', { requestId, body: req.body });
+    logger.warn('无效的页面渲染请求 - 需要type参数', { requestId, body: req.body });
     return res.status(400).json({ 
-      message: 'type is required',
+      message: '需要type参数',
       requestId,
       supportedTypes: ['home', 'favorite', 'sort'],
       timestamp: new Date().toISOString()
@@ -2392,9 +2416,9 @@ app.post('/render/pages', async (req, res) => {
   }
 
   if (!['home', 'favorite', 'sort', 'allSorts'].includes(type)) {
-    logger.warn('Invalid page type', { requestId, type });
+    logger.warn('无效的页面类型', { requestId, type });
     return res.status(400).json({ 
-      message: 'Invalid page type',
+      message: '无效的页面类型',
       requestId,
       received: type,
       supported: ['home', 'favorite', 'sort', 'allSorts'],
@@ -2410,12 +2434,12 @@ app.post('/render/pages', async (req, res) => {
       const { sortIds } = params;
       if (!Array.isArray(sortIds) || sortIds.length === 0) {
         return res.status(400).json({ 
-          message: 'sortIds array required for allSorts type',
+          message: 'allSorts类型需要sortIds数组',
           requestId 
         });
       }
       
-      logger.info('Rendering all sort pages', { requestId, sortIds });
+      logger.info('渲染所有分类页面', { requestId, sortIds });
       
       // 创建统一的批量任务而不是多个独立任务
       const batchTaskId = generateTaskId();
@@ -2432,11 +2456,11 @@ app.post('/render/pages', async (req, res) => {
              await renderSingleSortPage(sortId, batchTaskId);
              successCount++;
              results.push({ sortId, status: 'success' });
-             logger.info('Sort page rendered successfully', { batchTaskId, sortId });
+             logger.info('分类页面渲染成功', { batchTaskId, sortId });
            } catch (error) {
              failCount++;
              results.push({ sortId, status: 'failed', error: error.message });
-             logger.error('Sort page render failed', { batchTaskId, sortId, error: error.message });
+             logger.error('分类页面渲染失败', { batchTaskId, sortId, error: error.message });
            }
          }
         
@@ -2459,7 +2483,7 @@ app.post('/render/pages', async (req, res) => {
     
     const duration = Date.now() - startTime;
     
-    logger.info('Page render request completed successfully', { 
+    logger.info('页面渲染请求成功完成', { 
       requestId, 
       type, 
       params, 
@@ -2475,7 +2499,7 @@ app.post('/render/pages', async (req, res) => {
       timestamp: new Date().toISOString()
     });
   } catch (e) {
-    logger.error('Page render request failed', { 
+    logger.error('页面渲染请求失败', { 
       requestId, 
       type, 
       params,
@@ -2560,7 +2584,7 @@ app.get('/health', (req, res) => {
     res.status(statusCode).json(health);
     
   } catch (error) {
-    logger.error('Health check failed', { requestId, error: error.message });
+    logger.error('健康检查失败', { requestId, error: error.message });
     res.status(500).json({
       status: 'error',
       requestId,
@@ -2652,7 +2676,7 @@ app.get('/logs/download/:filename', (req, res) => {
   const requestId = req.requestId;
   const filename = req.params.filename;
   
-  logger.info('Log file download request', { requestId, filename });
+  logger.info('日志文件下载请求', { requestId, filename });
   
   // 安全检查
   if (!filename.match(/^prerender-\d{4}-\d{2}-\d{2}\.log$/)) {
@@ -2674,9 +2698,9 @@ app.get('/logs/download/:filename', (req, res) => {
   
   res.download(filePath, filename, (err) => {
     if (err) {
-      logger.error('Log file download failed', { requestId, filename, error: err.message });
+      logger.error('日志文件下载失败', { requestId, filename, error: err.message });
     } else {
-      logger.info('Log file downloaded successfully', { requestId, filename });
+      logger.info('日志文件下载成功', { requestId, filename });
     }
   });
 });
@@ -2755,7 +2779,7 @@ app.get('/errors', (req, res) => {
   const requestId = req.requestId;
   const limit = parseInt(req.query.limit) || 10;
   
-  logger.debug('Error log request', { requestId, limit });
+  logger.debug('错误日志请求', { requestId, limit });
   
   const errors = monitor.getRecentErrors(limit);
   res.json({
@@ -2770,7 +2794,7 @@ app.get('/errors', (req, res) => {
 app.get('/logs/usage', (req, res) => {
   const requestId = req.requestId;
   
-  logger.debug('Log disk usage request', { requestId });
+  logger.debug('日志磁盘使用情况请求', { requestId });
   
   const usage = logger.getLogDiskUsage();
   res.json({
@@ -2785,7 +2809,7 @@ app.post('/logs/cleanup', (req, res) => {
   const requestId = req.requestId;
   const { retentionDays } = req.body || {};
   
-  logger.info('Manual log cleanup request', { requestId, retentionDays });
+  logger.info('手动日志清理请求', { requestId, retentionDays });
   
   try {
     const result = logger.manualCleanup(retentionDays);
@@ -2795,7 +2819,7 @@ app.post('/logs/cleanup', (req, res) => {
       ...result
     });
   } catch (error) {
-    logger.error('Manual log cleanup failed', { requestId, error: error.message });
+    logger.error('手动日志清理失败', { requestId, error: error.message });
     res.status(500).json({
       success: false,
       error: error.message,
@@ -2809,24 +2833,24 @@ app.post('/logs/cleanup', (req, res) => {
 app.post('/cache/seo/clear', (req, res) => {
   const requestId = req.requestId;
 
-  logger.info('SEO config cache clear request', { requestId });
+  logger.info('SEO配置缓存清理请求', { requestId });
 
   try {
     // 清理SEO配置缓存
     seoConfigCache.data = null;
     seoConfigCache.lastFetch = 0;
 
-    logger.info('SEO config cache cleared successfully', { requestId });
+    logger.info('SEO配置缓存清理成功', { requestId });
 
     res.json({
       success: true,
-      message: 'SEO config cache cleared successfully',
+      message: 'SEO配置缓存清理成功',
       requestId,
       timestamp: new Date().toISOString()
     });
 
   } catch (error) {
-    logger.error('Failed to clear SEO config cache', { requestId, error: error.message });
+    logger.error('清理SEO配置缓存失败', { requestId, error: error.message });
     res.status(500).json({
       success: false,
       error: error.message,
@@ -2840,7 +2864,7 @@ app.post('/cache/seo/clear', (req, res) => {
 app.get('/config/source-language', async (req, res) => {
   const requestId = req.requestId;
 
-  logger.info('Source language config request', { requestId });
+  logger.info('源语言配置请求', { requestId });
 
   try {
     const sourceLanguage = await getSourceLanguage();
@@ -2855,7 +2879,7 @@ app.get('/config/source-language', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error('Failed to get source language config', { requestId, error: error.message });
+    logger.error('获取源语言配置失败', { requestId, error: error.message });
     res.status(500).json({
       success: false,
       error: error.message,
@@ -2870,7 +2894,7 @@ app.post('/cleanup', (req, res) => {
   const requestId = req.requestId;
   const options = req.body || {};
   
-  logger.info('Cleanup request received', { requestId, options });
+  logger.info('收到清理请求', { requestId, options });
   
   try {
     const results = {};
@@ -2881,7 +2905,7 @@ app.post('/cleanup', (req, res) => {
       if (fs.existsSync(prerenderDir)) {
         const deletedFiles = clearDirectory(prerenderDir);
         results.deletedFiles = deletedFiles;
-        logger.info('Prerender files cleared', { requestId, deletedFiles });
+        logger.info('预渲染文件已清理', { requestId, deletedFiles });
       }
     }
     
@@ -2890,7 +2914,7 @@ app.post('/cleanup', (req, res) => {
       monitor.clearStats();
       logger.memoryLogs = [];
       results.memoryCleared = true;
-      logger.info('Memory cache cleared', { requestId });
+      logger.info('内存缓存已清理', { requestId });
     }
     
     // 清理日志文件（可选，默认不清理）
@@ -2901,11 +2925,11 @@ app.post('/cleanup', (req, res) => {
         try {
           fs.unlinkSync(file.path);
         } catch (e) {
-          logger.warn('Failed to delete log file', { requestId, file: file.name, error: e.message });
+          logger.warn('删除日志文件失败', { requestId, file: file.name, error: e.message });
         }
       });
       results.deletedLogs = deletedLogs;
-      logger.info('Log files cleared', { requestId, deletedLogs });
+      logger.info('日志文件已清理', { requestId, deletedLogs });
     }
     
     // 手动触发日志清理（使用自定义保留天数）
@@ -2913,7 +2937,7 @@ app.post('/cleanup', (req, res) => {
       const retentionDays = options.logRetentionDays || null;
       const cleanupResult = logger.manualCleanup(retentionDays);
       results.logCleanup = cleanupResult;
-      logger.info('Manual log cleanup triggered', { requestId, retentionDays, result: cleanupResult });
+      logger.info('手动日志清理已触发', { requestId, retentionDays, result: cleanupResult });
     }
     
     res.json({
@@ -2924,7 +2948,7 @@ app.post('/cleanup', (req, res) => {
     });
     
   } catch (error) {
-    logger.error('Cleanup failed', { requestId, error: error.message, stack: error.stack });
+    logger.error('清理失败', { requestId, error: error.message, stack: error.stack });
     res.status(500).json({
       success: false,
       error: error.message,
@@ -2965,7 +2989,7 @@ function clearDirectory(dirPath) {
     deleteRecursive(dirPath);
     return deletedCount;
   } catch (error) {
-    logger.error('Failed to clear directory', { dirPath, error: error.message });
+    logger.error('清理目录失败', { dirPath, error: error.message });
     return deletedCount;
   }
 }
@@ -2976,12 +3000,12 @@ function initializeOutputDirectory() {
   try {
     if (!fs.existsSync(outputPath)) {
       fs.mkdirSync(outputPath, { recursive: true });
-      logger.info('Output directory created', { path: outputPath });
+      logger.info('输出目录已创建', { path: outputPath });
     } else {
-      logger.info('Output directory already exists', { path: outputPath });
+      logger.info('输出目录已存在', { path: outputPath });
     }
   } catch (error) {
-    logger.error('Failed to create output directory', { path: outputPath, error: error.message });
+    logger.error('创建输出目录失败', { path: outputPath, error: error.message });
   }
 }
 
@@ -2990,7 +3014,7 @@ app.listen(PORT, () => {
   // Initialize output directory on startup
   initializeOutputDirectory();
   
-  logger.info('Prerender worker started', {
+  logger.info('Prerender worker 启动', {
     port: PORT,
     nodeVersion: process.version,
     timestamp: new Date().toISOString(),
@@ -3001,7 +3025,7 @@ app.listen(PORT, () => {
       PRERENDER_OUTPUT: process.env.PRERENDER_OUTPUT || 'default'
     }
   });
-  console.log(`🚀 Prerender worker listening on port ${PORT}`);
+  console.log(`🚀 Prerender worker 监听于端口 ${PORT}`);
 });
 
 // 添加一个通用函数，用于将SEO配置中的图标字段添加到meta对象中

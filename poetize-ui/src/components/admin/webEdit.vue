@@ -816,7 +816,7 @@
         </div>
 
         <div class="form-tip" style="margin-top: 15px; font-size: 13px; color: #909399;">
-          * 回调地址为 http://你的域名/python/callback/{平台标识}
+          * 回调地址为 http://你的域名/callback/{平台标识}
         </div>
 
         <div style="margin-top: 20px;margin-bottom: 22px; text-align: center;">
@@ -3374,7 +3374,7 @@ X-API-KEY: {{apiConfig.apiKey}}
       // AI聊天配置相关方法
       async loadAiConfigs() {
         try {
-          const response = await this.$http.get(this.$constant.pythonBaseURL + "/python/ai/chat/getConfig", {}, true);
+          const response = await this.$http.get(this.$constant.pythonBaseURL + "/ai/chat/getConfig", {}, true);
           if (response.flag && response.data) {
             const config = response.data;
             
@@ -3463,7 +3463,7 @@ X-API-KEY: {{apiConfig.apiKey}}
             saveData.api_key = this.aiConfigs.modelConfig.apiKey;
           }
 
-          const response = await this.$http.post(this.$constant.pythonBaseURL + '/python/ai/chat/saveConfig', saveData, true);
+          const response = await this.$http.post(this.$constant.pythonBaseURL + '/ai/chat/saveConfig', saveData, true);
           
           if (response.flag) {
             this.$message.success('AI聊天配置保存成功');

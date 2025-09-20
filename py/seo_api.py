@@ -620,6 +620,84 @@ async def generate_article_meta_tags(article_id, lang=None):
 
         logger.info(f"成功获取文章信息，标题: {article_data.get('articleTitle', '无标题')}")
 
+        # 获取默认源语言
+        default_source_lang = 'zh'  # 默认值
+        try:
+            client = await http_client_pool.get_client()
+            headers = get_auth_headers()
+            headers.update({
+                'X-Internal-Service': 'poetize-python',
+                'User-Agent': 'poetize-python/1.0.0'
+            })
+            
+            default_lang_response = await client.get(
+                f"{PYTHON_BACKEND_URL}/api/translation/default-lang",
+                headers=headers,
+                timeout=5
+            )
+            
+            if default_lang_response.status_code == 200:
+                default_lang_data = default_lang_response.json()
+                if default_lang_data.get('success') and default_lang_data.get('data'):
+                    default_source_lang = default_lang_data['data'].get('source_lang', 'zh')
+                    logger.info(f"获取到默认源语言: {default_source_lang}")
+            
+        except Exception as e:
+            logger.warning(f"获取默认源语言失败: {str(e)}，使用默认值 zh")
+
+        # 获取文章标题和内容（如果指定了语言且不是源语言，则获取翻译版本）
+        article_title = article_data.get('articleTitle', '')
+        article_content = article_data.get('articleContent', '')
+        
+        # 如果指定了语言参数且不是源语言，尝试获取翻译版本
+        if lang and lang != default_source_lang:
+            try:
+                logger.info(f"尝试获取文章翻译版本，文章ID: {article_id}, 语言: {lang}")
+                
+                # 调用翻译接口获取翻译内容
+                client = await http_client_pool.get_client()
+                headers = get_auth_headers()
+                headers.update({
+                    'X-Internal-Service': 'poetize-python',
+                    'User-Agent': 'poetize-python/1.0.0'
+                })
+                
+                translation_response = await client.get(
+                    f"{JAVA_BACKEND_URL}/article/getTranslation?id={article_id}&language={lang}",
+                    headers=headers,
+                    timeout=10
+                )
+                
+                logger.info(f"翻译接口响应状态码: {translation_response.status_code}")
+                
+                if translation_response.status_code == 200:
+                    translation_data = translation_response.json()
+                    if translation_data.get('success') and translation_data.get('data'):
+                        translation_info = translation_data['data']
+                        if translation_info.get('status') == 'success':
+                            # 使用翻译后的标题和内容
+                            translated_title = translation_info.get('title')
+                            translated_content = translation_info.get('content')
+                            
+                            if translated_title:
+                                article_title = translated_title
+                                logger.info(f"使用翻译后的标题: {article_title}")
+                            
+                            if translated_content:
+                                article_content = translated_content
+                                logger.info(f"使用翻译后的内容，长度: {len(article_content)}")
+                        else:
+                            logger.warning(f"翻译状态不是success: {translation_info.get('status')}")
+                    else:
+                        logger.warning(f"翻译接口返回数据格式异常: {translation_data}")
+                else:
+                    logger.warning(f"获取翻译失败，状态码: {translation_response.status_code}")
+                    
+            except Exception as e:
+                logger.error(f"获取文章翻译时发生错误: {str(e)}")
+                # 翻译获取失败时继续使用原文
+                logger.info("翻译获取失败，继续使用原文")
+
         # 优先使用智能摘要，如果没有则从内容生成描述
         article_summary = article_data.get('summary', '')
         if article_summary:
@@ -627,12 +705,12 @@ async def generate_article_meta_tags(article_id, lang=None):
             description = article_summary
         else:
             logger.info(f"文章没有智能摘要，从内容生成描述，文章ID: {article_id}")
-            description = get_article_description(article_data.get('articleContent', ''))
+            description = get_article_description(article_content)
 
         # 基本元标签
         meta_tags = {
             # OpenGraph标签
-            "og:title": article_data.get('articleTitle', ''),
+            "og:title": article_title,
             "og:description": description,
             "og:type": seo_config.get('og_type', 'article'),
             "og:url": f"{seo_config.get('site_address', FRONTEND_URL)}/{seo_config.get('article_url_format', 'article/{id}')}".replace('{id}', str(article_id)),
@@ -641,7 +719,7 @@ async def generate_article_meta_tags(article_id, lang=None):
             
             # Twitter标签
             "twitter:card": seo_config.get('twitter_card', 'summary_large_image'),
-            "twitter:title": article_data.get('articleTitle', ''),
+            "twitter:title": article_title,
             "twitter:description": description,
             "twitter:image": article_data.get('articleCover', seo_config.get('og_image', '')),
             "twitter:site": seo_config.get('twitter_site', ''),
@@ -656,7 +734,7 @@ async def generate_article_meta_tags(article_id, lang=None):
         }
         
         # 基础元标签 (用于HTML head)
-        title = article_data.get('articleTitle', '')
+        title = article_title
         keywords = await get_article_keywords(article_data)
         
         meta_tags.update({
@@ -666,34 +744,66 @@ async def generate_article_meta_tags(article_id, lang=None):
             "author": article_data.get('username', seo_config.get('default_author', '')),
         })
 
-        # 添加hreflang标签 - 支持更多语言
+        # 添加hreflang标签 - 根据实际翻译情况动态生成
         article_url = f"{seo_config.get('site_address', FRONTEND_URL)}/{seo_config.get('article_url_format', 'article/{id}')}".replace('{id}', str(article_id))
 
-        # 支持的语言列表
-        supported_languages = ['zh', 'en', 'ja', 'ko', 'fr', 'de', 'es', 'ru']
+        # 获取文章实际可用的语言
+        available_languages = [default_source_lang]  # 源语言总是可用的
 
-        # 为每种支持的语言添加hreflang标签
-        for supported_lang in supported_languages:
-            if supported_lang == 'zh':
-                # 中文是默认语言，不需要lang参数
-                meta_tags[f"hreflang_{supported_lang}"] = f'<link rel="alternate" hreflang="{supported_lang}" href="{article_url}" />'
+        try:
+            logger.info(f"获取文章 {article_id} 的可用语言列表")
+            
+            # 调用获取可用语言的接口
+            available_lang_response = await client.get(
+                f"{JAVA_BACKEND_URL}/api/article/getAvailableLanguages?id={article_id}",
+                headers=headers,
+                timeout=10
+            )
+            
+            if available_lang_response.status_code == 200:
+                available_lang_data = available_lang_response.json()
+                if available_lang_data.get('success') and available_lang_data.get('data'):
+                    api_available_languages = available_lang_data['data']
+                    if isinstance(api_available_languages, list):
+                        # 确保源语言在列表中
+                        if default_source_lang not in api_available_languages:
+                            api_available_languages.append(default_source_lang)
+                        available_languages = api_available_languages
+                        logger.info(f"从API获取到可用语言: {available_languages}")
+                    else:
+                        logger.warning(f"API返回的语言列表格式异常: {api_available_languages}")
+                else:
+                    logger.warning(f"获取可用语言API返回数据异常: {available_lang_data}")
+            else:
+                logger.warning(f"获取可用语言失败，状态码: {available_lang_response.status_code}")
+                        
+        except Exception as e:
+            logger.warning(f"获取可用语言时发生错误: {str(e)}，将只使用源语言")
+
+        logger.info(f"文章 {article_id} 最终可用语言: {available_languages}")
+
+        # 只为实际可用的语言生成hreflang标签
+        for available_lang in available_languages:
+            if available_lang == default_source_lang:
+                # 源语言不需要lang参数
+                meta_tags[f"hreflang_{available_lang}"] = f'<link rel="alternate" hreflang="{available_lang}" href="{article_url}" />'
             else:
                 # 其他语言需要lang参数
-                meta_tags[f"hreflang_{supported_lang}"] = f'<link rel="alternate" hreflang="{supported_lang}" href="{article_url}?lang={supported_lang}" />'
+                meta_tags[f"hreflang_{available_lang}"] = f'<link rel="alternate" hreflang="{available_lang}" href="{article_url}?lang={available_lang}" />'
 
-        # 添加x-default hreflang（指向中文版本）
+        # 添加x-default hreflang（指向源语言版本）
         meta_tags["hreflang_x_default"] = f'<link rel="alternate" hreflang="x-default" href="{article_url}" />'
 
         # 根据语言参数设置canonical标签
         if lang and lang in supported_languages:
-            if lang == 'zh':
-                # 中文版本的canonical不包含lang参数
+            if lang == default_source_lang:
+                # 源语言版本的canonical不包含lang参数
                 meta_tags["canonical"] = article_url
             else:
                 # 其他语言版本的canonical包含lang参数
                 meta_tags["canonical"] = f"{article_url}?lang={lang}"
         else:
-            # 默认情况下指向中文版本
+            # 默认情况下指向源语言版本
             meta_tags["canonical"] = article_url
 
         # 添加Pinterest标签
@@ -1568,7 +1678,7 @@ def register_seo_api(app: FastAPI):
                 "data": None
             })
 
-    @app.get('/python/seo/getSeoConfig')
+    @app.get('/seo/getSeoConfig')
     async def get_seo_config_for_nginx(request: Request):
         """供Nginx Lua脚本使用的SEO配置获取接口，不需要权限验证"""
         try:
@@ -1752,7 +1862,7 @@ def register_seo_api(app: FastAPI):
                 "error": "生成PWA manifest失败"
             }, status_code=500)
 
-    @app.post('/python/seo/processImage')
+    @app.post('/seo/processImage')
     async def process_image_api(request: Request, _: bool = Depends(admin_required)):
         """智能图片处理API"""
         try:
@@ -1818,7 +1928,7 @@ def register_seo_api(app: FastAPI):
                 "data": None
             }, status_code=500)
 
-    @app.post('/python/seo/batchProcessIcons')
+    @app.post('/seo/batchProcessIcons')
     async def batch_process_icons_api(request: Request, _: bool = Depends(admin_required)):
         """批量图标处理API"""
         try:
@@ -1947,7 +2057,7 @@ def register_seo_api(app: FastAPI):
                 "data": None
             }, status_code=500)
 
-    @app.post('/python/seo/getImageInfo')
+    @app.post('/seo/getImageInfo')
     async def get_image_info_api(request: Request, _: bool = Depends(admin_required)):
         """获取图片信息API"""
         try:
@@ -2033,7 +2143,7 @@ def register_seo_api(app: FastAPI):
                 "data": None
             }, status_code=500)
 
-    @app.post('/python/seo/updateSeoConfig')
+    @app.post('/seo/updateSeoConfig')
     async def update_seo_config_api(request: Request, _: bool = Depends(admin_required)):
         try:
             config = await request.json()
@@ -2189,7 +2299,7 @@ def register_seo_api(app: FastAPI):
             return JSONResponse({"code": 500, "message": f"更新SEO配置出错: {str(e)}", "data": None})
     
     # 专门处理SEO开关状态的API
-    @app.post('/python/seo/updateEnableStatus')
+    @app.post('/seo/updateEnableStatus')
     async def update_enable_status_api(request: Request, _: bool = Depends(admin_required)):
         try:
             data = await request.json()
@@ -2276,7 +2386,7 @@ def register_seo_api(app: FastAPI):
             return JSONResponse({"code": 500, "message": f"更新SEO开关状态出错: {str(e)}", "data": None})
     
     # 文章META标签API
-    @app.get('/python/seo/getArticleMeta')
+    @app.get('/seo/getArticleMeta')
     async def get_article_meta(request: Request):
         """
         获取文章元数据，用于SEO优化 - 优化版本
@@ -2334,7 +2444,7 @@ def register_seo_api(app: FastAPI):
             return JSONResponse({"status": "error", "message": f"获取文章元数据时发生错误: {str(e)}"})
 
     # SEO缓存清理API（仅供手动调用或调试使用）
-    @app.post('/python/seo/clearCache')
+    @app.post('/seo/clearCache')
     async def clear_seo_cache():
         """手动清空所有SEO缓存"""
         try:
@@ -2352,7 +2462,7 @@ def register_seo_api(app: FastAPI):
             })
 
     # 文章SEO缓存清理API（供Java后端调用）
-    @app.post('/python/seo/clearArticleCache')
+    @app.post('/seo/clearArticleCache')
     async def clear_article_seo_cache(request: Request):
         """清理指定文章的SEO缓存（供Java后端在文章CRUD时调用）"""
         try:
@@ -2395,7 +2505,7 @@ def register_seo_api(app: FastAPI):
             })
 
     # 批量文章SEO缓存清理API（供Java后端调用）
-    @app.post('/python/seo/clearArticlesCache')
+    @app.post('/seo/clearArticlesCache')
     async def clear_articles_seo_cache(request: Request):
         """批量清理多个文章的SEO缓存（供Java后端在批量操作时调用）"""
         try:
@@ -2495,7 +2605,7 @@ def register_seo_api(app: FastAPI):
             return JSONResponse({"code": 500, "message": f"获取robots.txt出错: {str(e)}", "data": None})
     
     # 手动更新SEO数据
-    @app.post('/python/seo/updateSeoData')
+    @app.post('/seo/updateSeoData')
     async def update_seo_data_api(request: Request):
         # 检查SEO是否启用
         config = await get_seo_config()
@@ -2519,7 +2629,7 @@ def register_seo_api(app: FastAPI):
             return JSONResponse({"code": 500, "message": f"更新SEO数据出错: {str(e)}", "data": None})
     
     # 百度推送API
-    @app.post('/python/seo/baiduPush')
+    @app.post('/seo/baiduPush')
     async def baidu_push_api(request: Request):
         # 检查SEO是否启用
         config = await get_seo_config()
@@ -2544,7 +2654,7 @@ def register_seo_api(app: FastAPI):
             return JSONResponse({"code": 500, "message": f"百度推送API出错: {str(e)}", "data": None})
     
     # Google索引API
-    @app.post('/python/seo/googleIndex')
+    @app.post('/seo/googleIndex')
     async def google_index_api_route(request: Request):
         # 检查SEO是否启用
         config = await get_seo_config()
@@ -2569,7 +2679,7 @@ def register_seo_api(app: FastAPI):
             return JSONResponse({"code": 500, "message": f"Google索引API提交出错: {str(e)}", "data": None})
     
     # Bing索引API
-    @app.post('/python/seo/bingIndex')
+    @app.post('/seo/bingIndex')
     async def bing_index_api_route(request: Request):
         # 检查SEO是否启用
         config = await get_seo_config()
@@ -2594,7 +2704,7 @@ def register_seo_api(app: FastAPI):
             return JSONResponse({"code": 500, "message": f"Bing索引API提交出错: {str(e)}", "data": None})
     
     # Yandex索引API
-    @app.post('/python/seo/yandexIndex')
+    @app.post('/seo/yandexIndex')
     async def yandex_index_api_route(request: Request):
         # 检查SEO是否启用
         config = await get_seo_config()
@@ -2619,7 +2729,7 @@ def register_seo_api(app: FastAPI):
             return JSONResponse({"code": 500, "message": f"Yandex索引API提交出错: {str(e)}", "data": None})
     
     # 搜狗推送API
-    @app.post('/python/seo/sogouPush')
+    @app.post('/seo/sogouPush')
     async def sogou_push_api(request: Request):
         # 检查SEO是否启用
         config = await get_seo_config()
@@ -2644,7 +2754,7 @@ def register_seo_api(app: FastAPI):
             return JSONResponse({"code": 500, "message": f"搜狗推送API出错: {str(e)}", "data": None})
     
     # 360搜索推送API
-    @app.post('/python/seo/soPush')
+    @app.post('/seo/soPush')
     async def so_push_api(request: Request):
         # 检查SEO是否启用
         config = await get_seo_config()
@@ -2669,7 +2779,7 @@ def register_seo_api(app: FastAPI):
             return JSONResponse({"code": 500, "message": f"360推送API出错: {str(e)}", "data": None})
     
     # 神马搜索推送API
-    @app.post('/python/seo/shenmaIndex')
+    @app.post('/seo/shenmaIndex')
     async def shenma_index_api_route(request: Request):
         """神马搜索索引API"""
         # 检查SEO是否启用
@@ -2705,7 +2815,7 @@ def register_seo_api(app: FastAPI):
             })
     
     # 专门的sitemap更新API（用于文章保存/更新后自动更新sitemap）
-    @app.post('/python/seo/updateArticleSitemap')
+    @app.post('/seo/updateArticleSitemap')
     async def update_article_sitemap_api(request: Request):
         """更新文章sitemap条目"""
         # 检查SEO是否启用
@@ -2776,7 +2886,7 @@ def register_seo_api(app: FastAPI):
             return JSONResponse({"code": 500, "message": f"更新文章sitemap出错: {str(e)}", "data": None})
     
     # 文章发布后的SEO处理（自动提交给各搜索引擎）
-    @app.post('/python/seo/submitArticle')
+    @app.post('/seo/submitArticle')
     async def submit_article_api(request: Request):
         """提交文章到各搜索引擎"""
         # 检查SEO是否启用
@@ -3012,7 +3122,7 @@ def register_seo_api(app: FastAPI):
         return JSONResponse(response_data)
     
     # AI SEO分析API
-    @app.get('/python/seo/aiAnalyzeSite')
+    @app.get('/seo/aiAnalyzeSite')
     async def ai_analyze_site_api(request: Request):
         """使用AI分析网站SEO情况"""
         # 检查SEO是否启用
@@ -3118,7 +3228,7 @@ def register_seo_api(app: FastAPI):
             return JSONResponse({"code": 500, "message": f"AI SEO分析出错: {str(e)}", "data": None})
 
     # 检查AI API配置
-    @app.get('/python/seo/checkAiApiConfig')
+    @app.get('/seo/checkAiApiConfig')
     async def check_ai_api_config(request: Request, _: bool = Depends(admin_required)):
         try:
             decrypted_config, display_config = get_ai_api_config()
@@ -3161,7 +3271,7 @@ def register_seo_api(app: FastAPI):
             })
 
     # 更新AI API配置
-    @app.post('/python/seo/updateAiApiConfig')
+    @app.post('/seo/updateAiApiConfig')
     async def update_ai_api_config(request: Request, _: bool = Depends(admin_required)):
         try:
             config = await request.json()
@@ -3190,7 +3300,7 @@ def register_seo_api(app: FastAPI):
             return JSONResponse({"code": 500, "message": f"更新AI API配置出错: {str(e)}", "data": None})
             
     # 站点优化建议API
-    @app.get('/python/seo/analyzeSite')
+    @app.get('/seo/analyzeSite')
     async def analyze_site_api(request: Request):
         """分析网站SEO配置并提供改进建议"""
         # 检查SEO是否启用
@@ -3338,7 +3448,7 @@ def register_seo_api(app: FastAPI):
             return JSONResponse({"code": 500, "message": f"站点SEO分析出错: {str(e)}", "data": None})
 
     # 获取AI API配置
-    @app.get('/python/seo/getAiApiConfig')
+    @app.get('/seo/getAiApiConfig')
     async def get_ai_api_config_route(request: Request, _: bool = Depends(admin_required)):
         try:
             decrypted_config, display_config = get_ai_api_config()
@@ -3378,7 +3488,7 @@ def register_seo_api(app: FastAPI):
             })
 
     # 保存AI API配置
-    @app.post('/python/seo/saveAiApiConfig')
+    @app.post('/seo/saveAiApiConfig')
     async def save_ai_api_config_route(request: Request, _: bool = Depends(admin_required)):
         try:
             config = await request.json()
@@ -3407,7 +3517,7 @@ def register_seo_api(app: FastAPI):
             return JSONResponse({"code": 500, "message": f"保存AI API配置出错: {str(e)}", "data": None})
 
     # Yahoo索引API
-    @app.post('/python/seo/yahooPush')
+    @app.post('/seo/yahooPush')
     async def yahoo_push_api(request: Request):
         # 检查SEO是否启用
         config = await get_seo_config()
@@ -3521,7 +3631,7 @@ def register_seo_api(app: FastAPI):
             })
 
     # 新增分类页元数据获取API
-    @app.get('/python/seo/getCategoryMeta')
+    @app.get('/seo/getCategoryMeta')
     async def get_category_meta(request: Request):
         """
         获取分类页面的SEO元数据

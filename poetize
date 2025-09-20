@@ -2,7 +2,7 @@
 ## 作者: LeapYa
 ## 修改时间: 2025-09-20
 ## 描述: Poetize 博客系统全局管理命令
-## 版本: 1.5.0
+## 版本: 1.5.1
 
 # 定义颜色
 RED='\033[0;31m'
@@ -116,6 +116,7 @@ show_help() {
     printf "  -restart                  重启所有服务\n"
     printf "  -update                   更新系统到最新版本\n"
     printf "  -deploy, -bushu, -bs      执行部署脚本\n"
+    printf "  -update-poetize-command   更新poetize命令\n"
     printf "\n"
     printf "${BLUE}系统管理:${NC}\n"
     printf "  -qianyi, -migrate, -qy    执行博客迁移到远程服务器\n"
@@ -1103,6 +1104,8 @@ pull_code_on_target() {
 
 # 检查并更新poetize命令本身
 update_poetize_command() {
+    find_project_dir
+
     info "检查poetize命令是否需要更新..."
     
     # 下载最新的poetize脚本到临时文件
@@ -1111,7 +1114,7 @@ update_poetize_command() {
     
     # 从项目中获取最新的poetize脚本
     if [ -f "poetize" ]; then
-        cp "poetize" "$temp_poetize"
+        sudo cp "poetize" "$temp_poetize"
     else
         warning "未找到新版本的poetize脚本，跳过命令更新"
         return 0
@@ -1120,7 +1123,7 @@ update_poetize_command() {
     # 比较版本或文件差异
     if [ -f "$current_poetize" ] && cmp -s "$current_poetize" "$temp_poetize"; then
         info "poetize命令已是最新版本"
-        rm -f "$temp_poetize"
+        sudo rm -f "$temp_poetize"
         return 0
     fi
     
@@ -1158,10 +1161,10 @@ else
 fi
 EOF
     
-    chmod +x "$self_update_script"
+    sudo chmod +x "$self_update_script"
     
     info "启动自更新进程..."
-    nohup "$self_update_script" "$temp_poetize" > /dev/null 2>&1 &
+    sudo nohup "$self_update_script" "$temp_poetize" > /dev/null 2>&1 &
     
     success "poetize命令自更新已启动，当前进程即将退出"
     info "请等待几秒后重新运行 'poetize -update' 以继续更新"
@@ -1175,9 +1178,6 @@ reinstall_latest_system() {
 
     # 拉取项目
     pull_code_on_target
-    
-    # 检查并更新poetize命令本身
-    update_poetize_command
     
     # 恢复数据库
     cp $BACKUP_DIR/poetry.sql poetize-server/sql/poetry.sql
@@ -1306,7 +1306,7 @@ restore_full_backup() {
     info "重启相关服务以应用恢复的配置..."
     
     # 只重启需要应用配置的服务，不重启前端构建容器
-    local services_to_restart="nginx java-backend python-backend mysql redis prerender"
+    local services_to_restart="nginx java-backend python-backend mysql redis"
     if $DOCKER_COMPOSE_CMD restart $services_to_restart; then
         success "相关服务重启完成"
     else
@@ -1430,6 +1430,9 @@ main() {
             ;;
         "-update")
             run_update
+            ;;
+        "-update-poetize-command")
+            update_poetize_command
             ;;
         "-uninstall")
             uninstall_services

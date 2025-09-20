@@ -327,7 +327,7 @@ else
     local httpc = http.new()
     httpc:set_timeout(3000) -- 3秒超时
     
-    local res, err = httpc:request_uri("http://poetize-python:5000/python/seo/getSeoConfig", {
+    local res, err = httpc:request_uri("http://poetize-python:5000/seo/getSeoConfig", {
         method = "GET",
         headers = {
             ["Host"] = ngx.var.host,

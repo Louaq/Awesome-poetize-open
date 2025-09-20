@@ -916,7 +916,7 @@
           .then((articleRes) => {
             if (articleRes.code === 200 && articleRes.data) {
               // 文章信息获取成功后再获取SEO元数据
-              axios.get(this.$constant.pythonBaseURL + `/python/seo/getArticleMeta?id=${this.id}&lang=${this.currentLang}`)
+              axios.get(this.$constant.pythonBaseURL + `/seo/getArticleMeta?id=${this.id}&lang=${this.currentLang}`)
                 .then((res) => {
                   clearTimeout(timeout);
                   this.isLoadingMeta = false;
@@ -1152,7 +1152,7 @@
             }
           }, 3000);
 
-          axios.get(this.$constant.pythonBaseURL + `/python/seo/getArticleMeta?id=${this.id}&lang=${this.currentLang}`)
+          axios.get(this.$constant.pythonBaseURL + `/seo/getArticleMeta?id=${this.id}&lang=${this.currentLang}`)
             .then((res) => {
               clearTimeout(timeout);
               this.isLoadingMeta = false;

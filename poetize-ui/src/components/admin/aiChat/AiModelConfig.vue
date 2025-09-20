@@ -240,7 +240,7 @@ export default {
 
       try {
         if (this.isApiKeyMasked || (this.modelConfig.apiKey && this.modelConfig.apiKey.includes('*'))) {
-          const response = await this.$http.post(this.$constant.pythonBaseURL + '/python/ai/chat/testConnection', {
+          const response = await this.$http.post(this.$constant.pythonBaseURL + '/ai/chat/testConnection', {
             provider: this.modelConfig.provider,
             api_base: this.modelConfig.baseUrl,
             model: this.modelConfig.model,
@@ -268,7 +268,7 @@ export default {
             model: this.modelConfig.model
           };
 
-          const response = await this.$http.post(this.$constant.pythonBaseURL + '/python/ai/chat/testConnection', testData, true);
+          const response = await this.$http.post(this.$constant.pythonBaseURL + '/ai/chat/testConnection', testData, true);
 
           if (response.flag) {
             this.testResult = {
