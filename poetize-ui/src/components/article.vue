@@ -385,7 +385,7 @@
       }
     },
 
-      async created() {
+    async created() {
         // 重置组件状态，防止缓存问题
         this.resetComponentState();
         
@@ -623,6 +623,7 @@
       this.clearComponentState();
     },
 
+    methods: {
       // 重置组件状态，防止缓存问题
       resetComponentState() {
         console.log('重置文章组件状态');
@@ -1816,6 +1817,7 @@
         }
       }
     }
+  }
 </script>
 
 <style scoped>
