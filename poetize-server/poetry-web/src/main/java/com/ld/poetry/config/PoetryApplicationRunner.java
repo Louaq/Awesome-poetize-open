@@ -347,13 +347,24 @@ public class PoetryApplicationRunner implements ApplicationRunner {
     private void renderArticlesWithAvailableLanguages(List<Integer> articleIds) {
         for (Integer articleId : articleIds) {
             try {
-                // 获取该文章的可用翻译语言
+                // 获取该文章的可用翻译语言（不包含源语言）
                 List<String> translationLanguages = translationService.getArticleAvailableLanguages(articleId);
                 
                 if (!translationLanguages.isEmpty()) {
-                    // 如果有翻译语言，渲染源语言 + 翻译语言版本
-                    log.info("文章{}将渲染多语言版本，翻译语言: {}", articleId, translationLanguages);
-                    prerenderClient.renderArticleWithLanguages(articleId, translationLanguages);
+                    // 如果有翻译语言，需要构建完整的渲染语言列表（源语言 + 翻译语言）
+                    Map<String, String> languageConfig = translationService.getTranslationLanguageConfig();
+                    String sourceLanguage = languageConfig.get("source");
+                    
+                    // 构建完整的渲染语言列表
+                    List<String> allLanguagesToRender = new ArrayList<>();
+                    if (sourceLanguage != null && !sourceLanguage.trim().isEmpty()) {
+                        allLanguagesToRender.add(sourceLanguage); // 添加源语言
+                    }
+                    allLanguagesToRender.addAll(translationLanguages); // 添加翻译语言
+                    
+                    log.info("文章{}将渲染多语言版本，源语言: {}, 翻译语言: {}, 完整渲染列表: {}", 
+                            articleId, sourceLanguage, translationLanguages, allLanguagesToRender);
+                    prerenderClient.renderArticleWithLanguages(articleId, allLanguagesToRender);
                 } else {
                     // 如果没有翻译语言，只渲染源语言版本
                     log.info("文章{}只渲染源语言版本", articleId);
