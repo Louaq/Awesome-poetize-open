@@ -1816,7 +1816,6 @@
         }
       }
     }
-  }
 </script>
 
 <style scoped>
