@@ -83,7 +83,7 @@
               </div>
 
               <div v-show="indexType === 2">
-                <articleList :articleList="articles"></articleList>
+                <articleList :articleList="articles" :searchKey="pagination.articleSearch"></articleList>
                 <div class="pagination-wrap">
                   <div @click="pageArticles()" class="pagination" v-if="pagination.total !== articles.length">
                     下一页
@@ -360,6 +360,34 @@
         });
       },
       async selectArticle(articleSearch) {
+        // 如果搜索词为空，返回到正常首页
+        if (!articleSearch || !articleSearch.trim()) {
+          this.pagination = {
+            current: 1,
+            size: 10,
+            total: 0,
+            searchKey: "",
+            sortId: null,
+            articleSearch: ""
+          };
+          this.articles = [];
+          await this.getArticles();
+          this.$nextTick(() => {
+            this.indexType = 1; // 返回到首页模式
+            
+            // 恢复公告栏样式
+            try {
+              const announcementEl = document.querySelector('.announcement');
+              if (announcementEl) {
+                announcementEl.style.maxWidth = '';
+              }
+            } catch (error) {
+              console.warn('恢复公告栏样式失败:', error);
+            }
+          });
+          return;
+        }
+        
         this.pagination = {
           current: 1,
           size: 10,

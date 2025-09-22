@@ -91,4 +91,13 @@ public interface ArticleService extends IService<Article> {
      */
     PoetryResult<ArticleSaveStatus> getArticleSaveStatus(String taskId);
 
+    /**
+     * 获取翻译匹配的内容
+     * @param id 文章ID
+     * @param searchKey 搜索关键词
+     * @param language 翻译语言
+     * @return 翻译匹配的内容
+     */
+    ArticleVO getTranslationContent(Integer id, String searchKey, String language);
+
 }

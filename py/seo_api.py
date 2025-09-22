@@ -1011,7 +1011,7 @@ async def generate_sitemap():
             }
             
             async with httpx.AsyncClient() as client:
-                # 后端接口为 GET 方法，这里改为 GET 请求
+                # 获取分类信息
                 sort_response = await client.get(
                     f"{JAVA_BACKEND_URL}/webInfo/getSortInfo",
                     headers=headers,
@@ -1215,16 +1215,38 @@ async def generate_sitemap():
                                 sitemap += f'    <priority>{seo_config.get("sitemap_priority", "0.7")}</priority>\n'
                                 sitemap += f'  </url>\n'
 
-                            # 添加英文URL
-                            article_url_en = f"{article_url}?lang=en"
-                            if article_url_en.rstrip('/') not in url_set:
-                                url_set.add(article_url_en.rstrip('/'))
-                                sitemap += f'  <url>\n'
-                                sitemap += f'    <loc>{article_url_en}</loc>\n'
-                                sitemap += f'    <lastmod>{update_time}</lastmod>\n'
-                                sitemap += f'    <changefreq>{seo_config.get("sitemap_change_frequency", "weekly")}</changefreq>\n'
-                                sitemap += f'    <priority>{seo_config.get("sitemap_priority", "0.7")}</priority>\n'
-                                sitemap += f'  </url>\n'
+                            # 动态获取文章的可用语言并添加相应的URL
+                            try:
+                                # 获取文章的可用语言
+                                available_languages = []
+                                lang_response = await client.get(
+                                    f"{JAVA_BACKEND_URL}/article/getAvailableLanguages?id={article_id}",
+                                    headers={
+                                        "X-Internal-Service": "poetize-python",
+                                        'User-Agent': 'poetize-python/1.0.0'
+                                    },
+                                    timeout=5
+                                )
+                                if lang_response.status_code == 200:
+                                    available_languages = lang_response.json()['data']
+                                    if available_languages:
+                                        logger.debug(f"文章 {article_id} 可用语言: {available_languages}")
+                                        for lang in available_languages:
+                                            article_url_available = f"{article_url}?lang={lang}"
+                                            if article_url_available.rstrip('/') not in url_set:
+                                                url_set.add(article_url_available.rstrip('/'))
+                                                sitemap += f'  <url>\n'
+                                                sitemap += f'    <loc>{article_url_available}</loc>\n'
+                                                sitemap += f'    <lastmod>{update_time}</lastmod>\n'
+                                                sitemap += f'    <changefreq>{seo_config.get("sitemap_change_frequency", "weekly")}</changefreq>\n'
+                                                sitemap += f'    <priority>{seo_config.get("sitemap_priority", "0.7")}</priority>\n'
+                                                sitemap += f'  </url>\n'
+                                            else:
+                                                logger.debug(f"文章 {article_id} 已有对应语言的URL: {article_url_available}")
+                                    else:
+                                        logger.debug(f"文章 {article_id} 没有可用语言，跳过添加")
+                            except Exception as e:
+                                logger.warning(f"获取文章 {article_id} 的可用语言失败: {str(e)}")
         except Exception as e:
             logger.error(f"添加文章页面到网站地图出错: {str(e)}")
             logger.exception("详细错误信息:")
@@ -3689,31 +3711,6 @@ def register_seo_api(app: FastAPI):
                 "status": "error",
                 "message": f"获取分类页元数据异常: {str(e)}"
             })
-
-    @app.post('/seo/removeArticleFromSitemap')
-    async def remove_article_from_sitemap(request: Request, _: bool = Depends(admin_required)):
-        """接收 {"url": "http://site/article/123"} 或 {"id":123} 移除 sitemap 条目"""
-        try:
-            data = await request.json()
-            if not data:
-                return JSONResponse({"code":400,"message":"参数为空"})
-            seo_config = await get_seo_config()
-            site_url = seo_config.get('site_address', FRONTEND_URL)
-            if 'url' in data and data['url']:
-                target_url = data['url']
-            elif 'id' in data:
-                target_url = f"{site_url}/{seo_config.get('article_url_format','article/{id}').replace('{id}', str(data['id']))}"
-            else:
-                return JSONResponse({"code":400,"message":"缺少 url 或 id"})
-
-            # 同时移除中文和英文两个URL
-            asyncio.create_task(remove_sitemap_url(target_url))
-            asyncio.create_task(remove_sitemap_url(f"{target_url}?lang=en"))
-
-            return JSONResponse({"code":200,"message":"已提交删除任务","data":target_url})
-        except Exception as e:
-            logger.error(f"删除 sitemap URL API 失败: {e}")
-            return JSONResponse({"code":500,"message":str(e)})
 
 # 获取AI API配置
 def get_ai_api_config():

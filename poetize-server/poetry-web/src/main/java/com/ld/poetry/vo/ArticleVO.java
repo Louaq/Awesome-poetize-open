@@ -75,6 +75,12 @@ public class ArticleVO {
     // 搜索引擎推送控制
     private Boolean submitToSearchEngine; // 是否推送至搜索引擎
     
+    // 翻译搜索相关字段
+    private String matchedLanguage;     // 匹配的语言（zh/en等）
+
+    private Boolean isTranslationMatch; // 是否匹配的翻译内容
+    private Boolean hasTranslationMatch; // 是否同时有翻译匹配（当原文和翻译都匹配时）
+    
     // 分类名称和标签名称（用于API创建文章时自动创建分类和标签）
     private String sortName;    // 分类名称
     private String labelName;   // 标签名称

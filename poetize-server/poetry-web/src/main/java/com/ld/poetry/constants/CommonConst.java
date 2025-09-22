@@ -178,6 +178,16 @@ public class CommonConst {
      * 文章摘要默认字数
      */
     public static final int SUMMARY = 80;
+    
+    /**
+     * PC端文章摘要字数
+     */
+    public static final int SUMMARY_PC = 120;
+    
+    /**
+     * 移动端文章摘要字数
+     */
+    public static final int SUMMARY_MOBILE = 60;
 
     /**
      * 留言的源

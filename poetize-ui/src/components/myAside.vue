@@ -34,6 +34,8 @@
                  v-model="articleSearch"
                  @keyup.enter="selectArticle()"
                  @input="handleSearchInput"
+                 @focus="showSearchTipsOnFocus"
+                 @blur="hideSearchTipsOnBlur"
                  placeholder="搜索文章" 
                  maxlength="50">
           <div class="ais-SearchBox-submit" @click="selectArticle()" title="搜索" :class="{'search-active': articleSearch}">
@@ -59,9 +61,14 @@
             <div class="tooltip-text">
               <div>支持多关键词搜索，空格分隔</div>
               <div>例如：<span class="search-keyword">诗词 唐朝</span></div>
+              <div>支持正则表达式搜索，用 / 包围</div>
+              <div>例如：<span class="search-keyword">/^春.*诗$/</span></div>
               <div v-if="articleSearch && articleSearch.length >= 45" style="color:#ff7a7a; margin-top:5px;">
                 <i class="el-icon-warning"></i> 搜索关键词限制为50字符
               </div>
+            </div>
+            <div class="tooltip-close" @click="hideSearchTips" title="关闭提示">
+              <i class="el-icon-close"></i>
             </div>
           </div>
         </div>
@@ -222,6 +229,7 @@
         showAdmireDialog: false,
         articleSearch: "",
         showSearchTips: false,
+        searchTipsTimer: null,
         recentSearches: []
       }
     },
@@ -247,11 +255,9 @@
         this.$emit("selectSort", sort);
       },
       selectArticle() {
+        // 如果搜索框为空，返回到正常首页
         if (!this.articleSearch.trim()) {
-          this.showSearchTips = true;
-          setTimeout(() => {
-            this.showSearchTips = false;
-          }, 3000);
+          this.$emit("selectArticle", ""); // 发送空字符串表示返回首页
           return;
         }
         
@@ -269,17 +275,50 @@
           this.clearSearch();
         }
         
-        // 显示搜索提示
-        if (this.articleSearch && !this.showSearchTips) {
-          this.showSearchTips = true;
-          setTimeout(() => {
+        // 输入时保持提示显示，重置定时器
+        if (this.showSearchTips) {
+          if (this.searchTipsTimer) {
+            clearTimeout(this.searchTipsTimer);
+          }
+          // 重新设置定时器
+          this.searchTipsTimer = setTimeout(() => {
             this.showSearchTips = false;
-          }, 3000);
+          }, 8000);
         }
       },
       useRecentSearch(search) {
         this.articleSearch = search;
         this.selectArticle();
+      },
+      hideSearchTips() {
+        this.showSearchTips = false;
+        if (this.searchTipsTimer) {
+          clearTimeout(this.searchTipsTimer);
+          this.searchTipsTimer = null;
+        }
+      },
+      showSearchTipsOnFocus() {
+        // 输入框获得焦点时显示搜索提示
+        this.showSearchTips = true;
+        // 清除之前的定时器
+        if (this.searchTipsTimer) {
+          clearTimeout(this.searchTipsTimer);
+        }
+        // 设置较长的显示时间，让用户有足够时间阅读
+        this.searchTipsTimer = setTimeout(() => {
+          this.showSearchTips = false;
+        }, 10000); // 10秒后自动隐藏
+      },
+      hideSearchTipsOnBlur() {
+        // 输入框失去焦点时延迟隐藏提示（给用户时间点击提示内容）
+        setTimeout(() => {
+          if (!this.articleSearch || this.articleSearch.length < 45) {
+            this.showSearchTips = false;
+            if (this.searchTipsTimer) {
+              clearTimeout(this.searchTipsTimer);
+            }
+          }
+        }, 200); // 200ms延迟，避免点击提示时立即隐藏
       },
       loadRecentSearches() {
         const searches = localStorage.getItem('recentSearches');
@@ -745,6 +784,34 @@
     background: rgba(81, 196, 146, 0.2);
     color: var(--lightGreen);
     transform: translateY(-2px);
+  }
+
+  .tooltip-close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    cursor: pointer;
+    color: var(--greyFont);
+    opacity: 0.6;
+    transition: all 0.3s;
+    padding: 2px;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+  }
+
+  .tooltip-close:hover {
+    opacity: 1;
+    background: rgba(255, 0, 0, 0.1);
+    color: #ff4757;
+  }
+
+  .tooltip-content {
+    position: relative;
   }
 
 </style>

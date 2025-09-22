@@ -75,6 +75,38 @@ public class StringUtil {
         return result;
     }
 
+    /**
+     * 正则表达式高亮显示搜索结果
+     * @param text 原始文本
+     * @param regexPattern 正则表达式模式
+     * @param highlightStart 高亮开始标记
+     * @param highlightEnd 高亮结束标记
+     * @return 高亮后的文本
+     */
+    public static String highlightTextWithRegex(String text, String regexPattern, String highlightStart, String highlightEnd) {
+        if (!StringUtils.hasText(text) || !StringUtils.hasText(regexPattern)) {
+            return text;
+        }
+        
+        try {
+            // 直接使用正则表达式进行匹配和替换
+            Pattern pattern = Pattern.compile(regexPattern, Pattern.CASE_INSENSITIVE);
+            Matcher matcher = pattern.matcher(text);
+            
+            StringBuffer sb = new StringBuffer();
+            while (matcher.find()) {
+                String matchedText = matcher.group();
+                matcher.appendReplacement(sb, highlightStart + matchedText + highlightEnd);
+            }
+            matcher.appendTail(sb);
+            
+            return sb.toString();
+        } catch (Exception e) {
+            // 如果正则表达式有问题，回退到普通文本高亮
+            return highlightText(text, regexPattern, highlightStart, highlightEnd);
+        }
+    }
+
     public static boolean isValidFileName(String fileName) {
         if (!StringUtils.hasText(fileName) || fileName.length() > 128) {
             return false;

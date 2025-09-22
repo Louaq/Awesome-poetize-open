@@ -507,6 +507,16 @@ public class ArticleController {
     }
 
     /**
+     * 获取翻译匹配的内容
+     */
+    @GetMapping("/translation/{id}")
+    public PoetryResult<ArticleVO> getTranslationContent(@PathVariable("id") Integer id,
+                                                         @RequestParam(value = "searchKey", required = false) String searchKey,
+                                                         @RequestParam(value = "language", required = false) String language) {
+        return PoetryResult.success(articleService.getTranslationContent(id, searchKey, language));
+    }
+
+    /**
      * 查询分类文章List
      */
     @GetMapping("/listSortArticle")

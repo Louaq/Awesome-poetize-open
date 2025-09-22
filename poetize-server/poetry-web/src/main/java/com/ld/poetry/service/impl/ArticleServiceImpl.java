@@ -28,7 +28,9 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
+import java.util.regex.Pattern;
 import org.springframework.cache.annotation.Cacheable;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.cache.annotation.CachePut;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
@@ -748,15 +750,10 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 String originalContent = article.getArticleContent();
                 String originalTitle = article.getArticleTitle();
                 
-                // 如果内容太长，仍然截取用于articleContent字段（保持兼容性）
-                if (article.getArticleContent().length() > CommonConst.SUMMARY) {
-                    article.setArticleContent(article.getArticleContent().substring(0, CommonConst.SUMMARY).replace("`", "").replace("#", "").replace(">", ""));
-                }
-                
                 ArticleVO articleVO = buildArticleVO(article, false);
                 
-                // 直接使用数据库中存储的摘要
-                if (StringUtils.hasText(article.getSummary())) {
+                // 直接使用数据库中存储的摘要（仅在非搜索场景下设置）
+                if (!StringUtils.hasText(baseRequestVO.getArticleSearch()) && StringUtils.hasText(article.getSummary())) {
                     articleVO.setSummary(article.getSummary());
                 }
                 
@@ -768,22 +765,138 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 if (StringUtils.hasText(baseRequestVO.getArticleSearch())) {
                     String searchText = baseRequestVO.getArticleSearch();
                     
+                    // 检测是否为正则表达式搜索
+                    boolean isRegexSearch = searchText.startsWith("/") && searchText.endsWith("/") && searchText.length() > 2;
+                    String actualSearchText = isRegexSearch ? searchText.substring(1, searchText.length() - 1) : searchText;
+                    
                     // 使用高亮标签进行处理
                     String highlightStart = "<span class='search-highlight' style='color: var(--lightGreen); font-weight: bold;'>";
                     String highlightEnd = "</span>";
                     
-                    // 对标题和内容进行高亮处理
+                    // 检查原文是否匹配
+                    boolean originalTitleMatches = false;
+                    boolean originalContentMatches = false;
+                    
+                    if (isRegexSearch) {
+                        Pattern pattern = Pattern.compile(actualSearchText, Pattern.CASE_INSENSITIVE);
+                        originalTitleMatches = originalTitle != null && pattern.matcher(originalTitle).find();
+                        originalContentMatches = originalContent != null && pattern.matcher(originalContent).find();
+                    } else {
+                        originalTitleMatches = originalTitle != null && originalTitle.toLowerCase().contains(searchText.toLowerCase());
+                        originalContentMatches = originalContent != null && originalContent.toLowerCase().contains(searchText.toLowerCase());
+                    }
+                    
+                    boolean originalMatches = originalTitleMatches || originalContentMatches;
+                    
+                    // 检查翻译是否匹配
+                    String matchedLanguage = commonQuery.getMatchedTranslationLanguage(articleVO.getId(), searchText);
+                    boolean translationMatches = matchedLanguage != null;
+                    
+                    if (originalMatches && translationMatches) {
+                        // 原文和翻译都匹配：优先显示原文，但标记翻译也匹配
+                        articleVO.setIsTranslationMatch(false); // 优先显示原文
+                        articleVO.setMatchedLanguage(matchedLanguage); // 保存匹配的翻译语言信息
+                        
+                        // 可以添加一个字段标识翻译也匹配了
+                        articleVO.setHasTranslationMatch(true);
+                        
+                        log.debug("文章ID {} 原文和翻译都匹配搜索词，优先显示原文，翻译语言: {}", articleVO.getId(), matchedLanguage);
+                        
+                    } else if (originalMatches) {
+                        // 只有原文匹配
+                        articleVO.setIsTranslationMatch(false);
+                        log.debug("文章ID {} 仅原文匹配搜索词", articleVO.getId());
+                        
+                    } else if (translationMatches) {
+                        // 只有翻译匹配
+                        Map<String, String> matchedTranslation = commonQuery.getMatchedTranslation(articleVO.getId(), searchText, matchedLanguage);
+                        if (matchedTranslation != null) {
+                            articleVO.setIsTranslationMatch(true);
+                            articleVO.setMatchedLanguage(matchedLanguage);
+                            
+                            // 高亮翻译标题和内容，并替换原文显示
+                            String translatedTitle = matchedTranslation.get("title");
+                            String translatedContent = matchedTranslation.get("content");
+                            
+                            if (translatedTitle != null) {
+                                String highlightedTitle;
+                                if (isRegexSearch) {
+                                    highlightedTitle = StringUtil.highlightTextWithRegex(translatedTitle, actualSearchText, highlightStart, highlightEnd);
+                                } else {
+                                    highlightedTitle = StringUtil.highlightText(translatedTitle, searchText, highlightStart, highlightEnd);
+                                }
+                                articleVO.setMatchedTitle(highlightedTitle);
+                                articleVO.setArticleTitle(highlightedTitle); // 替换显示的标题
+                            }
+                            if (translatedContent != null) {
+                                // 智能截取包含搜索关键词的内容片段
+                                String contentSnippet = getContentSnippetWithKeyword(translatedContent, searchText, CommonConst.SUMMARY);
+                                String highlightedContent;
+                                if (isRegexSearch) {
+                                    highlightedContent = StringUtil.highlightTextWithRegex(contentSnippet, actualSearchText, highlightStart, highlightEnd);
+                                } else {
+                                    highlightedContent = StringUtil.highlightText(contentSnippet, searchText, highlightStart, highlightEnd);
+                                }
+                                articleVO.setMatchedContent(highlightedContent);
+                                articleVO.setArticleContent(highlightedContent); // 替换显示的内容
+                            }
+                            
+                            log.debug("文章ID {} 仅翻译匹配搜索词，显示翻译内容，语言: {}", articleVO.getId(), matchedLanguage);
+                        }
+                    } else {
+                        // 原文和翻译都不匹配（理论上不应该出现）
+                        articleVO.setIsTranslationMatch(false);
+                        log.warn("文章ID {} 在搜索结果中但原文和翻译都不匹配搜索词: {}", articleVO.getId(), searchText);
+                    }
+                    
+                    // 对标题和内容进行高亮处理（原有逻辑）
                     if (idList.get(0).contains(articleVO.getId())) {
                         // 标题匹配的文章
-                        articleVO.setArticleTitle(StringUtil.highlightText(originalTitle, searchText, highlightStart, highlightEnd));
+                        if (!Boolean.TRUE.equals(articleVO.getIsTranslationMatch())) {
+                            String highlightedTitle;
+                            if (isRegexSearch) {
+                                highlightedTitle = StringUtil.highlightTextWithRegex(originalTitle, actualSearchText, highlightStart, highlightEnd);
+                            } else {
+                                highlightedTitle = StringUtil.highlightText(originalTitle, searchText, highlightStart, highlightEnd);
+                            }
+                            articleVO.setArticleTitle(highlightedTitle);
+                        }
                         titles.add(articleVO);
                     } else if (idList.get(1).contains(articleVO.getId())) {
                         // 内容匹配的文章
-                        articleVO.setArticleContent(StringUtil.highlightText(articleVO.getArticleContent(), searchText, highlightStart, highlightEnd));
+                        if (!Boolean.TRUE.equals(articleVO.getIsTranslationMatch())) {
+                            // 智能截取包含搜索关键词的原文内容片段（使用原始内容）
+                            String contentSnippet = getContentSnippetWithKeyword(originalContent, searchText, CommonConst.SUMMARY);
+                            String highlightedContent;
+                            if (isRegexSearch) {
+                                highlightedContent = StringUtil.highlightTextWithRegex(contentSnippet, actualSearchText, highlightStart, highlightEnd);
+                            } else {
+                                highlightedContent = StringUtil.highlightText(contentSnippet, searchText, highlightStart, highlightEnd);
+                            }
+                            articleVO.setArticleContent(highlightedContent);
+                        }
                         contents.add(articleVO);
+                    } else if (Boolean.TRUE.equals(articleVO.getIsTranslationMatch())) {
+                        // 翻译匹配的文章，根据匹配类型分类
+                        if (articleVO.getMatchedTitle() != null) {
+                            titles.add(articleVO);
+                        } else {
+                            contents.add(articleVO);
+                        }
                     }
                 } else {
+                    // 非搜索情况下，对内容进行默认截断处理
+                    if (originalContent.length() > CommonConst.SUMMARY) {
+                        String truncatedContent = originalContent.substring(0, CommonConst.SUMMARY)
+                            .replace("`", "").replace("#", "").replace(">", "") + "...";
+                        articleVO.setArticleContent(truncatedContent);
+                    }
                     articles.add(articleVO);
+                }
+                
+                // 搜索场景下，确保summary为空，强制前端使用articleContent
+                if (StringUtils.hasText(baseRequestVO.getArticleSearch())) {
+                    articleVO.setSummary(null);
                 }
             }
 
@@ -964,7 +1077,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                         BeanUtils.copyProperties(article, processedArticle);
                         // 如果内容太长，截取用于缓存
                         if (processedArticle.getArticleContent().length() > CommonConst.SUMMARY) {
-                            processedArticle.setArticleContent(processedArticle.getArticleContent().substring(0, CommonConst.SUMMARY).replace("`", "").replace("#", "").replace(">", ""));
+                            processedArticle.setArticleContent(processedArticle.getArticleContent().substring(0, CommonConst.SUMMARY).replace("`", "").replace("#", "").replace(">", "") + "...");
                         }
                         return processedArticle;
                     }).collect(Collectors.toList());
@@ -1230,7 +1343,7 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                 // 如果内容太长，截取用于显示
                 if (StringUtils.hasText(article.getArticleContent()) && article.getArticleContent().length() > CommonConst.SUMMARY) {
                     article.setArticleContent(article.getArticleContent().substring(0, CommonConst.SUMMARY)
-                            .replace("`", "").replace("#", "").replace(">", ""));
+                            .replace("`", "").replace("#", "").replace(">", "") + "...");
                 }
 
                 ArticleVO articleVO = buildArticleVO(article, false);
@@ -1565,4 +1678,149 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
         
         return PoetryResult.success(taskId);
     }
+
+    /**
+     * 智能截取包含搜索关键词的内容片段
+     * @param content 原始内容
+     * @param keyword 搜索关键词
+     * @param maxLength 最大长度
+     * @return 包含关键词的内容片段
+     */
+    private String getContentSnippetWithKeyword(String content, String keyword, int maxLength) {
+        if (content == null || keyword == null || content.length() <= maxLength) {
+            // 如果内容不长，直接返回并添加省略号（如果需要）
+            return content != null && content.length() > maxLength ? 
+                   content.substring(0, maxLength) + "..." : content;
+        }
+
+        // 查找关键词位置（忽略大小写）
+        int keywordIndex = content.toLowerCase().indexOf(keyword.toLowerCase());
+        
+        if (keywordIndex == -1) {
+            // 如果没找到关键词，返回开头部分
+            return content.substring(0, maxLength) + "...";
+        }
+
+        // 计算截取的起始位置，尽量让关键词居中
+        int keywordLength = keyword.length();
+        int halfLength = (maxLength - keywordLength) / 2;
+        
+        int startIndex = Math.max(0, keywordIndex - halfLength);
+        int endIndex = Math.min(content.length(), startIndex + maxLength);
+        
+        // 如果从中间开始，调整起始位置确保不超过最大长度
+        if (endIndex - startIndex < maxLength && startIndex > 0) {
+            startIndex = Math.max(0, endIndex - maxLength);
+        }
+
+        String snippet = content.substring(startIndex, endIndex);
+        
+        // 添加省略号
+        if (startIndex > 0) {
+            snippet = "..." + snippet;
+        }
+        if (endIndex < content.length()) {
+            snippet = snippet + "...";
+        }
+
+        return snippet;
+    }
+
+    @Override
+    public ArticleVO getTranslationContent(Integer id, String searchKey, String language) {
+        try {
+            // 获取原文章
+            Article article = this.getById(id);
+            if (article == null) {
+                throw new RuntimeException("文章不存在");
+            }
+
+            // 如果没有指定语言，尝试获取第一个可用的翻译语言
+            if (language == null || language.trim().isEmpty()) {
+                List<String> availableLanguages = translationService.getArticleAvailableLanguages(id);
+                if (availableLanguages.isEmpty()) {
+                    throw new RuntimeException("该文章没有可用的翻译");
+                }
+                language = availableLanguages.get(0);
+            }
+            
+            // 获取翻译内容
+            Map<String, String> translation = translationService.getArticleTranslation(id, language);
+            if (translation == null || translation.isEmpty()) {
+                throw new RuntimeException("翻译内容不存在");
+            }
+
+            String translatedTitle = translation.get("title");
+            String translatedContent = translation.get("content");
+
+            if (translatedTitle == null || translatedContent == null) {
+                throw new RuntimeException("翻译内容不完整");
+            }
+
+            // 对翻译内容进行搜索高亮处理和智能截取
+            if (searchKey != null && !searchKey.trim().isEmpty()) {
+                // 检测是否为正则表达式搜索
+                boolean isRegexSearch = searchKey.startsWith("/") && searchKey.endsWith("/") && searchKey.length() > 2;
+                String actualSearchText = isRegexSearch ? searchKey.substring(1, searchKey.length() - 1) : searchKey;
+                
+                // 使用高亮标签进行处理
+                String highlightStart = "<span class='search-highlight' style='color: var(--lightGreen); font-weight: bold;'>";
+                String highlightEnd = "</span>";
+                
+                if (isRegexSearch) {
+                    translatedTitle = StringUtil.highlightTextWithRegex(translatedTitle, actualSearchText, highlightStart, highlightEnd);
+                    // 对翻译内容进行智能截取和正则高亮
+                    translatedContent = getContentSnippetWithKeyword(translatedContent, actualSearchText, 80);
+                    translatedContent = StringUtil.highlightTextWithRegex(translatedContent, actualSearchText, highlightStart, highlightEnd);
+                } else {
+                    translatedTitle = StringUtil.highlightText(translatedTitle, searchKey, highlightStart, highlightEnd);
+                    // 对翻译内容进行智能截取和高亮
+                    translatedContent = getContentSnippetWithKeyword(translatedContent, searchKey, 80);
+                    translatedContent = StringUtil.highlightText(translatedContent, searchKey, highlightStart, highlightEnd);
+                }
+            } else {
+                // 如果没有搜索关键词，也要进行内容截取（显示前80个字符）
+                translatedContent = truncateContent(translatedContent, 80);
+            }
+
+            // 构建返回的 ArticleVO
+            ArticleVO articleVO = new ArticleVO();
+            articleVO.setId(article.getId());
+            articleVO.setArticleTitle(translatedTitle);
+            articleVO.setArticleContent(translatedContent);
+
+            return articleVO;
+        } catch (Exception e) {
+            throw new RuntimeException("获取翻译内容失败: " + e.getMessage());
+        }
+    }
+
+    /**
+     * 截取内容到指定长度
+     */
+    private String truncateContent(String content, int maxLength) {
+        if (content == null || content.length() <= maxLength) {
+            return content;
+        }
+        
+        // 移除HTML标签进行长度计算
+        String plainText = content.replaceAll("<[^>]*>", "");
+        if (plainText.length() <= maxLength) {
+            return content;
+        }
+        
+        // 截取到指定长度，尽量在句号、感叹号、问号处截断
+        String truncated = plainText.substring(0, maxLength);
+        int lastSentenceEnd = Math.max(
+            Math.max(truncated.lastIndexOf('。'), truncated.lastIndexOf('！')),
+            Math.max(truncated.lastIndexOf('？'), truncated.lastIndexOf('.'))
+        );
+        
+        if (lastSentenceEnd > maxLength * 0.7) {
+            truncated = plainText.substring(0, lastSentenceEnd + 1);
+        }
+        
+        return truncated + "...";
+    }
+
 }

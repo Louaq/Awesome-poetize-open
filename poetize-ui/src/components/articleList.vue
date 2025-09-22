@@ -17,7 +17,7 @@
     <div class="recent-post-item shadow-box background-opacity"
          v-for="(article, index) in articleList"
          :key="index"
-         @click="$router.push({path: `/article/${article.id}`})">
+         @click="goToArticle(article)">
       <!-- 封面 -->
       <div class="recent-post-item-image" :class="{ leftImage: index % 2 !== 0, rightImage: index % 2 === 0 }">
         <div class="image-container">
@@ -58,8 +58,8 @@
         </div>
         <!-- 标题 -->
         <el-tooltip placement="top" effect="light">
-          <div slot="content" v-html="article.articleTitle"></div>
-          <h3 v-html="article.articleTitle"></h3>
+          <div slot="content" v-html="getDisplayTitle(article)"></div>
+          <h3 v-html="getDisplayTitle(article)"></h3>
         </el-tooltip>
 
         <!-- 信息 -->
@@ -115,7 +115,27 @@
           </span>
         </div>
         <!-- 内容 -->
-        <div class="recent-post-desc" v-html="getSummaryDisplay(article)"></div>
+        <div class="recent-post-desc" v-html="getDisplayContent(article)"></div>
+        
+        <!-- 翻译匹配提示 -->
+        <div v-if="article.hasTranslationMatch" class="translation-match-tip">
+          <el-tag 
+            size="mini" 
+            type="info" 
+            effect="plain"
+            @click.stop="toggleTranslationView(article)"
+            class="clickable-tag"
+          >
+            {{ article.showTranslation ? '查看原文' : `查看${getLanguageName(article.matchedLanguage)}文章的匹配内容` }}
+          </el-tag>
+        </div>
+        
+        <!-- 查看原文链接 -->
+        <div v-if="article.isTranslationMatch" class="view-original">
+          <el-button type="text" size="mini" @click.stop="viewOriginal(article)">
+            <i class="el-icon-document"></i> 查看原文
+          </el-button>
+        </div>
         <!-- 分类 标签 -->
         <div class="sort-label">
           <span style="margin-right: 12px"
@@ -159,6 +179,10 @@
     props: {
       articleList: {
         type: Array
+      },
+      searchKey: {
+        type: String,
+        default: ""
       }
     },
     methods: {
@@ -169,6 +193,158 @@
         
         // 摘要为空时，回退显示文章内容截取
         return this.$common.removeMarkdown(article.articleContent);
+      },
+      
+      // 获取显示标题
+      getDisplayTitle(article) {
+        // 如果正在显示翻译内容且有翻译标题，显示翻译标题
+        if (article.showTranslation && article.translationTitle) {
+          return article.translationTitle;
+        }
+        return article.articleTitle;
+      },
+      
+      // 获取显示内容
+      getDisplayContent(article) {
+        if (this.searchKey && this.searchKey.trim()) {
+          // 如果正在显示翻译内容且有翻译内容，显示翻译内容
+          if (article.showTranslation && article.translationContent) {
+            return article.translationContent;
+          }
+          return article.articleContent || '';
+        }
+        
+        // 非搜索场景：优先显示摘要
+        return this.getSummaryDisplay(article);
+      },
+      // 获取语言名称
+      getLanguageName(languageCode) {
+        const languageMap = {
+          'en': 'English',
+          'zh': '中文',
+          'zh-TW': '繁體中文',
+          'ja': '日本語',
+          'ko': '한국어',
+          'fr': 'Français',
+          'de': 'Deutsch',
+          'es': 'Español',
+          'ru': 'Русский',
+          'pt': 'Português',
+          'it': 'Italiano',
+          'ar': 'العربية',
+          'th': 'ไทย',
+          'vi': 'Tiếng Việt'
+        };
+        return languageMap[languageCode] || languageCode;
+      },
+      
+      // 跳转到文章页面
+      goToArticle(article) {
+        const query = {};
+        if (article.isTranslationMatch && article.matchedLanguage) {
+          query.lang = article.matchedLanguage;
+        }
+        this.$router.push({
+          path: `/article/${article.id}`,
+          query: query
+        });
+      },
+      
+      // 查看原文
+      viewOriginal(article) {
+        this.$router.push(`/article/${article.id}`);
+      },
+      
+      // 切换翻译视图
+      toggleTranslationView(article) {
+        // 切换显示状态
+        this.$set(article, 'showTranslation', !article.showTranslation);
+        
+        console.log('切换翻译视图:', {
+          showTranslation: article.showTranslation,
+          hasTranslationContent: !!article.translationContent,
+          translationTitle: article.translationTitle,
+          originalTitle: article.articleTitle
+        });
+        
+        // 如果需要显示翻译内容，调用后端获取翻译匹配的内容
+        if (article.showTranslation && !article.translationContent) {
+          this.fetchTranslationContent(article);
+        }
+        
+        // 强制更新组件
+        this.$forceUpdate();
+      },
+      
+      // 获取翻译匹配的内容
+      async fetchTranslationContent(article) {
+        try {
+          // 构建查询参数
+          const queryParams = new URLSearchParams();
+          if (this.searchKey) {
+            queryParams.append('searchKey', this.searchKey);
+          }
+          if (article.matchedLanguage) {
+            queryParams.append('language', article.matchedLanguage);
+          }
+          
+          const url = `/article/translation/${article.id}${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+          console.log('请求URL:', url);
+          
+          const response = await this.$http.get(url);
+          
+          // 检查响应是否成功
+          if (response.data && (response.code === 200 || response.code === "200")) {
+            console.log('获取翻译内容成功:', response.data);
+            
+            // 使用 Vue.set 确保响应式更新
+            this.$set(article, 'translationContent', response.data.articleContent);
+            this.$set(article, 'translationTitle', response.data.articleTitle);
+            
+            // 等待下一个 tick 再强制更新
+            this.$nextTick(() => {
+              this.$forceUpdate();
+              console.log('强制更新完成');
+            });
+          } else {
+            console.error('响应码不是200:', {
+              code: response.data.code,
+              codeType: typeof response.code,
+              fullData: response.data
+            });
+          }
+        } catch (error) {
+          console.error('获取翻译内容失败:', error);
+          this.$message.error('获取翻译内容失败');
+        }
+      },
+      
+      // 获取显示标题
+      getDisplayTitle(article) {
+        const result = (article.showTranslation && article.translationTitle) ? 
+          article.translationTitle : article.articleTitle;
+        
+        console.log('getDisplayTitle:', {
+          showTranslation: article.showTranslation,
+          hasTranslationTitle: !!article.translationTitle,
+          result: result
+        });
+        
+        return result;
+      },
+      
+      // 获取显示内容
+      getDisplayContent(article) {
+        const result = (article.showTranslation && article.translationContent) ? 
+          article.translationContent : article.articleContent;
+        
+        console.log('getDisplayContent:', {
+          showTranslation: article.showTranslation,
+          hasTranslationContent: !!article.translationContent,
+          resultLength: result ? result.length : 0
+        });
+        
+        return result;
       }
     }
   }
@@ -386,5 +562,51 @@
     box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.15);
   }
 
-  /* 更多样式 */
+  /* 翻译匹配提示样式 */
+  .translation-match-tip {
+    margin-top: 8px;
+    margin-bottom: 5px;
+  }
+  
+  .translation-match-tip .el-tag {
+    font-size: 11px;
+    border-radius: 12px;
+    padding: 2px 8px;
+    background-color: rgba(64, 158, 255, 0.1);
+    border-color: rgba(64, 158, 255, 0.2);
+    color: #409eff;
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+  }
+
+  .translation-match-tip .el-tag:hover {
+    background-color: rgba(64, 158, 255, 0.2);
+    border-color: rgba(64, 158, 255, 0.4);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(64, 158, 255, 0.3);
+  }
+
+  .translation-match-tip .clickable-tag {
+    user-select: none;
+  }
+
+  /* 查看原文按钮样式 */
+  .view-original {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--lightGray);
+  }
+
+  .view-original .el-button {
+    color: var(--greyFont);
+    font-size: 12px;
+    padding: 0;
+  }
+
+  .view-original .el-button:hover {
+    color: var(--themeBackground);
+  }
 </style>

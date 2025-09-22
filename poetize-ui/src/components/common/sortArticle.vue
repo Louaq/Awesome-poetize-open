@@ -48,7 +48,7 @@
         </el-tooltip>
 
         <!-- 信息 -->
-        <div class="post-meta" style="margin-bottom: 10px">
+        <div class="post-meta" style="margin-bottom: 8px">
           <span>
             <svg viewBox="0 0 1024 1024" width="14" height="14" style="vertical-align: -2px;">
               <path d="M14.656 512a497.344 497.344 0 1 0 994.688 0 497.344 497.344 0 1 0-994.688 0z"
@@ -204,8 +204,8 @@
     text-overflow: ellipsis;
     overflow: hidden;
     max-width: 100%;
-    margin-top: 15px;
-    margin-bottom: 15px;
+    margin-top: 13px;
+    margin-bottom: 13px;
   }
 
   .post-meta {

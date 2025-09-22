@@ -19,10 +19,11 @@ import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
 import jakarta.annotation.PostConstruct;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.stream.Collectors;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 
 @Slf4j
@@ -48,6 +49,9 @@ public class CommonQuery {
 
     @Autowired
     private FamilyMapper familyMapper;
+
+    @Autowired
+    private ArticleTranslationMapper articleTranslationMapper;
 
     @Autowired
     private CacheService cacheService;
@@ -321,9 +325,18 @@ public class CommonQuery {
     }
 
     public List<List<Integer>> getArticleIds(String searchText) {
+        // 如果搜索文本为空，返回空结果
+        if (!StringUtils.hasText(searchText)) {
+            return Arrays.asList(new ArrayList<>(), new ArrayList<>());
+        }
+        
+        // 检测是否为正则表达式（以 / 开头和结尾）
+        boolean isRegex = searchText.startsWith("/") && searchText.endsWith("/") && searchText.length() > 2;
+        String actualSearchText = isRegex ? searchText.substring(1, searchText.length() - 1) : searchText;
+        
         // 限制文章搜索关键词长度，避免过长搜索导致性能问题
-        if (StringUtils.hasText(searchText) && searchText.length() > 50) {
-            searchText = searchText.substring(0, 50);
+        if (actualSearchText.length() > 50) {
+            actualSearchText = actualSearchText.substring(0, 50);
         }
         
         // 使用Redis缓存替换PoetryCache
@@ -337,42 +350,288 @@ public class CommonQuery {
         
         // 直接在数据库层面执行搜索，避免加载所有文章内容到内存
         List<List<Integer>> ids = new ArrayList<>();
-        List<Integer> titleIds = new ArrayList<>();
-        List<Integer> contentIds = new ArrayList<>();
+        Set<Integer> titleIds = new HashSet<>();
+        Set<Integer> contentIds = new HashSet<>();
 
-        if (StringUtils.hasText(searchText)) {
-            // 搜索标题包含关键词的文章ID
-            LambdaQueryChainWrapper<Article> titleWrapper = new LambdaQueryChainWrapper<>(articleMapper);
-            titleIds = titleWrapper
-                    .select(Article::getId)
-                    .eq(Article::getDeleted, false)
-                    .like(Article::getArticleTitle, searchText)
-                    .last("LIMIT 100") // 限制结果数量
-                    .list()
-                    .stream()
-                    .map(Article::getId)
-                    .collect(Collectors.toList());
-            
-            // 搜索内容包含关键词的文章ID
-            LambdaQueryChainWrapper<Article> contentWrapper = new LambdaQueryChainWrapper<>(articleMapper);
-            contentIds = contentWrapper
-                    .select(Article::getId)
-                    .eq(Article::getDeleted, false)
-                    .like(Article::getArticleContent, searchText)
-                    .last("LIMIT 100") // 限制结果数量
-                    .list()
-                    .stream()
-                    .map(Article::getId)
-                    .collect(Collectors.toList());
+        if (StringUtils.hasText(actualSearchText)) {
+            if (isRegex) {
+                // 正则表达式搜索
+                searchWithRegex(actualSearchText, titleIds, contentIds);
+            } else {
+                // 普通文本搜索
+                searchWithText(actualSearchText, titleIds, contentIds);
+            }
         }
 
-        ids.add(titleIds);
-        ids.add(contentIds);
+        // 转换为List并添加到结果中
+        ids.add(new ArrayList<>(titleIds));
+        ids.add(new ArrayList<>(contentIds));
 
         // 缓存搜索结果10分钟
         cacheService.set(cacheKey, ids, 600);
 
         return ids;
+    }
+
+    /**
+     * 普通文本搜索
+     */
+    private void searchWithText(String searchText, Set<Integer> titleIds, Set<Integer> contentIds) {
+        // 1. 搜索原文标题包含关键词的文章ID
+        LambdaQueryChainWrapper<Article> titleWrapper = new LambdaQueryChainWrapper<>(articleMapper);
+        List<Integer> originalTitleIds = titleWrapper
+                .select(Article::getId)
+                .eq(Article::getDeleted, false)
+                .like(Article::getArticleTitle, searchText)
+                .last("LIMIT 100") // 限制结果数量
+                .list()
+                .stream()
+                .map(Article::getId)
+                .collect(Collectors.toList());
+        titleIds.addAll(originalTitleIds);
+        
+        // 2. 搜索原文内容包含关键词的文章ID
+        LambdaQueryChainWrapper<Article> contentWrapper = new LambdaQueryChainWrapper<>(articleMapper);
+        List<Integer> originalContentIds = contentWrapper
+                .select(Article::getId)
+                .eq(Article::getDeleted, false)
+                .like(Article::getArticleContent, searchText)
+                .last("LIMIT 100") // 限制结果数量
+                .list()
+                .stream()
+                .map(Article::getId)
+                .collect(Collectors.toList());
+        contentIds.addAll(originalContentIds);
+        
+        // 3. 搜索翻译标题包含关键词的文章ID
+        try {
+            LambdaQueryChainWrapper<ArticleTranslation> translationTitleWrapper = new LambdaQueryChainWrapper<>(articleTranslationMapper);
+            List<Integer> translationTitleIds = translationTitleWrapper
+                    .select(ArticleTranslation::getArticleId)
+                    .like(ArticleTranslation::getTitle, searchText)
+                    .last("LIMIT 100") // 限制结果数量
+                    .list()
+                    .stream()
+                    .map(ArticleTranslation::getArticleId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            
+            // 验证这些文章ID对应的文章是否存在且未删除
+            if (!translationTitleIds.isEmpty()) {
+                LambdaQueryChainWrapper<Article> validationWrapper = new LambdaQueryChainWrapper<>(articleMapper);
+                List<Integer> validTitleIds = validationWrapper
+                        .select(Article::getId)
+                        .in(Article::getId, translationTitleIds)
+                        .eq(Article::getDeleted, false)
+                        .list()
+                        .stream()
+                        .map(Article::getId)
+                        .collect(Collectors.toList());
+                titleIds.addAll(validTitleIds);
+            }
+        } catch (Exception e) {
+            log.warn("搜索翻译标题时出错，跳过翻译标题搜索: {}", e.getMessage());
+        }
+        
+        // 4. 搜索翻译内容包含关键词的文章ID
+        try {
+            LambdaQueryChainWrapper<ArticleTranslation> translationContentWrapper = new LambdaQueryChainWrapper<>(articleTranslationMapper);
+            List<Integer> translationContentIds = translationContentWrapper
+                    .select(ArticleTranslation::getArticleId)
+                    .like(ArticleTranslation::getContent, searchText)
+                    .last("LIMIT 100") // 限制结果数量
+                    .list()
+                    .stream()
+                    .map(ArticleTranslation::getArticleId)
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toList());
+            
+            // 验证这些文章ID对应的文章是否存在且未删除
+            if (!translationContentIds.isEmpty()) {
+                LambdaQueryChainWrapper<Article> validationWrapper = new LambdaQueryChainWrapper<>(articleMapper);
+                List<Integer> validContentIds = validationWrapper
+                        .select(Article::getId)
+                        .in(Article::getId, translationContentIds)
+                        .eq(Article::getDeleted, false)
+                        .list()
+                        .stream()
+                        .map(Article::getId)
+                        .collect(Collectors.toList());
+                contentIds.addAll(validContentIds);
+            }
+        } catch (Exception e) {
+            log.warn("搜索翻译内容时出错，跳过翻译内容搜索: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 正则表达式搜索
+     */
+    private void searchWithRegex(String regexPattern, Set<Integer> titleIds, Set<Integer> contentIds) {
+        try {
+            // 验证正则表达式是否有效
+            Pattern.compile(regexPattern);
+            
+            // 使用MySQL的REGEXP进行数据库层面的正则搜索
+            // 1. 搜索原文标题
+            try {
+                LambdaQueryChainWrapper<Article> titleWrapper = new LambdaQueryChainWrapper<>(articleMapper);
+                List<Integer> originalTitleIds = titleWrapper
+                        .select(Article::getId)
+                        .eq(Article::getDeleted, false)
+                        .last("AND article_title REGEXP '" + regexPattern.replace("'", "\\'") + "' LIMIT 100")
+                        .list()
+                        .stream()
+                        .map(Article::getId)
+                        .collect(Collectors.toList());
+                titleIds.addAll(originalTitleIds);
+            } catch (Exception e) {
+                log.warn("正则搜索原文标题时出错: {}", e.getMessage());
+            }
+            
+            // 2. 搜索原文内容
+            try {
+                LambdaQueryChainWrapper<Article> contentWrapper = new LambdaQueryChainWrapper<>(articleMapper);
+                List<Integer> originalContentIds = contentWrapper
+                        .select(Article::getId)
+                        .eq(Article::getDeleted, false)
+                        .last("AND article_content REGEXP '" + regexPattern.replace("'", "\\'") + "' LIMIT 100")
+                        .list()
+                        .stream()
+                        .map(Article::getId)
+                        .collect(Collectors.toList());
+                contentIds.addAll(originalContentIds);
+            } catch (Exception e) {
+                log.warn("正则搜索原文内容时出错: {}", e.getMessage());
+            }
+            
+            // 3. 搜索翻译标题
+            try {
+                LambdaQueryChainWrapper<ArticleTranslation> translationTitleWrapper = new LambdaQueryChainWrapper<>(articleTranslationMapper);
+                List<Integer> translationTitleIds = translationTitleWrapper
+                        .select(ArticleTranslation::getArticleId)
+                        .last("WHERE title REGEXP '" + regexPattern.replace("'", "\\'") + "' LIMIT 100")
+                        .list()
+                        .stream()
+                        .map(ArticleTranslation::getArticleId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
+                
+                // 验证这些文章ID对应的文章是否存在且未删除
+                if (!translationTitleIds.isEmpty()) {
+                    LambdaQueryChainWrapper<Article> validationWrapper = new LambdaQueryChainWrapper<>(articleMapper);
+                    List<Integer> validTitleIds = validationWrapper
+                            .select(Article::getId)
+                            .in(Article::getId, translationTitleIds)
+                            .eq(Article::getDeleted, false)
+                            .list()
+                            .stream()
+                            .map(Article::getId)
+                            .collect(Collectors.toList());
+                    titleIds.addAll(validTitleIds);
+                }
+            } catch (Exception e) {
+                log.warn("正则搜索翻译标题时出错: {}", e.getMessage());
+            }
+            
+            // 4. 搜索翻译内容
+            try {
+                LambdaQueryChainWrapper<ArticleTranslation> translationContentWrapper = new LambdaQueryChainWrapper<>(articleTranslationMapper);
+                List<Integer> translationContentIds = translationContentWrapper
+                        .select(ArticleTranslation::getArticleId)
+                        .last("WHERE content REGEXP '" + regexPattern.replace("'", "\\'") + "' LIMIT 100")
+                        .list()
+                        .stream()
+                        .map(ArticleTranslation::getArticleId)
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toList());
+                
+                // 验证这些文章ID对应的文章是否存在且未删除
+                if (!translationContentIds.isEmpty()) {
+                    LambdaQueryChainWrapper<Article> validationWrapper = new LambdaQueryChainWrapper<>(articleMapper);
+                    List<Integer> validContentIds = validationWrapper
+                            .select(Article::getId)
+                            .in(Article::getId, translationContentIds)
+                            .eq(Article::getDeleted, false)
+                            .list()
+                            .stream()
+                            .map(Article::getId)
+                            .collect(Collectors.toList());
+                    contentIds.addAll(validContentIds);
+                }
+            } catch (Exception e) {
+                log.warn("正则搜索翻译内容时出错: {}", e.getMessage());
+            }
+            
+        } catch (PatternSyntaxException e) {
+            log.warn("无效的正则表达式: {}, 错误: {}", regexPattern, e.getMessage());
+            // 如果正则表达式无效，回退到普通文本搜索
+            searchWithText(regexPattern, titleIds, contentIds);
+        } catch (Exception e) {
+            log.warn("正则搜索时发生异常: {}, 回退到普通文本搜索", e.getMessage());
+            // 如果数据库不支持REGEXP，回退到普通文本搜索
+            searchWithText(regexPattern, titleIds, contentIds);
+        }
+    }
+
+    /**
+     * 检查文章是否匹配翻译内容
+     */
+    public String getMatchedTranslationLanguage(Integer articleId, String searchText) {
+        if (articleId == null || !StringUtils.hasText(searchText)) {
+            return null;
+        }
+        
+        try {
+            LambdaQueryChainWrapper<ArticleTranslation> wrapper = 
+                new LambdaQueryChainWrapper<>(articleTranslationMapper);
+            
+            List<ArticleTranslation> translations = wrapper
+                .eq(ArticleTranslation::getArticleId, articleId)
+                .and(w -> w.like(ArticleTranslation::getTitle, searchText)
+                          .or()
+                          .like(ArticleTranslation::getContent, searchText))
+                .list();
+                
+            return translations.isEmpty() ? null : translations.get(0).getLanguage();
+        } catch (Exception e) {
+            log.warn("检查翻译匹配失败，文章ID: {}, 搜索词: {}, 错误: {}", articleId, searchText, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * 获取匹配的翻译内容
+     */
+    public Map<String, String> getMatchedTranslation(Integer articleId, String searchText, String language) {
+        if (articleId == null || !StringUtils.hasText(searchText) || !StringUtils.hasText(language)) {
+            return null;
+        }
+        
+        try {
+            LambdaQueryChainWrapper<ArticleTranslation> wrapper = 
+                new LambdaQueryChainWrapper<>(articleTranslationMapper);
+            
+            ArticleTranslation translation = wrapper
+                .eq(ArticleTranslation::getArticleId, articleId)
+                .eq(ArticleTranslation::getLanguage, language)
+                .and(w -> w.like(ArticleTranslation::getTitle, searchText)
+                          .or()
+                          .like(ArticleTranslation::getContent, searchText))
+                .one();
+                
+            if (translation != null) {
+                Map<String, String> result = new HashMap<>();
+                result.put("language", translation.getLanguage());
+                result.put("title", translation.getTitle());
+                result.put("content", translation.getContent());
+                return result;
+            }
+        } catch (Exception e) {
+            log.warn("获取匹配翻译内容失败，文章ID: {}, 语言: {}, 错误: {}", articleId, language, e.getMessage());
+        }
+        
+        return null;
     }
 
     public List<Sort> getSortInfo() {
