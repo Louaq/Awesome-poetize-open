@@ -535,21 +535,6 @@ public class ArticleController {
     }
 
     /**
-     * 获取翻译语言配置
-     */
-    @GetMapping("/getTranslationConfig")
-    public PoetryResult<Map<String, String>> getTranslationConfig() {
-        try {
-            // 获取翻译语言配置
-            Map<String, String> config = translationService.getTranslationLanguageConfig();
-            return PoetryResult.success(config);
-        } catch (Exception e) {
-            log.error("获取翻译语言配置失败", e);
-            return PoetryResult.fail("获取翻译语言配置失败：" + e.getMessage());
-        }
-    }
-
-    /**
      * 获取文章翻译
      */
     @GetMapping("/getTranslation")

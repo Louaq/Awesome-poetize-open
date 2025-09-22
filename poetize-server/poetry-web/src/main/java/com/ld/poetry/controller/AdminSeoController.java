@@ -35,19 +35,6 @@ public class AdminSeoController {
         }
     }
 
-    /**
-     * 更新SEO数据
-     */
-    @PostMapping("/updateSeoData")
-    @LoginCheck(1)
-    public PoetryResult updateSeoData() {
-        try {
-            return callPythonSeoApi("POST", "/seo/updateSeoData", new HashMap<>());
-        } catch (Exception e) {
-            log.error("更新SEO数据失败", e);
-            return PoetryResult.fail("更新SEO数据失败：" + e.getMessage());
-        }
-    }
 
     /**
      * 分析站点SEO

@@ -60,7 +60,11 @@
           <div class="section-content">
             <div class="language-config-row">
               <el-form-item label="默认源语言" class="language-item">
-                <el-select v-model="apiConfig.defaultSourceLang" placeholder="请选择默认源语言" class="language-select">
+                <el-select 
+                  v-model="apiConfig.defaultSourceLang" 
+                  placeholder="请选择默认源语言" 
+                  class="language-select"
+                  :disabled="hasArticles">
                   <el-option label="自动检测" value="auto">
                     <span class="option-content">
                       自动检测
@@ -112,6 +116,19 @@
                     </span>
                   </el-option>
                 </el-select>
+                
+                <!-- 源语言保护提示 -->
+                <div v-if="hasArticles" class="source-lang-warning">
+                  <el-alert
+                    title="源语言已锁定"
+                    type="warning"
+                    :closable="false"
+                    show-icon>
+                    <template slot="default">
+                      系统中已有文章数据，为保证数据一致性，源语言配置已被锁定，无法修改。
+                    </template>
+                  </el-alert>
+                </div>
 
               </el-form-item>
               
@@ -475,15 +492,12 @@
         <!-- 操作按钮 -->
         <div class="action-bar">
           <el-button type="primary" @click="saveApiConfig" class="action-btn primary-btn">
-            <i class="el-icon-check"></i>
             保存配置
           </el-button>
           <el-button @click="getApiConfig" class="action-btn">
-            <i class="el-icon-refresh"></i>
             刷新配置
           </el-button>
           <el-button type="success" @click="testTranslation" class="action-btn success-btn">
-            <i class="el-icon-s-promotion"></i>
             测试翻译
           </el-button>
         </div>
@@ -688,6 +702,7 @@ export default {
       testTranslationLoading: false,
       testSummaryLoading: false,
       testSummaryDialogVisible: false,
+      hasArticles: false, // 是否存在文章数据
       testSummaryForm: {
         content: `# Vue.js入门指南
 
@@ -709,6 +724,7 @@ Vue.js具有响应式数据绑定和组件化的特性，这使得开发者可�
   },
   created() {
     this.getApiConfig();
+    this.checkArticlesExist();
   },
   computed: {
     needsApiKey() {
@@ -955,9 +971,46 @@ Vue.js具有响应式数据绑定和组件化的特性，这使得开发者可�
         }
       } catch (error) {
         console.error('保存API配置失败:', error);
+        
+        // 检查是否是源语言修改被拒绝的错误
+        if (error.response && error.response.data && error.response.data.message) {
+          const errorMessage = error.response.data.message;
+          if (errorMessage.includes('源语言配置') || errorMessage.includes('文章数据')) {
+            this.$message.error(errorMessage);
+            // 重新检查文章状态
+            this.checkArticlesExist();
+            return;
+          }
+        }
+        
         this.$message.error('保存失败，请检查网络连接');
       } finally {
         this.loading = false;
+      }
+    },
+    
+    // 检查是否存在文章数据
+    async checkArticlesExist() {
+      try {
+        const response = await this.$http.post(this.$constant.baseURL + '/article/listArticle', {
+          pageSize: 1,
+          pageNum: 1,
+          current: 1,
+          size: 1
+        });
+        
+        if (response && response.code === 200 && response.data) {
+          // 检查是否有文章数据
+          this.hasArticles = response.data.total > 0;
+          
+          if (this.hasArticles) {
+            console.log('检测到系统中已有文章数据，源语言配置将被锁定');
+          }
+        }
+      } catch (error) {
+        console.error('检查文章数据失败:', error);
+        // 检查失败时保守处理，假设有文章数据
+        this.hasArticles = true;
       }
     },
     // 测试翻译相关方法
@@ -1702,5 +1755,39 @@ Vue.js具有响应式数据绑定和组件化的特性，这使得开发者可�
   line-height: 40px;
   font-size: 16px;
   color: var(--black);
+}
+
+/* 源语言保护警告样式 */
+.source-lang-warning {
+  margin-top: 12px;
+}
+
+.source-lang-warning .el-alert {
+  border-radius: 4px;
+  padding: 12px 16px;
+}
+
+.source-lang-warning .el-alert__title {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.source-lang-warning .el-alert__content {
+  font-size: 12px;
+  line-height: 1.4;
+  margin-top: 4px;
+}
+
+/* 禁用状态的选择器样式 */
+.language-select.is-disabled .el-input__inner {
+  background-color: #f5f7fa !important;
+  border-color: #e4e7ed !important;
+  color: #c0c4cc !important;
+  cursor: not-allowed !important;
+}
+
+.language-select.is-disabled .el-input__suffix {
+  color: #c0c4cc !important;
 }
 </style>

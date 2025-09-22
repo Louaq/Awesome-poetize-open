@@ -155,6 +155,52 @@ class TranslationManager:
         except Exception:
             return 0
 
+    def _has_articles(self) -> bool:
+        """检查系统中是否已有文章数据"""
+        try:
+            import httpx
+            from config import JAVA_BACKEND_URL
+            from auth_decorator import get_auth_headers
+            
+            headers = get_auth_headers()
+            headers.update({
+                'X-Internal-Service': 'poetize-python',
+                'User-Agent': 'poetize-python/1.0.0'
+            })
+            
+            # 请求文章列表，只获取第一页的一条记录来检查是否有数据
+            request_data = {
+                "pageSize": 1,
+                "pageNum": 1,
+                "current": 1,
+                "size": 1
+            }
+            
+            with httpx.Client(timeout=10) as client:
+                response = client.post(
+                    f"{JAVA_BACKEND_URL}/article/listArticle",
+                    json=request_data,
+                    headers=headers
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    # 检查是否有文章数据
+                    if data.get('code') == 200 and data.get('data'):
+                        records = data['data'].get('records', [])
+                        total = data['data'].get('total', 0)
+                        has_articles = len(records) > 0 or total > 0
+                        logger.info(f"文章数据检查结果: 总数={total}, 当前页记录数={len(records)}, 有文章={has_articles}")
+                        return has_articles
+                    
+            logger.warning("检查文章数据时未获取到有效响应，默认认为无文章")
+            return False
+            
+        except Exception as e:
+            logger.error(f"检查文章数据失败: {e}")
+            # 出错时为了安全起见，假设有文章数据，阻止修改源语言
+            return True
+
     def _is_cache_valid(self, file_mtime: float) -> bool:
         """检查缓存是否有效 - 基于文件修改时间的精确检测
 
@@ -380,6 +426,14 @@ class TranslationManager:
             if os.path.exists(self.config_file):
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     original_data = json.load(f)
+            
+            # 检查是否要修改源语言，如果系统中已有文章则不允许修改
+            if original_data.get('default_source_lang') and \
+               data.get('default_source_lang') != original_data.get('default_source_lang'):
+                # 检查系统中是否已有文章
+                if self._has_articles():
+                    logger.warning(f"系统中已有文章数据，不允许修改源语言从 {original_data.get('default_source_lang')} 到 {data.get('default_source_lang')}")
+                    raise ValueError("系统中已有文章数据，不允许修改源语言配置。修改源语言会导致现有文章的语言标识混乱，影响SEO和翻译关系。")
             
             # 处理百度翻译配置的加密
             if data.get('baidu'):
@@ -1259,6 +1313,13 @@ def register_translation_api(app):
                     'code': 500,
                     'message': '配置保存失败'
                 }
+        except ValueError as e:
+            # 处理业务逻辑错误（如不允许修改源语言）
+            logger.warning(f"翻译配置保存被拒绝: {e}")
+            return {
+                'code': 400,
+                'message': str(e)
+            }
         except Exception as e:
             logger.error(f"保存翻译配置失败: {e}")
             return {

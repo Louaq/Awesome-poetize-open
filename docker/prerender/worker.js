@@ -583,16 +583,15 @@ const md = new MarkdownIt({breaks: true}).use(require('markdown-it-multimd-table
  */
 async function getSourceLanguage() {
   try {
-    logger.debug('从Java后端获取源语言配置');
-    const res = await axios.get(`${JAVA_BACKEND_URL}/article/getTranslationConfig`, {
-      timeout: 5000,
-      headers: INTERNAL_SERVICE_HEADERS
+    logger.debug('从Python后端获取源语言配置');
+    const res = await axios.get(`${PYTHON_BACKEND_URL}/api/translation/default-lang`, {
+      timeout: 5000
     });
 
     if (res.data && res.data.code === 200 && res.data.data) {
-      const sourceLanguage = res.data.data.source || 'zh';
+      const sourceLanguage = res.data.data.default_source_lang || 'zh';
 
-      logger.debug('已从Java后端获取源语言配置', {
+      logger.debug('已从Python后端获取源语言配置', {
         sourceLanguage,
         responseCode: res.data.code,
         fullConfig: res.data.data
@@ -600,17 +599,17 @@ async function getSourceLanguage() {
 
       return sourceLanguage;
     } else {
-      logger.warn('Java翻译配置API响应格式无效', {
+      logger.warn('Python翻译配置API响应格式无效', {
         responseCode: res.data?.code,
         hasData: !!res.data?.data
       });
     }
   } catch (error) {
-    logger.warn('从Java后端获取源语言配置失败，使用默认配置', {
+    logger.warn('从Python后端获取源语言配置失败，使用默认配置', {
       error: error.message,
       status: error.response?.status,
       statusText: error.response?.statusText,
-      url: `${JAVA_BACKEND_URL}/article/getTranslationConfig`
+      url: `${PYTHON_BACKEND_URL}/api/translation/default-lang`
     });
   }
 
@@ -1070,6 +1069,7 @@ function buildHtmlTemplate({ title, meta, content, lang, pageType = 'article' })
   // 使用 JSDOM 解析 HTML
   const dom = new JSDOM(templateHtml);
   const document = dom.window.document;
+  const Node = dom.window.Node; // 获取Node对象
 
   // 设置语言属性
   document.documentElement.setAttribute('lang', lang);

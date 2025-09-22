@@ -885,29 +885,20 @@ Sitemap: /sitemap.xml"
           <el-button 
             type="primary" 
             @click="saveSeoConfig" 
-            :loading="loading"
-            class="simple-action-btn">
+            :loading="loading">
             {{ loading ? '保存中...' : '保存配置' }}
           </el-button>
           
-          <el-button 
-            @click="updateSeoData" 
-            :loading="updateLoading"
-            class="simple-action-btn">
-            {{ updateLoading ? '更新中...' : '更新数据' }}
-          </el-button>
-          
+
           <el-button 
             @click="analyzeSite" 
-            :loading="analyzeLoading"
-            class="simple-action-btn">
+            :loading="analyzeLoading">
             {{ analyzeLoading ? '分析中...' : 'SEO分析' }}
           </el-button>
           
           <el-dropdown @command="handleAiCommand" placement="bottom">
             <el-button 
-              :loading="aiAnalyzeLoading"
-              class="simple-action-btn ai-btn">
+              :loading="aiAnalyzeLoading">
               {{ aiAnalyzeLoading ? '分析中...' : 'AI分析' }}
               <span class="el-dropdown-link-suffix">▼</span>
             </el-button>
@@ -1407,7 +1398,7 @@ export default {
         custom_head_code: ""
       },
       loading: false,
-      updateLoading: false,
+
       analyzeLoading: false,
       aiAnalyzeLoading: false,
       apiConfigLoading: false,
@@ -1583,7 +1574,7 @@ export default {
       const enableStatus = status === undefined ? false : !!status;
       console.log('开始保存SEO开关状态:', enableStatus);
       
-      this.$http.post(this.$constant.pythonBaseURL + '/seo/updateEnableStatus', {
+      this.$http.post(this.$constant.baseURL + '/admin/updateSeoEnableStatus', {
         enable: enableStatus
       }, true)
       .then(res => {
@@ -1686,27 +1677,7 @@ export default {
         });
     },
     
-    updateSeoData() {
-      this.updateLoading = true;
-      console.log('正在更新SEO数据...');
-      this.$http.post(this.$constant.baseURL + '/admin/seo/updateSeoData', {}, true)
-        .then((res) => {
-          this.updateLoading = false;
-          console.log('更新SEO数据响应:', res);
-          if (res && res.code === 200) {
-            this.$message.success('更新SEO数据成功');
-          } else {
-            console.error('更新SEO数据失败，响应数据异常:', res);
-            this.$message.error(res ? res.message || '更新SEO数据失败' : '响应数据为空');
-          }
-        })
-        .catch((error) => {
-          this.updateLoading = false;
-          console.error('更新SEO数据失败:', error);
-          this.$message.error('更新SEO数据失败: ' + (error.message || '网络连接问题'));
-        });
-    },
-    
+
     analyzeSite() {
       this.analyzeLoading = true;
       console.log('正在进行SEO分析...');
@@ -3198,26 +3169,6 @@ export default {
     border: 1px solid rgba(0, 0, 0, 0.05);
   }
   
-  .simple-action-btn {
-    min-width: 100px;
-    height: 36px;
-    border-radius: 18px;
-    font-size: 14px;
-    font-weight: 500;
-    transition: all 0.3s ease;
-  }
-  
-  .ai-btn {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: none;
-    color: white;
-  }
-  
-  .ai-btn:hover {
-    background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%);
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-  }
   
   .el-dropdown-link-suffix {
     margin-left: 6px;
@@ -3601,11 +3552,6 @@ export default {
     .seo-actions-container {
       flex-direction: column;
       gap: 12px;
-    }
-    
-    .simple-action-btn {
-      width: 100%;
-      min-width: auto;
     }
     
     /* 地址操作按钮移动端适配 */

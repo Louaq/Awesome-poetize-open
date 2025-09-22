@@ -623,25 +623,10 @@ async def generate_article_meta_tags(article_id, lang=None):
         # 获取默认源语言
         default_source_lang = 'zh'  # 默认值
         try:
-            client = await http_client_pool.get_client()
-            headers = get_auth_headers()
-            headers.update({
-                'X-Internal-Service': 'poetize-python',
-                'User-Agent': 'poetize-python/1.0.0'
-            })
-            
-            default_lang_response = await client.get(
-                f"{PYTHON_BACKEND_URL}/api/translation/default-lang",
-                headers=headers,
-                timeout=5
-            )
-            
-            if default_lang_response.status_code == 200:
-                default_lang_data = default_lang_response.json()
-                if default_lang_data.get('success') and default_lang_data.get('data'):
-                    default_source_lang = default_lang_data['data'].get('source_lang', 'zh')
-                    logger.info(f"获取到默认源语言: {default_source_lang}")
-            
+            from translation_api import translation_manager
+            default_config = translation_manager.get_default_languages()
+            default_source_lang = default_config.get('default_source_lang', 'zh')
+            logger.info(f"获取到默认源语言: {default_source_lang}")
         except Exception as e:
             logger.warning(f"获取默认源语言失败: {str(e)}，使用默认值 zh")
 
@@ -2267,22 +2252,8 @@ def register_seo_api(app: FastAPI):
                 except Exception as e:
                     logger.error(f"清理预渲染服务SEO配置缓存失败: {str(e)}")
                 
-                # 触发首页预渲染（SEO配置更新后需要更新首页内容）
-                try:
-                    logger.info("正在触发首页预渲染...")
-                    async with httpx.AsyncClient(verify=False) as client:
-                        prerender_response = await client.post(
-                            f"{prerender_url}/render/pages",
-                            json={"type": "home"},
-                            timeout=10
-                        )
-                    if prerender_response.status_code == 200:
-                        logger.info("首页预渲染触发成功")
-                    else:
-                        logger.warning(f"首页预渲染触发失败，状态码: {prerender_response.status_code}, 响应: {prerender_response.text}")
-                except Exception as e:
-                    logger.error(f"触发首页预渲染失败: {str(e)}")
-                    # 不影响SEO配置保存的成功响应
+                # 更新网站地图和robots.txt后，Java端会自动触发完整预渲染
+                logger.info("SEO配置更新完成，Java端将自动触发完整预渲染")
 
                 return JSONResponse({"code": 200, "message": "更新SEO配置成功", "data": current_config})
             else:
@@ -2353,23 +2324,6 @@ def register_seo_api(app: FastAPI):
                     logger.info(f"预渲染服务SEO配置缓存清理结果: {'成功' if cache_response.status_code == 200 else f'失败,非200状态码: {cache_response.status_code}, 响应: {cache_response.text}'}")
                 except Exception as e:
                     logger.error(f"清理预渲染服务SEO配置缓存失败: {str(e)}")
-                
-                # 触发首页预渲染（SEO开关状态变更后需要更新首页内容）
-                try:
-                    logger.info("正在触发首页预渲染...")
-                    async with httpx.AsyncClient(verify=False) as client:
-                        prerender_response = await client.post(
-                            f"{prerender_url}/render/pages",
-                            json={"type": "home"},
-                            timeout=10
-                        )
-                    if prerender_response.status_code == 200:
-                        logger.info("首页预渲染触发成功")
-                    else:
-                        logger.warning(f"首页预渲染触发失败，状态码: {prerender_response.status_code}, 响应: {prerender_response.text}")
-                except Exception as e:
-                    logger.error(f"触发首页预渲染失败: {str(e)}")
-                    # 不影响SEO开关状态保存的成功响应
                 
                 return JSONResponse({"code": 200, "message": "SEO开关状态更新成功", "data": {"enable": enable_status}})
             else:
@@ -2601,30 +2555,7 @@ def register_seo_api(app: FastAPI):
             logger.error(f"获取robots.txt出错: {str(e)}")
             return JSONResponse({"code": 500, "message": f"获取robots.txt出错: {str(e)}", "data": None})
     
-    # 手动更新SEO数据
-    @app.post('/seo/updateSeoData')
-    async def update_seo_data_api(request: Request, _: bool = Depends(admin_required)):
-        # 检查SEO是否启用
-        config = await get_seo_config()
-        if not config.get('enable', False):
-            return JSONResponse({"code": 403, "message": "SEO功能未启用"}, status_code=403)
-            
-        try:
-            sitemap = await generate_sitemap()
-            robots = await generate_robots_txt()
-            
-            return JSONResponse({
-                "code": 200, 
-                "message": "更新SEO数据成功", 
-                "data": {
-                    "sitemap_generated": sitemap is not None,
-                    "robots_generated": robots is not None
-                }
-            })
-        except Exception as e:
-            logger.error(f"更新SEO数据出错: {str(e)}")
-            return JSONResponse({"code": 500, "message": f"更新SEO数据出错: {str(e)}", "data": None})
-    
+
     # 百度推送API
     @app.post('/seo/baiduPush')
     async def baidu_push_api(request: Request):
@@ -2872,11 +2803,9 @@ def register_seo_api(app: FastAPI):
                     # 获取默认源语言
                     default_source_lang = 'zh'  # 默认值
                     try:
-                        async with httpx.AsyncClient() as client:
-                            default_lang_response = await client.get(f"{JAVA_BACKEND_URL}/api/translation/default-lang")
-                            default_lang_data = default_lang_response.json()
-                            if default_lang_data.get('success') and default_lang_data.get('data'):
-                                default_source_lang = default_lang_data['data'].get('source_lang', 'zh')
+                        from translation_api import translation_manager
+                        default_config = translation_manager.get_default_languages()
+                        default_source_lang = default_config.get('default_source_lang', 'zh')
                     except Exception as e:
                         logger.warning(f"获取默认源语言失败: {str(e)}，使用默认值 zh")
                     
@@ -2903,11 +2832,9 @@ def register_seo_api(app: FastAPI):
                     # 获取默认源语言
                     default_source_lang = 'zh'  # 默认值
                     try:
-                        async with httpx.AsyncClient() as client:
-                            default_lang_response = await client.get(f"{JAVA_BACKEND_URL}/api/translation/default-lang")
-                            default_lang_data = default_lang_response.json()
-                            if default_lang_data.get('success') and default_lang_data.get('data'):
-                                default_source_lang = default_lang_data['data'].get('source_lang', 'zh')
+                        from translation_api import translation_manager
+                        default_config = translation_manager.get_default_languages()
+                        default_source_lang = default_config.get('default_source_lang', 'zh')
                     except Exception as e:
                         logger.warning(f"获取默认源语言失败: {str(e)}，使用默认值 zh")
                     
@@ -4433,13 +4360,20 @@ def get_recent_articles(limit=5):
             'User-Agent': 'poetize-python/1.0.0'
         }
         # 使用listArticle获取文章列表，不会影响浏览量
-        response = httpx.get(f"{JAVA_BACKEND_URL}/article/listArticle?current=1&size={limit}&status=1", headers=headers)
+        request_data = {
+            "pageSize": limit,
+            "pageNum": 1,
+            "current": 1,
+            "size": limit
+        }
+        
+        response = httpx.post(f"{JAVA_BACKEND_URL}/article/listArticle", json=request_data, headers=headers)
         if response.status_code != 200:
             logger.error(f"获取文章数据失败: HTTP状态码 {response.status_code}")
             return []
             
         articles_data = response.json()
-        if not articles_data or not articles_data.get('data') or not articles_data.get('data').get('records'):
+        if not articles_data or articles_data.get('code') != 200 or not articles_data.get('data') or not articles_data.get('data').get('records'):
             logger.warning("获取文章数据成功，但无文章记录")
             return []
             

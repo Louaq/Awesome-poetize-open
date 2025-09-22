@@ -163,6 +163,13 @@ public class PoetryApplicationRunner implements ApplicationRunner {
      * 执行启动时预渲染任务
      */
     private void executeStartupPrerender() {
+        executeFullPrerender();
+    }
+
+    /**
+     * 执行完整预渲染任务（可被外部调用）
+     */
+    public void executeFullPrerender() {
         // 异步执行预渲染，避免阻塞应用启动
         new Thread(() -> {
             try {
