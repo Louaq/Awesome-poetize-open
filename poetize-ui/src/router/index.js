@@ -26,6 +26,10 @@ const routes = [
       name: "sort",
       component: () => import('../components/sort')
     }, {
+      path: "/article/:lang/:id",
+      name: "article-translated",
+      component: () => import('../components/article')
+    }, {
       path: "/article/:id",
       name: "article",
       component: () => import('../components/article')

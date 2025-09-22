@@ -825,7 +825,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                                 } else {
                                     highlightedTitle = StringUtil.highlightText(translatedTitle, searchText, highlightStart, highlightEnd);
                                 }
-                                articleVO.setMatchedTitle(highlightedTitle);
                                 articleVO.setArticleTitle(highlightedTitle); // 替换显示的标题
                             }
                             if (translatedContent != null) {
@@ -837,7 +836,6 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                                 } else {
                                     highlightedContent = StringUtil.highlightText(contentSnippet, searchText, highlightStart, highlightEnd);
                                 }
-                                articleVO.setMatchedContent(highlightedContent);
                                 articleVO.setArticleContent(highlightedContent); // 替换显示的内容
                             }
                             
@@ -877,12 +875,8 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
                         }
                         contents.add(articleVO);
                     } else if (Boolean.TRUE.equals(articleVO.getIsTranslationMatch())) {
-                        // 翻译匹配的文章，根据匹配类型分类
-                        if (articleVO.getMatchedTitle() != null) {
-                            titles.add(articleVO);
-                        } else {
-                            contents.add(articleVO);
-                        }
+                        // 翻译匹配的文章，统一添加到内容匹配列表
+                        contents.add(articleVO);
                     }
                 } else {
                     // 非搜索情况下，对内容进行默认截断处理

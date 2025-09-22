@@ -730,6 +730,7 @@
       // 更新目录按钮显示状态
       updateTocButtonVisibility() {
         // 只在文章页面显示目录按钮
+        // 支持新的URL格式：/article/id 或 /article/lang/id
         this.showTocButton = this.$route.path.startsWith('/article/') && this.$route.params.id;
       },
 
@@ -749,6 +750,7 @@
       // 更新简化语言切换按钮显示状态
       updateSimpleLangSwitchVisibility() {
         // 只在文章页面显示简化语言切换按钮
+        // 支持新的URL格式：/article/id 或 /article/lang/id
         this.showSimpleLangSwitch = this.$route.path.startsWith('/article/') && this.$route.params.id;
       },
 

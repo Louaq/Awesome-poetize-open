@@ -101,7 +101,7 @@
         </div>
         <div v-for="(article, index) in recommendArticles"
              :key="index"
-             @click="$router.push({path: `/article/${article.id}`})">
+             @click="goToArticle(article)">
           <div class="aside-post-detail">
             <div class="aside-post-image">
               <el-image lazy class="my-el-image" :src="article.articleCover" fit="cover">
@@ -251,6 +251,12 @@
       this.loadRecentSearches();
     },
     methods: {
+      // 跳转到文章页面
+      goToArticle(article) {
+        // 使用简洁格式跳转到原文
+        this.$router.push(`/article/${article.id}`);
+      },
+      
       selectSort(sort) {
         this.$emit("selectSort", sort);
       },

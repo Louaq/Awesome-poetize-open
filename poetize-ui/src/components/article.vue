@@ -324,6 +324,7 @@
     data() {
       return {
         id: this.$route.params.id,
+        lang: this.$route.params.lang,
         subscribe: false,
         article: {},
         articleContentHtml: "",
@@ -549,16 +550,22 @@
       scrollTop(scrollTop, oldScrollTop) {
         // 滚动监听逻辑已移至home.vue的toolButton控制
       },
-      '$route.params.id': function(newId, oldId) {
-        // 如果新的文章ID和当前组件的ID不同，说明需要更新
+      '$route.params': function(newParams, oldParams) {
+        // 检查文章ID或语言参数是否变化
+        const newId = newParams.id;
+        const oldId = oldParams.id;
+        const newLang = newParams.lang;
+        const oldLang = oldParams.lang;
+        
         if (newId && newId !== this.id) {
           console.log('路由参数变化，从文章', oldId, '切换到文章', newId);
           
           // 重置组件状态，防止显示旧数据
           this.resetComponentState();
           
-          // 更新组件的id数据
+          // 更新组件的id和lang数据
           this.id = newId;
+          this.lang = newLang;
 
           // 重新初始化语言设置 - 关键修复：确保每次切换文章都重新初始化语言
           this.initializeLanguageSettings().then(() => {
@@ -577,36 +584,24 @@
           this.$nextTick(() => {
             this.checkPendingSubscribe();
           });
-        }
-      },
-      '$route': function(newRoute, oldRoute) {
-        // 检查变化是否仅仅是语言参数的变化
-        // 如果仅是语言参数变化，不重新加载文章
-        if (newRoute.params.id === oldRoute.params.id) {
-          const newLang = newRoute.query.lang;
-          const oldLang = oldRoute.query.lang;
+        } else if (newId === this.id && newLang !== oldLang) {
+          // 同一文章，仅语言参数变化
+          console.log('同一文章，语言参数变化:', oldLang, '->', newLang);
+          this.lang = newLang;
           
-          if (newLang !== oldLang) {
-            // 仅语言参数变化，不重新获取文章，避免增加热度计数
-            console.log('仅语言参数变化，不重新获取文章');
-            
-            // 如果语言参数有效，切换到该语言
-            if (newLang && this.languageMap[newLang]) {
-              // 检查当前语言是否已经是该语言，避免无意义的切换
-              if (this.currentLang !== newLang) {
-                console.log('切换到URL指定的语言:', newLang);
-                this.switchLanguage(newLang);
-              }
-            } else if (newLang === null || newLang === undefined) {
-              // 如果语言参数被移除，切换到默认源语言
-              console.log('URL语言参数被移除，切换到默认源语言:', this.sourceLanguage);
-              this.switchLanguage(this.sourceLanguage);
+          if (newLang && this.languageMap[newLang]) {
+            if (this.currentLang !== newLang) {
+              console.log('切换到URL指定的语言:', newLang);
+              this.switchLanguage(newLang);
             }
-            
-            return;
+          } else {
+            // 如果语言参数无效，切换到默认源语言
+            console.log('语言参数无效，切换到默认源语言:', this.sourceLanguage);
+            this.switchLanguage(this.sourceLanguage);
           }
         }
-      }
+      },
+
     },
 
     computed: {
@@ -1613,37 +1608,29 @@
         }
       },
       updateUrlWithLanguage(lang) {
-        // 保留原始URL参数，更新或移除lang参数
-        const url = new URL(window.location);
-
-        // 如果是源语言，移除lang参数以保持URL干净
+        // 生成新的路径格式：/article/lang/id 或 /article/id（源语言）
+        let newPath;
+        
         if (lang === this.sourceLanguage) {
-          url.searchParams.delete('lang');
+          // 源语言使用简洁格式：/article/id
+          newPath = `/article/${this.id}`;
         } else {
-          url.searchParams.set('lang', lang);
+          // 其他语言使用完整格式：/article/lang/id
+          newPath = `/article/${lang}/${this.id}`;
         }
 
-        // 使用replaceState而不是pushState，避免触发路由监听和影响浏览器历史
-        window.history.replaceState({}, '', url);
+        // 保留查询参数（如果有的话）
+        const query = { ...this.$route.query };
 
-        // 如果当前在文章详情页，也更新路由对象的查询参数
-        if (this.$route.name === 'article') {
-          // 通过编程方式导航，保持相同的路径但更新查询参数
-          const query = { ...this.$route.query };
-
-          // 如果是源语言，移除lang参数；否则设置lang参数
-          if (lang === this.sourceLanguage) {
-            delete query.lang;
-          } else {
-            query.lang = lang;
+        // 使用Vue Router进行导航，避免页面刷新
+        this.$router.replace({ 
+          path: newPath, 
+          query: query 
+        }).catch(err => {
+          if (err.name !== 'NavigationDuplicated') {
+            console.warn('路由导航重复:', err);
           }
-
-          this.$router.replace({ path: this.$route.path, query }).catch(err => {
-            if (err.name !== 'NavigationDuplicated') {
-              throw err;
-            }
-          });
-        }
+        });
       },
       /**
        * 检查是否有临时保存的评论
@@ -1757,60 +1744,34 @@
           // 先获取默认语言配置（只调用一次API）
           await this.getDefaultTargetLanguage();
 
-          // 获取顺序：URL参数 > 当前文章的语言偏好 > 默认源语言
-          const urlParams = new URLSearchParams(window.location.search);
-          const langParam = urlParams.get('lang') || this.$route.query.lang; // 备用方案：从Vue路由获取
+          // 获取顺序：URL路径参数 > 当前文章的语言偏好 > 默认源语言
+          const langParam = this.$route.params.lang; // 从路径参数获取语言
           const articleLangKey = `article_${this.id}_preferredLanguage`;
           const savedLang = localStorage.getItem(articleLangKey); // 只读取当前文章的语言偏好
 
           console.log('语言初始化调试信息:', {
             'articleId': this.id,
-            'window.location.search': window.location.search,
             'langParam': langParam,
             'savedLang': savedLang,
             'sourceLanguage': this.sourceLanguage,
-            'route.query': this.$route.query
+            'route.params': this.$route.params
           });
 
           // 重置当前语言为源语言，避免使用上一篇文章的语言设置
           this.currentLang = this.sourceLanguage;
 
           if (langParam && this.languageMap[langParam]) {
-            // URL参数优先，但必须是支持的语言
-            console.log('使用URL参数设置语言:', langParam);
+            // URL路径参数优先，但必须是支持的语言
+            console.log('使用URL路径参数设置语言:', langParam);
             this.currentLang = langParam;
-
-            // 确保URL中的lang参数与当前设置一致
-            if (this.$route.query.lang !== langParam) {
-              console.log('更新路由查询参数:', langParam);
-              // 静默更新URL，不触发路由变化
-              const query = { ...this.$route.query, lang: langParam };
-              this.$router.replace({ query }).catch(err => {
-                if (err.name !== 'NavigationDuplicated') {
-                  throw err;
-                }
-              });
-            }
           } else if (savedLang && this.languageMap[savedLang] && savedLang !== this.sourceLanguage) {
-            // 只有当前文章有保存的语言偏好时才使用（仅限URL中有lang参数的情况）
-            // 这样可以在用户刷新页面时保持语言选择，但从首页进入时始终使用源语言
-            if (this.$route.query.lang) {
-              console.log('页面刷新，使用当前文章保存的语言偏好:', savedLang);
-              this.currentLang = savedLang;
-              this.updateUrlWithLanguage(savedLang);
-            } else {
-              console.log('从首页进入，忽略保存的偏好，使用源语言:', this.sourceLanguage);
-              this.currentLang = this.sourceLanguage;
-            }
+            // 只有当前文章有保存的语言偏好时才使用
+            console.log('使用当前文章保存的语言偏好:', savedLang);
+            this.currentLang = savedLang;
           } else {
             // 使用默认源语言
             console.log('使用默认源语言:', this.sourceLanguage);
             this.currentLang = this.sourceLanguage;
-            
-            // 清除URL中可能存在的无效lang参数
-            if (langParam && !this.languageMap[langParam]) {
-              this.updateUrlWithLanguage(this.sourceLanguage);
-            }
           }
 
           // 设置HTML元素的lang属性

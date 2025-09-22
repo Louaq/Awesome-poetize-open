@@ -240,14 +240,15 @@
       
       // 跳转到文章页面
       goToArticle(article) {
-        const query = {};
+        let path;
         if (article.isTranslationMatch && article.matchedLanguage) {
-          query.lang = article.matchedLanguage;
+          // 如果是翻译匹配，使用语言路径格式
+          path = `/article/${article.matchedLanguage}/${article.id}`;
+        } else {
+          // 原文使用简洁格式
+          path = `/article/${article.id}`;
         }
-        this.$router.push({
-          path: `/article/${article.id}`,
-          query: query
-        });
+        this.$router.push({ path });
       },
       
       // 查看原文

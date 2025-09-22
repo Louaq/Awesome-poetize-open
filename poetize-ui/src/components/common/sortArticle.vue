@@ -3,7 +3,7 @@
     <div class="recent-post-item shadow-box background-opacity wow"
          v-for="(article, index) in articleList"
          :key="index"
-         @click="$router.push({path: `/article/${article.id}`})">
+         @click="goToArticle(article)">
       <!-- 封面 -->
       <div class="recent-post-item-image">
         <el-image class="my-el-image"
@@ -147,6 +147,12 @@
       }
     },
     methods: {
+      // 跳转到文章页面
+      goToArticle(article) {
+        // 使用简洁格式跳转到原文
+        this.$router.push(`/article/${article.id}`);
+      },
+      
       getSummaryDisplay(article) {
         if (article.summary && article.summary.trim()) {
           return article.summary;

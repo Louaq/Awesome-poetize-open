@@ -730,7 +730,8 @@ async def generate_article_meta_tags(article_id, lang=None):
         })
 
         # 添加hreflang标签 - 根据实际翻译情况动态生成
-        article_url = f"{seo_config.get('site_address', FRONTEND_URL)}/{seo_config.get('article_url_format', 'article/{id}')}".replace('{id}', str(article_id))
+        site_url = seo_config.get('site_address', FRONTEND_URL)
+        article_url = f"{site_url}/{seo_config.get('article_url_format', 'article/{id}')}".replace('{id}', str(article_id))
 
         # 获取文章实际可用的语言
         available_languages = [default_source_lang]  # 源语言总是可用的
@@ -773,8 +774,8 @@ async def generate_article_meta_tags(article_id, lang=None):
                 # 源语言不需要lang参数
                 meta_tags[f"hreflang_{available_lang}"] = f'<link rel="alternate" hreflang="{available_lang}" href="{article_url}" />'
             else:
-                # 其他语言需要lang参数
-                meta_tags[f"hreflang_{available_lang}"] = f'<link rel="alternate" hreflang="{available_lang}" href="{article_url}?lang={available_lang}" />'
+                # 其他语言使用新的路径格式
+                meta_tags[f"hreflang_{available_lang}"] = f'<link rel="alternate" hreflang="{available_lang}" href="{site_url}/article/{available_lang}/{article_id}" />'
 
         # 添加x-default hreflang（指向源语言版本）
         meta_tags["hreflang_x_default"] = f'<link rel="alternate" hreflang="x-default" href="{article_url}" />'
@@ -1155,8 +1156,8 @@ async def generate_sitemap():
                             # 如果无法获取配置，使用默认值'en'
                             target_lang = 'en'
                             
-                        # 添加目标语言URL
-                        article_url_translated = f"{article_url}?lang={target_lang}"
+                        # 添加目标语言URL - 使用新的路径格式
+                        article_url_translated = f"{site_url}/article/{target_lang}/{article['id']}"
                         if article_url_translated.rstrip('/') not in url_set:
                             url_set.add(article_url_translated.rstrip('/'))
                             sitemap += f'  <url>\n'
@@ -1232,7 +1233,7 @@ async def generate_sitemap():
                                     if available_languages:
                                         logger.debug(f"文章 {article_id} 可用语言: {available_languages}")
                                         for lang in available_languages:
-                                            article_url_available = f"{article_url}?lang={lang}"
+                                            article_url_available = f"{site_url}/article/{lang}/{article['id']}"
                                             if article_url_available.rstrip('/') not in url_set:
                                                 url_set.add(article_url_available.rstrip('/'))
                                                 sitemap += f'  <url>\n'
@@ -1736,7 +1737,7 @@ def register_seo_api(app: FastAPI):
                 }, status_code=404)
             
             # 动态检测站点地址
-            site_url = seo_config.get('site_address')
+            site_url = seo_config.get('site_address', FRONTEND_URL)
             if not site_url:
                 site_url = detect_frontend_url_from_request(request)
             
@@ -2790,7 +2791,7 @@ def register_seo_api(app: FastAPI):
             except Exception as e:
                 logger.error(f"清理文章SEO缓存失败，但不影响主流程: {e}")
             
-            # 获取SEO配置
+            # 获取SEO配置和站点URL（全局使用）
             seo_config = await get_seo_config()
             site_url = seo_config.get('site_address', FRONTEND_URL)
             article_format = seo_config.get('article_url_format', 'article/{id}')
@@ -2802,13 +2803,18 @@ def register_seo_api(app: FastAPI):
                 from translation_api import translation_manager
                 config = translation_manager.load_config()
                 
-                # 默认目标语言
+                # 获取默认目标语言配置，用于生成翻译版本的sitemap条目
                 if config and hasattr(config, 'default_target_lang'):
                     target_lang = config.default_target_lang
                 else:
+                    # 如果未配置默认语言，使用英语作为fallback
                     target_lang = 'en'
+                    logging.warning("未找到默认语言配置，使用英语作为默认目标语言")
+                
+                # 添加原文sitemap条目（使用简洁URL格式）
                 await add_or_update_sitemap_url(article_url, last_mod_time)
-                await add_or_update_sitemap_url(f"{article_url}?lang={target_lang}", last_mod_time)
+                # 添加默认翻译语言sitemap条目（使用完整URL格式）
+                await add_or_update_sitemap_url(f"{site_url}/article/{target_lang}/{article_id}", last_mod_time)
                 
                 logger.info(f"成功更新文章sitemap条目: {article_url}")
                 return JSONResponse({
@@ -2822,8 +2828,8 @@ def register_seo_api(app: FastAPI):
                 
                 if language:
                     # 删除特定语言的sitemap条目
-                    # 获取默认源语言
-                    default_source_lang = 'zh'  # 默认值
+                    # 获取默认源语言配置
+                    default_source_lang = 'zh'  # 默认值：中文
                     try:
                         from translation_api import translation_manager
                         default_config = translation_manager.get_default_languages()
@@ -2832,12 +2838,13 @@ def register_seo_api(app: FastAPI):
                         logger.warning(f"获取默认源语言失败: {str(e)}，使用默认值 zh")
                     
                     if language == default_source_lang:
-                        # 删除源语言（基础URL）
+                        # 删除源语言sitemap条目（使用简洁URL格式：/article/123）
                         await remove_sitemap_url(article_url)
                         removed_url = article_url
                     else:
-                        # 删除其他语言（带lang参数的URL）
-                        lang_url = f"{article_url}?lang={language}"
+                        # 删除翻译语言sitemap条目（使用完整URL格式：/article/lang/123）
+                        # 注意：这里重新获取site_url确保变量在当前作用域可用
+                        lang_url = f"{site_url}/article/{language}/{article_id}"
                         await remove_sitemap_url(lang_url)
                         removed_url = lang_url
                     
@@ -2848,11 +2855,11 @@ def register_seo_api(app: FastAPI):
                         "data": {"url": removed_url, "action": action, "language": language}
                     })
                 else:
-                    # 删除所有sitemap条目（改进逻辑：获取文章的所有翻译语言）
+                    # 删除所有语言的sitemap条目（包括原文和所有翻译版本）
                     removed_urls = []
                     
-                    # 获取默认源语言
-                    default_source_lang = 'zh'  # 默认值
+                    # 获取默认源语言配置
+                    default_source_lang = 'zh'  # 默认值：中文
                     try:
                         from translation_api import translation_manager
                         default_config = translation_manager.get_default_languages()
@@ -2860,7 +2867,7 @@ def register_seo_api(app: FastAPI):
                     except Exception as e:
                         logger.warning(f"获取默认源语言失败: {str(e)}，使用默认值 zh")
                     
-                    # 删除源语言的sitemap条目
+                    # 删除源语言sitemap条目（简洁URL格式：/article/123）
                     await remove_sitemap_url(article_url)
                     removed_urls.append(article_url)
                     
@@ -2868,7 +2875,7 @@ def register_seo_api(app: FastAPI):
                     available_languages = []
                     try:
                         async with httpx.AsyncClient() as client:
-                            # 调用Java后端获取文章的可用翻译语言
+                            # 调用Java后端API获取文章的所有可用翻译语言
                             lang_response = await client.get(
                                 f"{JAVA_BACKEND_URL}/admin/article/getAvailableLanguages",
                                 params={"articleId": article_id},
@@ -2885,12 +2892,11 @@ def register_seo_api(app: FastAPI):
                     except Exception as e:
                         logger.warning(f"获取文章 {article_id} 的翻译语言失败: {str(e)}")
                     
-                    # 删除所有翻译语言的sitemap条目
+                    # 删除所有翻译语言的sitemap条目（完整URL格式：/article/lang/123）
                     for lang in available_languages:
-                        if lang != default_source_lang:  # 源语言已经删除过了
-                            lang_url = f"{article_url}?lang={lang}"
-                            await remove_sitemap_url(lang_url)
-                            removed_urls.append(lang_url)
+                        lang_url = f"{site_url}/article/{lang}/{article_id}"
+                        await remove_sitemap_url(lang_url)
+                        removed_urls.append(lang_url)
                     
                     logger.info(f"成功删除文章 {article_id} 的所有sitemap条目: {removed_urls}")
                     return JSONResponse({
