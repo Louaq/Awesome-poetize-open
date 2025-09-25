@@ -756,28 +756,29 @@ async function fetchMeta(id, lang) {
   try {
     logger.debug('获取元数据', { id, lang });
     
-    // 并行获取文章元数据和SEO配置
+    // 并行获取文章元数据和SEO配置 - 改为调用Java端
     const [articleMetaRes, seoConfigRes] = await Promise.all([
-      axios.get(`${PYTHON_BACKEND_URL}/seo/getArticleMeta`, { 
-        params: { id, lang },
+      axios.get(`${JAVA_BACKEND_URL}/seo/getArticleMeta`, { 
+        params: { articleId: id, lang },
         timeout: 5000,
         headers: INTERNAL_SERVICE_HEADERS
       }),
-      axios.get(`${PYTHON_BACKEND_URL}/seo/getSeoConfig`, { 
+      axios.get(`${JAVA_BACKEND_URL}/seo/getSeoConfig/nginx`, { 
         timeout: 5000,
         headers: INTERNAL_SERVICE_HEADERS
       })
     ]);
     
-    // 获取文章元数据
-    const meta = (articleMetaRes.data && articleMetaRes.data.status === 'success') ? (articleMetaRes.data.data || {}) : {};
+    // 获取文章元数据 - 适配Java端返回格式
+    const meta = (articleMetaRes.data && articleMetaRes.data.code === 200) ? (articleMetaRes.data.data || {}) : {};
     logger.debug('元数据已获取', { id, lang, keysCount: Object.keys(meta).length });
     
-    // 获取SEO配置
-    const seoConfig = (seoConfigRes.data && seoConfigRes.data.code === 200) ? (seoConfigRes.data.data || {}) : {};
+    // 获取SEO配置 - Java端直接返回配置对象
+    const seoConfig = seoConfigRes.data || {};
     
     // 使用通用函数添加图标字段
     addSeoIconFieldsToMeta(meta, seoConfig);
+    addSearchEngineVerificationTags(meta, seoConfig);
     
     logger.debug('已添加图标字段到文章元数据', { 
       articleId: id, 
@@ -832,42 +833,20 @@ async function fetchWebInfo() {
   }
 }
 
-// SEO配置缓存
-const seoConfigCache = { 
-  data: null, 
-  lastFetch: 0, 
-  cacheDuration: 30 * 60 * 1000 // 30分钟缓存，与SEO配置变化频率匹配
-};
-
 async function fetchSeoConfig() {
-  // 检查缓存是否有效
-  const now = Date.now();
-  if (seoConfigCache.data && (now - seoConfigCache.lastFetch) < seoConfigCache.cacheDuration) {
-    logger.debug('使用缓存的SEO配置', { 
-      cacheAge: Math.round((now - seoConfigCache.lastFetch) / 1000) + 's'
-    });
-    return seoConfigCache.data;
-  }
-
   try {
     logger.debug('从服务器获取SEO配置');
-    const res = await axios.get(`${PYTHON_BACKEND_URL}/seo/getSeoConfig`, { 
+    const res = await axios.get(`${JAVA_BACKEND_URL}/seo/getSeoConfig/nginx`, { 
       timeout: 5000,
       headers: INTERNAL_SERVICE_HEADERS
     });
-    const seoConfig = (res.data && res.data.code === 200) ? (res.data.data || {}) : {};
+    const seoConfig = res.data || {};
     
-    // 更新缓存
-    seoConfigCache.data = seoConfig;
-    seoConfigCache.lastFetch = now;
-    
-    // 详细记录获取到的SEO配置数据
-    logger.info('SEO配置获取并缓存成功', { 
+    logger.info('SEO配置获取成功', { 
       status: res.status,
       responseCode: res.data?.code,
       dataExists: !!res.data?.data,
       keys: Object.keys(seoConfig),
-      site_title: seoConfig.site_title,
       site_address: seoConfig.site_address,
       og_image: seoConfig.og_image,
       site_icon: seoConfig.site_icon ? '存在' : '不存在',
@@ -876,7 +855,8 @@ async function fetchSeoConfig() {
       site_icon_512: seoConfig.site_icon_512 ? '存在' : '不存在',
       site_logo: seoConfig.site_logo ? '存在' : '不存在',
       default_author: seoConfig.default_author,
-      cacheDuration: seoConfigCache.cacheDuration / 1000 + 's'
+      custom_head_code: seoConfig.custom_head_code ? `存在(${seoConfig.custom_head_code.length}字符)` : '不存在',
+      has_site_verification: !!(seoConfig.google_site_verification || seoConfig.baidu_site_verification)
     });
     
     return seoConfig;
@@ -885,14 +865,8 @@ async function fetchSeoConfig() {
       error: error.message, 
       status: error.response?.status,
       statusText: error.response?.statusText,
-      url: `${PYTHON_BACKEND_URL}/seo/getSeoConfig`
+      url: `${JAVA_BACKEND_URL}/seo/getSeoConfig/nginx`
     });
-    
-    // 如果有缓存数据，即使过期也先用着
-    if (seoConfigCache.data) {
-      logger.info('使用过期的缓存SEO配置作为备用');
-      return seoConfigCache.data;
-    }
     
     return {};
   }
@@ -1079,6 +1053,25 @@ function buildHtmlTemplate({ title, meta, content, lang, pageType = 'article' })
   if (titleElement) {
     titleElement.textContent = title;
   }
+  
+  // 添加PWA manifest链接到title之前
+  try {
+    const manifestLink = document.createElement('link');
+    manifestLink.setAttribute('rel', 'manifest');
+    manifestLink.setAttribute('href', '/manifest.json'); // Java端动态生成，包含完整的PWA配置
+    manifestLink.setAttribute('data-prerender-manifest', 'true');
+    
+    if (document.head && document.head.nodeType === Node.ELEMENT_NODE && titleElement) {
+      document.head.insertBefore(manifestLink, titleElement);
+      logger.debug('✅ PWA manifest链接已添加到title之前');
+    } else if (document.head && document.head.nodeType === Node.ELEMENT_NODE) {
+      // 如果没有title元素，添加到head末尾以避免破坏HTML结构
+      document.head.appendChild(manifestLink);
+      logger.debug('✅ PWA manifest链接已添加到head末尾）');
+    }
+  } catch (e) {
+    logger.warn('❌ 添加PWA manifest链接失败', { error: e.message });
+  }
 
   // 清理占位符/旧meta，更彻底
   const removeElements = (selector) => {
@@ -1132,11 +1125,15 @@ function buildHtmlTemplate({ title, meta, content, lang, pageType = 'article' })
           linkElement.setAttribute(attr, attrs[attr]);
         });
         
-        // 安全地添加到head，避免appendChild在文本节点上的错误
+        // 安全地插入到title之前，避免appendChild在文本节点上的错误
         try {
-          if (document.head && document.head.nodeType === Node.ELEMENT_NODE) {
+          if (document.head && document.head.nodeType === Node.ELEMENT_NODE && titleElement) {
+            document.head.insertBefore(linkElement, titleElement);
+            logger.debug(`已添加${field}图标到title之前`, { url: meta[field] });
+          } else if (document.head && document.head.nodeType === Node.ELEMENT_NODE) {
+            // 如果没有title元素，添加到head末尾作为fallback
             document.head.appendChild(linkElement);
-            logger.debug(`已添加${field}图标到HTML`, { url: meta[field] });
+            logger.debug(`已添加${field}图标到head末尾（fallback）`, { url: meta[field] });
           } else {
             logger.warn(`无法添加${field}图标 - document.head不是元素节点`);
           }
@@ -1198,6 +1195,9 @@ function buildHtmlTemplate({ title, meta, content, lang, pageType = 'article' })
             logger.warn(`添加meta标签${key}失败`, { error: error.message, value });
           }
         }
+      } else if (key === 'custom_head_code') {
+        // 跳过 custom_head_code，它将在后面的专门逻辑中处理
+        logger.debug('跳过custom_head_code，将在专门的处理逻辑中处理');
       } else {
         // 处理 og:, twitter:, article: 等属性，但跳过空值
         if (value && value.trim() !== '') {
@@ -1218,6 +1218,173 @@ function buildHtmlTemplate({ title, meta, content, lang, pageType = 'article' })
         }
       }
     }
+    
+    // 处理搜索引擎验证标签
+    const verificationTags = [
+      'google_site_verification',
+      'baidu_site_verification', 
+      'bing_site_verification',
+      'yandex_site_verification',
+      'sogou_site_verification',
+      'so_site_verification',
+      'shenma_site_verification',
+      'yahoo_site_verification',
+      'duckduckgo_site_verification'
+    ];
+    
+    verificationTags.forEach(tagKey => {
+      if (meta[tagKey] && meta[tagKey].trim() !== '') {
+        try {
+          const verificationMeta = document.createElement('meta');
+          verificationMeta.setAttribute('name', tagKey.replace('_', '-'));
+          verificationMeta.setAttribute('content', meta[tagKey].trim());
+          verificationMeta.setAttribute('data-prerender-verification', 'true');
+          
+          if (document.head && document.head.nodeType === Node.ELEMENT_NODE) {
+            document.head.appendChild(verificationMeta);
+            logger.debug('成功添加搜索引擎验证标签', { 
+              platform: tagKey,
+              content: meta[tagKey].substring(0, 20) + '...'
+            });
+          }
+        } catch (e) {
+          logger.warn('添加搜索引擎验证标签失败', { 
+            platform: tagKey,
+            error: e.message 
+          });
+        }
+      }
+    });
+
+    // 处理robots meta标签
+    if (meta.robots && meta.robots.trim() !== '') {
+      try {
+        const robotsMeta = document.createElement('meta');
+        robotsMeta.setAttribute('name', 'robots');
+        robotsMeta.setAttribute('content', meta.robots.trim());
+        robotsMeta.setAttribute('data-prerender-robots', 'true');
+        
+        if (document.head && document.head.nodeType === Node.ELEMENT_NODE) {
+          document.head.appendChild(robotsMeta);
+          logger.debug('成功添加robots meta标签', { content: meta.robots });
+        }
+      } catch (e) {
+        logger.warn('添加robots meta标签失败', { error: e.message });
+      }
+    }
+
+    // 处理社交媒体验证标签
+    const socialMediaTags = {
+      // Twitter标签
+      'twitter_site': 'twitter:site',
+      'twitter_creator': 'twitter:creator',
+      
+      // Facebook标签
+      'fb_app_id': 'fb:app_id',
+      'fb_page_url': 'fb:page_url',
+      
+      // Open Graph标签（property字段）
+      'og_type': 'og:type',
+      'og_site_name': 'og:site_name',
+      
+      // LinkedIn标签
+      'linkedin_company_id': 'linkedin:company',
+      
+      // Pinterest标签
+      'pinterest_verification': 'p:domain_verify',
+      'pinterest_description': 'pinterest:description',
+      
+      // 小程序标签
+      'wechat_miniprogram_id': 'wechat:miniprogram',
+      'wechat_miniprogram_path': 'wechat:miniprogram:path',
+      'qq_miniprogram_path': 'qq:miniprogram:path'
+    };
+    
+    Object.entries(socialMediaTags).forEach(([configKey, metaName]) => {
+      if (meta[configKey] && meta[configKey].trim() !== '') {
+        try {
+          const socialMeta = document.createElement('meta');
+          
+          // OpenGraph字段使用property，其他使用name
+          if (metaName.startsWith('og:')) {
+            socialMeta.setAttribute('property', metaName);
+          } else {
+            socialMeta.setAttribute('name', metaName);
+          }
+          
+          socialMeta.setAttribute('content', meta[configKey].trim());
+          socialMeta.setAttribute('data-prerender-social', 'true');
+          
+          if (document.head && document.head.nodeType === Node.ELEMENT_NODE) {
+            document.head.appendChild(socialMeta);
+            logger.debug('成功添加社交媒体标签', { field: configKey, metaName });
+          }
+        } catch (e) {
+          logger.warn('添加社交媒体标签失败', { field: configKey, error: e.message });
+        }
+      }
+    });
+
+
+    // 处理自定义头部代码
+    if (meta.custom_head_code && meta.custom_head_code.trim() !== '') {
+      try {
+        logger.info('处理自定义头部代码', { 
+          codeLength: meta.custom_head_code.length,
+          preview: meta.custom_head_code.substring(0, 100) + '...'
+        });
+        
+        // 创建临时DOM容器来解析自定义头部代码
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = meta.custom_head_code;
+        
+        // 遍历解析的元素并添加到head
+        Array.from(tempDiv.children).forEach(element => {
+          if (element.nodeType === Node.ELEMENT_NODE) {
+            // 安全地添加到head
+            if (document.head && document.head.nodeType === Node.ELEMENT_NODE) {
+              try {
+                const clonedElement = element.cloneNode(true);
+                document.head.appendChild(clonedElement);
+                logger.debug('成功添加自定义头部元素到prerender HTML', { 
+                  tagName: element.tagName,
+                  id: element.id || '无',
+                  className: element.className || '无'
+                });
+              } catch (e) {
+                logger.warn('添加自定义头部元素失败', { 
+                  error: e.message, 
+                  tagName: element.tagName 
+                });
+              }
+            }
+          }
+        });
+        
+        // 如果是纯文本/脚本内容（没有HTML标签），包装在script标签中
+        const trimmedCode = meta.custom_head_code.trim();
+        if (trimmedCode && !trimmedCode.includes('<') && !trimmedCode.includes('>')) {
+          const scriptElement = document.createElement('script');
+          scriptElement.textContent = trimmedCode;
+          
+          if (document.head && document.head.nodeType === Node.ELEMENT_NODE) {
+            try {
+              document.head.appendChild(scriptElement);
+              logger.debug('成功添加自定义脚本到prerender HTML');
+            } catch (e) {
+              logger.warn('添加自定义脚本失败', { error: e.message });
+            }
+          }
+        }
+        
+      } catch (error) {
+        logger.error('处理自定义头部代码失败', { 
+          error: error.message,
+          codeLength: meta.custom_head_code.length 
+        });
+      }
+    }
+    
   } else {
     console.error('元数据不是有效对象:', meta);
   }
@@ -1330,7 +1497,7 @@ function buildHtmlTemplate({ title, meta, content, lang, pageType = 'article' })
   if (viewportMeta) {
     try {
       if (viewportMeta.nodeType === Node.ELEMENT_NODE) {
-        viewportMeta.insertAdjacentHTML('afterend', `<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="dns-prefetch" href="//cdn.jsdelivr.net">`);
+        viewportMeta.insertAdjacentHTML('afterend', `<link rel="dns-prefetch" href="https://cdn.jsdelivr.net">`);
       } else {
         logger.warn('无法添加预加载链接 - viewport meta不是元素节点');
       }
@@ -1527,7 +1694,7 @@ function buildHtml({ title, meta, content, lang }) {
   });
   
   return buildHtmlTemplate({ 
-    title: title || 'Poetize', 
+    title: title , 
     meta: safeMeta, 
     content: content, // 直接使用内容，不额外包装
     lang: lang || 'zh', 
@@ -1545,12 +1712,13 @@ async function renderHomePage(lang = 'zh') {
       fetchRecentArticles(8)
     ]);
 
-    // 优先使用SEO配置，其次使用webInfo，最后使用默认值
-    const title = seoConfig.site_title || webInfo.webTitle || webInfo.webName || 'Poetize';
+    // 直接使用webInfo的标题数据，简化逻辑
+    const title = webInfo.webTitle || webInfo.webName ;
     const description = seoConfig.site_description || `${webInfo.webName} - 个人博客网站，分享技术文章、生活感悟。`;
     const keywords = seoConfig.site_keywords || '博客,个人网站,技术分享';
     const author = seoConfig.default_author || webInfo.webName || 'Admin';
-    const ogImage = seoConfig.og_image || webInfo.avatar || '';
+    const baseUrl = seoConfig.site_address || process.env.SITE_URL || '';
+    const ogImage = ensureAbsoluteImageUrl(seoConfig.og_image || webInfo.avatar || '', baseUrl);
     
     const meta = {
       description,
@@ -1559,8 +1727,9 @@ async function renderHomePage(lang = 'zh') {
       'og:title': title,
       'og:description': description,
       'og:type': 'website',
-      'og:url': seoConfig.site_address || process.env.SITE_URL,
+      'og:url': baseUrl,
       'og:image': ogImage,
+      'og:site_name': webInfo.webTitle || webInfo.webName , // 优先使用webTitle
       'twitter:card': seoConfig.twitter_card || 'summary_large_image',
       'twitter:title': title,
       'twitter:description': description,
@@ -1568,13 +1737,14 @@ async function renderHomePage(lang = 'zh') {
     };
     
     // 使用通用函数添加图标字段
-    addSeoIconFieldsToMeta(meta, seoConfig);
+    addSeoIconFieldsToMeta(meta, seoConfig, baseUrl);
+    addSearchEngineVerificationTags(meta, seoConfig);
 
     // 构建首页内容（只包含静态SEO内容，动态内容由客户端加载）
     const homeContent = `
       <div class="home-prerender">
         <div class="home-hero">
-          <h1>${webInfo.webName || 'Poetize'}</h1>
+          <h1>${webInfo.webName || webInfo.webTitle}</h1>
           <p>${description}</p>
         </div>
         <div class="home-categories">
@@ -1582,7 +1752,7 @@ async function renderHomePage(lang = 'zh') {
           <ul>
             ${sortInfo.map(sort => `
               <li>
-                <a href="/sort?sortId=${sort.id}" title="${sort.sortDescription || sort.sortName}">
+                <a href="/sort/${sort.id}" title="${sort.sortDescription || sort.sortName}">
                   ${sort.sortName}
                 </a>
               </li>
@@ -1630,6 +1800,372 @@ async function renderHomePage(lang = 'zh') {
   }
 }
 
+// ===== 关于页面渲染函数 =====
+async function renderAboutPage(lang = 'zh') {
+  try {
+    logger.info('开始渲染关于页面', { lang });
+    
+    // 获取网站基本信息
+    const webInfo = await fetchWebInfo();
+    const seoConfig = await fetchSeoConfig();
+    
+    const title = `关于我们 - ${webInfo.webTitle || webInfo.webName }`;
+    const description = webInfo.about || '了解更多关于我们的信息';
+    const keywords = `关于,${webInfo.webName },博客,个人简介`;
+    const baseUrl = seoConfig.site_address || process.env.SITE_URL || '';
+    
+    const meta = {
+      description,
+      keywords,
+      author: webInfo.author ,
+      'og:title': title,
+      'og:description': description,
+      'og:type': 'website',
+      'og:image': ensureAbsoluteImageUrl(webInfo.avatar || '/poetize.jpg', baseUrl),
+      'og:site_name': webInfo.webTitle || webInfo.webName , // 优先使用webTitle
+      'twitter:card': seoConfig.twitter_card || 'summary',
+      'twitter:title': title,
+      'twitter:description': description,
+      'twitter:image': ensureAbsoluteImageUrl(webInfo.avatar || '/poetize.jpg', baseUrl)
+    };
+    
+    addSeoIconFieldsToMeta(meta, seoConfig, baseUrl);
+    addSearchEngineVerificationTags(meta, seoConfig);
+    
+    const aboutContent = `
+      <div class="about-prerender">
+        <div class="about-hero">
+          <h1>关于${ webInfo.webName || webInfo.webTitle }</h1>
+          <p>${description}</p>
+        </div>
+        <div class="about-content">
+          <div class="about-info">
+            ${webInfo.about ? `<div class="about-text">${webInfo.about}</div>` : ''}
+            <div class="contact-info">
+              <h3>联系方式</h3>
+              <p>邮箱: ${webInfo.email || '暂未提供'}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    
+    return buildHtmlTemplate({ title, meta, content: aboutContent, lang, pageType: 'about' });
+  } catch (error) {
+    logger.error('渲染关于页面失败:', error);
+    throw error;
+  }
+}
+
+// ===== 留言板页面渲染函数 =====
+async function renderMessagePage(lang = 'zh') {
+  try {
+    logger.info('开始渲染留言板页面', { lang });
+    
+    const webInfo = await fetchWebInfo();
+    const seoConfig = await fetchSeoConfig();
+    
+    const title = `留言板 - ${webInfo.webTitle || webInfo.webName }`;
+    const description = '欢迎在这里留下您的宝贵意见和建议';
+    const keywords = `留言,反馈,建议,${webInfo.webName }`;
+    const baseUrl = seoConfig.site_address || process.env.SITE_URL || '';
+    
+    const meta = {
+      description,
+      keywords,
+      author: webInfo.author ,
+      'og:title': title,
+      'og:description': description,
+      'og:type': 'website',
+      'og:url': `${baseUrl}/message`,
+      'og:image': ensureAbsoluteImageUrl(seoConfig.og_image || webInfo.avatar || '', baseUrl),
+      'og:site_name': webInfo.webTitle || webInfo.webName ,
+      'twitter:card': seoConfig.twitter_card || 'summary',
+      'twitter:title': title,
+      'twitter:description': description,
+      'twitter:image': ensureAbsoluteImageUrl(seoConfig.og_image || webInfo.avatar || '', baseUrl)
+    };
+    
+    addSeoIconFieldsToMeta(meta, seoConfig, baseUrl);
+    addSearchEngineVerificationTags(meta, seoConfig);
+    
+    const messageContent = `
+      <div class="message-prerender">
+        <div class="message-hero">
+          <h1>留言板</h1>
+          <p>${description}</p>
+        </div>
+        <div class="message-form-placeholder">
+          <p>留言功能将在页面加载完成后可用</p>
+        </div>
+      </div>
+    `;
+    
+    return buildHtmlTemplate({ title, meta, content: messageContent, lang, pageType: 'message' });
+  } catch (error) {
+    logger.error('渲染留言板页面失败:', error);
+    throw error;
+  }
+}
+
+// ===== 微言页面渲染函数 =====
+async function renderWeiYanPage(lang = 'zh') {
+  try {
+    logger.info('开始渲染微言页面', { lang });
+    
+    const webInfo = await fetchWebInfo();
+    const seoConfig = await fetchSeoConfig();
+    
+    const title = `微言 - ${webInfo.webTitle || webInfo.webName }`;
+    const description = '记录生活点滴，分享心情随笔';
+    const keywords = `微言,动态,心情,随笔,${webInfo.webName }`;
+    const baseUrl = seoConfig.site_address || process.env.SITE_URL || '';
+    
+    const meta = {
+      description,
+      keywords,
+      author: webInfo.author ,
+      'og:title': title,
+      'og:description': description,
+      'og:type': 'website',
+      'og:url': `${baseUrl}/weiYan`,
+      'og:image': ensureAbsoluteImageUrl(seoConfig.og_image || webInfo.avatar || '', baseUrl),
+      'og:site_name': webInfo.webTitle || webInfo.webName ,
+      'twitter:card': seoConfig.twitter_card || 'summary',
+      'twitter:title': title,
+      'twitter:description': description,
+      'twitter:image': ensureAbsoluteImageUrl(seoConfig.og_image || webInfo.avatar || '', baseUrl)
+    };
+    
+    addSeoIconFieldsToMeta(meta, seoConfig, baseUrl);
+    addSearchEngineVerificationTags(meta, seoConfig);
+    
+    const weiYanContent = `
+      <div class="weiyan-prerender">
+        <div class="weiyan-hero">
+          <h1>微言</h1>
+          <p>${description}</p>
+        </div>
+        <div class="weiyan-list-placeholder">
+          <p>动态内容将在页面加载完成后显示</p>
+        </div>
+      </div>
+    `;
+    
+    return buildHtmlTemplate({ title, meta, content: weiYanContent, lang, pageType: 'weiyan' });
+  } catch (error) {
+    logger.error('渲染微言页面失败:', error);
+    throw error;
+  }
+}
+
+// ===== 恋爱记录页面渲染函数 =====
+async function renderLovePage(lang = 'zh') {
+  try {
+    logger.info('开始渲染恋爱记录页面', { lang });
+    
+    const webInfo = await fetchWebInfo();
+    const seoConfig = await fetchSeoConfig();
+    
+    const title = `恋爱记录 - ${webInfo.webTitle || webInfo.webName }`;
+    const description = '记录美好的爱情时光';
+    const keywords = `恋爱,爱情,记录,${webInfo.webName }`;
+    const baseUrl = seoConfig.site_address || process.env.SITE_URL || '';
+    
+    const meta = {
+      description,
+      keywords,
+      author: webInfo.author ,
+      'og:title': title,
+      'og:description': description,
+      'og:type': 'website',
+      'og:url': `${baseUrl}/love`,
+      'og:image': ensureAbsoluteImageUrl(seoConfig.og_image || webInfo.avatar || '', baseUrl),
+      'og:site_name': webInfo.webTitle || webInfo.webName ,
+      'twitter:card': seoConfig.twitter_card || 'summary',
+      'twitter:title': title,
+      'twitter:description': description,
+      'twitter:image': ensureAbsoluteImageUrl(seoConfig.og_image || webInfo.avatar || '', baseUrl)
+    };
+    
+    addSeoIconFieldsToMeta(meta, seoConfig, baseUrl);
+    addSearchEngineVerificationTags(meta, seoConfig);
+    
+    const loveContent = `
+      <div class="love-prerender">
+        <div class="love-hero">
+          <h1>恋爱记录</h1>
+          <p>${description}</p>
+        </div>
+        <div class="love-timeline-placeholder">
+          <p>爱情时光轴将在页面加载完成后显示</p>
+        </div>
+      </div>
+    `;
+    
+    return buildHtmlTemplate({ title, meta, content: loveContent, lang, pageType: 'love' });
+  } catch (error) {
+    logger.error('渲染恋爱记录页面失败:', error);
+    throw error;
+  }
+}
+
+// ===== 旅行日记页面渲染函数 =====
+async function renderTravelPage(lang = 'zh') {
+  try {
+    logger.info('开始渲染旅行日记页面', { lang });
+    
+    const webInfo = await fetchWebInfo();
+    const seoConfig = await fetchSeoConfig();
+    
+    const title = `旅行日记 - ${webInfo.webTitle || webInfo.webName }`;
+    const description = '记录旅途中的美好时光和所见所闻';
+    const keywords = `旅行,日记,游记,${webInfo.webName }`;
+    const baseUrl = seoConfig.site_address || process.env.SITE_URL || '';
+    
+    const meta = {
+      description,
+      keywords,
+      author: webInfo.author ,
+      'og:title': title,
+      'og:description': description,
+      'og:type': 'website',
+      'og:url': `${baseUrl}/travel`,
+      'og:image': ensureAbsoluteImageUrl(seoConfig.og_image || webInfo.avatar || '', baseUrl),
+      'og:site_name': webInfo.webTitle || webInfo.webName ,
+      'twitter:card': seoConfig.twitter_card || 'summary',
+      'twitter:title': title,
+      'twitter:description': description,
+      'twitter:image': ensureAbsoluteImageUrl(seoConfig.og_image || webInfo.avatar || '', baseUrl)
+    };
+    
+    addSeoIconFieldsToMeta(meta, seoConfig, baseUrl);
+    addSearchEngineVerificationTags(meta, seoConfig);
+    
+    const travelContent = `
+      <div class="travel-prerender">
+        <div class="travel-hero">
+          <h1>旅行日记</h1>
+          <p>${description}</p>
+        </div>
+        <div class="travel-list-placeholder">
+          <p>旅行记录将在页面加载完成后显示</p>
+        </div>
+      </div>
+    `;
+    
+    return buildHtmlTemplate({ title, meta, content: travelContent, lang, pageType: 'travel' });
+  } catch (error) {
+    logger.error('渲染旅行日记页面失败:', error);
+    throw error;
+  }
+}
+
+// ===== 隐私政策页面渲染函数 =====
+async function renderPrivacyPage(lang = 'zh') {
+  try {
+    logger.info('开始渲染隐私政策页面', { lang });
+    
+    const webInfo = await fetchWebInfo();
+    const seoConfig = await fetchSeoConfig();
+    
+    const title = `隐私政策 - ${webInfo.webTitle || webInfo.webName }`;
+    const description = '了解我们如何保护您的个人隐私信息';
+    const keywords = `隐私政策,隐私保护,个人信息,${webInfo.webName }`;
+    const baseUrl = seoConfig.site_address || process.env.SITE_URL || '';
+    
+    const meta = {
+      description,
+      keywords,
+      author: webInfo.author ,
+      'og:title': title,
+      'og:description': description,
+      'og:type': 'article',
+      'og:url': `${baseUrl}/privacy`,
+      'og:image': ensureAbsoluteImageUrl(seoConfig.og_image || webInfo.avatar || '', baseUrl),
+      'og:site_name': webInfo.webTitle || webInfo.webName ,
+      'twitter:card': seoConfig.twitter_card || 'summary',
+      'twitter:title': title,
+      'twitter:description': description,
+      'twitter:image': ensureAbsoluteImageUrl(seoConfig.og_image || webInfo.avatar || '', baseUrl)
+    };
+    
+    addSeoIconFieldsToMeta(meta, seoConfig, baseUrl);
+    addSearchEngineVerificationTags(meta, seoConfig);
+    
+    const privacyContent = `
+      <div class="privacy-prerender">
+        <div class="privacy-hero">
+          <h1>隐私政策</h1>
+          <p>${description}</p>
+        </div>
+        <div class="privacy-content">
+          <p>我们重视您的隐私，并致力于保护您的个人信息安全。</p>
+          <p>详细的隐私政策内容将在页面加载完成后显示。</p>
+        </div>
+      </div>
+    `;
+    
+    return buildHtmlTemplate({ title, meta, content: privacyContent, lang, pageType: 'privacy' });
+  } catch (error) {
+    logger.error('渲染隐私政策页面失败:', error);
+    throw error;
+  }
+}
+
+
+// ===== 信件页面渲染函数 =====
+async function renderLetterPage(lang = 'zh') {
+  try {
+    logger.info('开始渲染信件页面', { lang });
+    
+    const webInfo = await fetchWebInfo();
+    const seoConfig = await fetchSeoConfig();
+    
+    const title = `信件 - ${webInfo.webTitle || webInfo.webName }`;
+    const description = '查看和管理您的信件';
+    const keywords = `信件,私信,消息,${webInfo.webName }`;
+    const baseUrl = seoConfig.site_address || process.env.SITE_URL || '';
+    
+    const meta = {
+      description,
+      keywords,
+      author: webInfo.author ,
+      'og:title': title,
+      'og:description': description,
+      'og:type': 'website',
+      'og:url': `${baseUrl}/letter`,
+      'og:image': ensureAbsoluteImageUrl(seoConfig.og_image || webInfo.avatar || '', baseUrl),
+      'og:site_name': webInfo.webTitle || webInfo.webName ,
+      'twitter:card': seoConfig.twitter_card || 'summary',
+      'twitter:title': title,
+      'twitter:description': description,
+      'twitter:image': ensureAbsoluteImageUrl(seoConfig.og_image || webInfo.avatar || '', baseUrl)
+    };
+    
+    addSeoIconFieldsToMeta(meta, seoConfig, baseUrl);
+    addSearchEngineVerificationTags(meta, seoConfig);
+    
+    const letterContent = `
+      <div class="letter-prerender">
+        <div class="letter-hero">
+          <h1>信件</h1>
+          <p>${description}</p>
+        </div>
+        <div class="letter-list-placeholder">
+          <p>信件内容将在页面加载完成后显示</p>
+        </div>
+      </div>
+    `;
+    
+    return buildHtmlTemplate({ title, meta, content: letterContent, lang, pageType: 'letter' });
+  } catch (error) {
+    logger.error('渲染信件页面失败:', error);
+    throw error;
+  }
+}
+
+
 // ===== 百宝箱页面渲染函数 =====
 async function renderFavoritePage(lang = 'zh') {
   try {
@@ -1656,15 +2192,15 @@ async function renderFavoritePage(lang = 'zh') {
       siteInfoCover: siteInfo.cover
     });
 
-    // 优先使用webInfo的实际数据，SEO配置仅作为fallback
-    const siteName = webInfo.webName || seoConfig.site_title || 'Poetize';
+    // 直接使用webInfo的数据，简化逻辑
+    const siteName = webInfo.webTitle || webInfo.webName ;
     const title = `百宝箱 - ${siteName}`;
-    const description = webInfo.webTitle || '收藏夹、友人帐、音乐欣赏 - 发现更多精彩内容';
+    const description = '收藏夹、友人帐、音乐欣赏 - 发现更多精彩内容';
     const author = webInfo.webName || seoConfig.default_author || 'Admin';
-    const ogImage = webInfo.avatar || seoConfig.og_image || '';
     
     // 网站地址：优先使用SEO配置，fallback到环境变量或webInfo
-    const baseUrl = seoConfig.site_address || process.env.SITE_URL;
+    const baseUrl = seoConfig.site_address || process.env.SITE_URL || '';
+    const ogImage = ensureAbsoluteImageUrl(webInfo.avatar || seoConfig.og_image || '', baseUrl);
     
     // 在基础关键词基础上添加页面特定关键词
     const baseKeywords = seoConfig.site_keywords || '博客,个人网站,技术分享';
@@ -1679,6 +2215,7 @@ async function renderFavoritePage(lang = 'zh') {
       'og:type': 'website',
       'og:url': `${baseUrl}/favorite`,
       'og:image': ogImage,
+      'og:site_name': webInfo.webTitle || webInfo.webName , // 优先使用webTitle
       'twitter:card': seoConfig.twitter_card || 'summary',
       'twitter:title': title,
       'twitter:description': description,
@@ -1686,7 +2223,8 @@ async function renderFavoritePage(lang = 'zh') {
     };
     
     // 使用通用函数添加图标字段
-    addSeoIconFieldsToMeta(meta, seoConfig);
+    addSeoIconFieldsToMeta(meta, seoConfig, baseUrl);
+    addSearchEngineVerificationTags(meta, seoConfig);
 
     // 构建百宝箱内容
     const favoriteContent = `
@@ -1726,7 +2264,7 @@ async function renderFavoritePage(lang = 'zh') {
             <div class="site-info">
               <h3>🌸本站信息</h3>
               <blockquote>
-                <div>网站名称: ${siteInfo.title || webInfo.webName || 'POETIZE'}</div>
+                <div>网站名称: ${siteInfo.title || webInfo.webName }</div>
                 <div>网址: ${siteInfo.url || baseUrl}</div>
                 <div>头像: ${siteInfo.cover || webInfo.avatar || 'https://s1.ax1x.com/2022/11/10/z9E7X4.jpg'}</div>
                 <div>描述: ${siteInfo.introduction || webInfo.webTitle || '这是一个 Vue2 Vue3 与 SpringBoot 结合的产物～'}</div>
@@ -1799,12 +2337,12 @@ async function renderDefaultSortPage(lang = 'zh') {
       fetchSortInfo() // 获取所有分类信息
     ]);
 
-    const siteName = seoConfig.site_title || webInfo.webName || 'Poetize';
+    const siteName = webInfo.webTitle || webInfo.webName;
     const title = `文章分类 - ${siteName}`;
     const description = '浏览所有文章分类，找到您感兴趣的内容主题';
     const author = seoConfig.default_author || webInfo.webName || 'Admin';
-    const ogImage = seoConfig.og_image || webInfo.avatar || '';
-    const baseUrl = seoConfig.site_address || process.env.SITE_URL;
+    const baseUrl = seoConfig.site_address || process.env.SITE_URL || '';
+    const ogImage = ensureAbsoluteImageUrl(seoConfig.og_image || webInfo.avatar || '', baseUrl);
     
     // 在基础关键词基础上添加页面特定关键词
     const baseKeywords = seoConfig.site_keywords || '博客,个人网站,技术分享';
@@ -1819,6 +2357,7 @@ async function renderDefaultSortPage(lang = 'zh') {
       'og:type': 'website',
       'og:url': `${baseUrl}/sort`,
       'og:image': ogImage,
+      'og:site_name': webInfo.webTitle || webInfo.webName, // 优先使用webTitle
       'twitter:card': seoConfig.twitter_card || 'summary',
       'twitter:title': title,
       'twitter:description': description,
@@ -1826,7 +2365,8 @@ async function renderDefaultSortPage(lang = 'zh') {
     };
     
     // 使用通用函数添加图标字段
-    addSeoIconFieldsToMeta(meta, seoConfig);
+    addSeoIconFieldsToMeta(meta, seoConfig, baseUrl);
+    addSearchEngineVerificationTags(meta, seoConfig);
 
     // 构建默认分类页面内容
     const defaultSortContent = `
@@ -1841,7 +2381,7 @@ async function renderDefaultSortPage(lang = 'zh') {
             <div class="categories-grid">
               ${sortList.map(sort => `
                 <div class="category-card">
-                  <a href="/sort?sortId=${sort.id}" title="${sort.sortDescription || sort.sortName}">
+                  <a href="/sort/${sort.id}" title="${sort.sortDescription || sort.sortName}">
                     <h3>${sort.sortName}</h3>
                     <p>${sort.sortDescription || '暂无描述'}</p>
                     <div class="category-stats">
@@ -1904,12 +2444,12 @@ async function renderSortPage(sortId, labelId = null, lang = 'zh') {
       throw new Error(`分类${sortId}未找到`);
     }
 
-    const siteName = seoConfig.site_title || webInfo.webName || 'Poetize';
+    const siteName = webInfo.webTitle || webInfo.webName ;
     const title = `${sortData.sortName} - ${siteName}`;
     const description = sortData.sortDescription || `${sortData.sortName}分类下的所有文章`;
     const author = seoConfig.default_author || webInfo.webName || 'Admin';
-    const ogImage = seoConfig.og_image || webInfo.avatar || '';
-    const baseUrl = seoConfig.site_address || process.env.SITE_URL;
+    const baseUrl = seoConfig.site_address || process.env.SITE_URL || '';
+    const ogImage = ensureAbsoluteImageUrl(seoConfig.og_image || webInfo.avatar || '', baseUrl);
     
     // 在基础关键词基础上添加分类特定关键词
     const baseKeywords = seoConfig.site_keywords || '博客,个人网站,技术分享';
@@ -1922,8 +2462,9 @@ async function renderSortPage(sortId, labelId = null, lang = 'zh') {
       'og:title': title,
       'og:description': description,
       'og:type': 'website',
-      'og:url': `${baseUrl}/sort?sortId=${sortId}${labelId ? `&labelId=${labelId}` : ''}`,
+      'og:url': `${baseUrl}/sort/${sortId}${labelId ? `?labelId=${labelId}` : ''}`,
       'og:image': ogImage,
+      'og:site_name': webInfo.webTitle || webInfo.webName , // 优先使用webTitle
       'twitter:card': seoConfig.twitter_card || 'summary',
       'twitter:title': title,
       'twitter:description': description,
@@ -1931,7 +2472,8 @@ async function renderSortPage(sortId, labelId = null, lang = 'zh') {
     };
     
     // 使用通用函数添加图标字段
-    addSeoIconFieldsToMeta(meta, seoConfig);
+    addSeoIconFieldsToMeta(meta, seoConfig, baseUrl);
+    addSearchEngineVerificationTags(meta, seoConfig);
 
     // 构建分类页面内容
     const sortContent = `
@@ -1972,7 +2514,7 @@ async function renderSortPage(sortId, labelId = null, lang = 'zh') {
             <ul>
               ${sortData.labels.map(label => `
                 <li>
-                  <a href="/sort?sortId=${sortId}&labelId=${label.id}" title="${label.labelDescription || label.labelName}">
+                  <a href="/sort/${sortId}?labelId=${label.id}" title="${label.labelDescription || label.labelName}">
                     ${label.labelName} (${label.countOfLabel || 0})
                   </a>
                 </li>
@@ -2106,7 +2648,7 @@ async function renderIds(ids = [], options = {}) {
           const articleMeta = await fetchMeta(id, lang);
           
           // 增强meta信息，结合SEO配置
-          const siteName = seoConfig.site_title || webInfo.webName || 'Poetize';
+          const siteName = webInfo.webTitle || webInfo.webName ;
           const baseKeywords = seoConfig.site_keywords || '博客,个人网站,技术分享';
           const author = seoConfig.default_author || webInfo.webName || 'Admin';
           const baseUrl = seoConfig.site_address || process.env.SITE_URL;
@@ -2117,11 +2659,12 @@ async function renderIds(ids = [], options = {}) {
             // 确保基础字段存在
             author: articleMeta.author || author,
             keywords: articleMeta.keywords || baseKeywords,
-            'og:site_name': siteName,
-            'og:url': articleMeta['og:url'] || `${baseUrl}/article/${id}`,
-            'og:image': articleMeta['og:image'] || seoConfig.og_image || webInfo.avatar || '',
+            'og:site_name': webInfo.webTitle || webInfo.webName , // 优先使用webTitle
+            'og:url': articleMeta['og:url'],
+            'og:image': ensureAbsoluteImageUrl(articleMeta['og:image'] || seoConfig.og_image || webInfo.avatar || '', baseUrl),
             'twitter:card': seoConfig.twitter_card || 'summary_large_image',
-            'twitter:site': seoConfig.twitter_site || ''
+            'twitter:site': seoConfig.twitter_site || '',
+            'twitter:image': ensureAbsoluteImageUrl(articleMeta['og:image'] || seoConfig.og_image || webInfo.avatar || '', baseUrl)
           };
 
           // 调试：检查meta对象的格式
@@ -2137,7 +2680,7 @@ async function renderIds(ids = [], options = {}) {
             }, {})
           });
 
-          let html = buildHtml({ title: meta.title || articleTitle || 'Poetize', meta, content: contentHtml, lang });
+          let html = buildHtml({ title: meta.title || articleTitle , meta, content: contentHtml, lang });
           
           const dir = path.join(OUTPUT_ROOT, 'article', id.toString());
           fs.mkdirSync(dir, { recursive: true });
@@ -2268,6 +2811,43 @@ async function renderPages(type, params = {}) {
               if (labelId) outputPath = path.join(outputPath, labelId.toString());
             }
             break;
+
+          case 'about':
+            html = await renderAboutPage(lang);
+            outputPath = path.join(OUTPUT_ROOT, 'about');
+            break;
+            
+          case 'message':
+            html = await renderMessagePage(lang);
+            outputPath = path.join(OUTPUT_ROOT, 'message');
+            break;
+            
+          case 'weiYan':
+            html = await renderWeiYanPage(lang);
+            outputPath = path.join(OUTPUT_ROOT, 'weiYan');
+            break;
+            
+          case 'love':
+            html = await renderLovePage(lang);
+            outputPath = path.join(OUTPUT_ROOT, 'love');
+            break;
+            
+          case 'travel':
+            html = await renderTravelPage(lang);
+            outputPath = path.join(OUTPUT_ROOT, 'travel');
+            break;
+            
+          case 'privacy':
+            html = await renderPrivacyPage(lang);
+            outputPath = path.join(OUTPUT_ROOT, 'privacy');
+            break;
+
+            
+          case 'letter':
+            html = await renderLetterPage(lang);
+            outputPath = path.join(OUTPUT_ROOT, 'letter');
+            break;
+            
             
           default:
             throw new Error(`未知页面类型: ${type}`);
@@ -2526,13 +3106,13 @@ app.post('/render/pages', async (req, res) => {
     });
   }
 
-  if (!['home', 'favorite', 'sort', 'allSorts'].includes(type)) {
+  if (!['home', 'favorite', 'sort', 'allSorts', 'about', 'message', 'weiYan', 'love', 'travel', 'privacy', 'letter', 'verify', '403', '404', 'oauth-callback'].includes(type)) {
     logger.warn('无效的页面类型', { requestId, type });
     return res.status(400).json({ 
       message: '无效的页面类型',
       requestId,
       received: type,
-      supported: ['home', 'favorite', 'sort', 'allSorts'],
+      supported: ['home', 'favorite', 'sort', 'allSorts', 'about', 'message', 'weiYan', 'love', 'travel', 'privacy', 'letter', 'verify', '403', '404', 'oauth-callback'],
       timestamp: new Date().toISOString()
     });
   }
@@ -2940,36 +3520,6 @@ app.post('/logs/cleanup', (req, res) => {
   }
 });
 
-// 新增：清理SEO配置缓存API
-app.post('/cache/seo/clear', (req, res) => {
-  const requestId = req.requestId;
-
-  logger.info('SEO配置缓存清理请求', { requestId });
-
-  try {
-    // 清理SEO配置缓存
-    seoConfigCache.data = null;
-    seoConfigCache.lastFetch = 0;
-
-    logger.info('SEO配置缓存清理成功', { requestId });
-
-    res.json({
-      success: true,
-      message: 'SEO配置缓存清理成功',
-      requestId,
-      timestamp: new Date().toISOString()
-    });
-
-  } catch (error) {
-    logger.error('清理SEO配置缓存失败', { requestId, error: error.message });
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      requestId,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
 
 // 新增：获取当前源语言配置API
 app.get('/config/source-language', async (req, res) => {
@@ -3139,8 +3689,28 @@ app.listen(PORT, () => {
   console.log(`🚀 Prerender worker 监听于端口 ${PORT}`);
 });
 
+// 添加一个通用函数来确保图片URL是绝对路径
+function ensureAbsoluteImageUrl(url, baseUrl) {
+  if (!url) return url;
+  
+  // 如果已经是绝对URL（包含协议），直接返回
+  if (/^https?:\/\//.test(url)) {
+    return url;
+  }
+  
+  // 如果是相对路径，转换为绝对路径
+  if (url.startsWith('/')) {
+    const cleanBaseUrl = baseUrl ? baseUrl.replace(/\/$/, '') : '';
+    return cleanBaseUrl ? `${cleanBaseUrl}${url}` : url;
+  }
+  
+  // 如果是相对路径但不以/开头，添加/
+  const cleanBaseUrl = baseUrl ? baseUrl.replace(/\/$/, '') : '';
+  return cleanBaseUrl ? `${cleanBaseUrl}/${url}` : `/${url}`;
+}
+
 // 添加一个通用函数，用于将SEO配置中的图标字段添加到meta对象中
-function addSeoIconFieldsToMeta(meta, seoConfig) {
+function addSeoIconFieldsToMeta(meta, seoConfig, baseUrl = '') {
   if (!meta || !seoConfig) return meta;
   
   // 定义需要从SEO配置中复制到meta的图标字段
@@ -3149,18 +3719,112 @@ function addSeoIconFieldsToMeta(meta, seoConfig) {
     'apple_touch_icon',
     'site_icon_192',
     'site_icon_512',
-    'site_logo',
-    'og_image'
+    'site_logo'
   ];
   
-  // 复制字段
+  // 复制字段，确保图片URL是绝对路径
   iconFields.forEach(field => {
     if (seoConfig[field] && !meta[field]) {
-      meta[field] = seoConfig[field];
+      meta[field] = ensureAbsoluteImageUrl(seoConfig[field], baseUrl);
     }
   });
   
-  // 如果将来需要添加新的图标字段，只需要在iconFields数组中添加即可
-  
+  return meta;
+}
+
+// 通用函数：添加所有SEO相关标签
+function addSearchEngineVerificationTags(meta, seoConfig) {
+  if (!meta || !seoConfig) return meta;
+
+  // 搜索引擎验证标签字段（基于Java接口返回的完整字段）
+  const verificationFields = [
+    'google_site_verification',
+    'baidu_site_verification', 
+    'bing_site_verification',
+    'yandex_site_verification',
+    'sogou_site_verification',
+    'so_site_verification',
+    'shenma_site_verification',
+    'yahoo_site_verification',
+    'duckduckgo_site_verification'
+  ];
+
+  let addedCount = 0;
+  verificationFields.forEach(field => {
+    if (seoConfig[field] && seoConfig[field].trim() !== '' && !meta[field]) {
+      meta[field] = seoConfig[field].trim();
+      addedCount++;
+    }
+  });
+
+  // 添加社交媒体字段（高价值SEO字段）
+  const socialMediaFields = [
+    // Twitter相关
+    'twitter_site', 
+    'twitter_creator',
+    
+    // Facebook相关
+    'fb_app_id',
+    'fb_page_url',
+    
+    
+    // LinkedIn支持
+    'linkedin_company_id',
+    
+    // Pinterest增强
+    'pinterest_verification',
+    'pinterest_description',
+    
+    // 小程序支持
+    'wechat_miniprogram_id',
+    'wechat_miniprogram_path',
+    'qq_miniprogram_path'
+  ];
+  socialMediaFields.forEach(field => {
+    if (seoConfig[field] && seoConfig[field].trim() !== '' && !meta[field]) {
+      meta[field] = seoConfig[field].trim();
+      addedCount++;
+    }
+  });
+
+
+  // 添加robots标签
+  if (seoConfig.robots_default && !meta.robots) {
+    meta.robots = seoConfig.robots_default;
+  }
+
+  // 添加自定义头部代码
+  if (seoConfig.custom_head_code && seoConfig.custom_head_code.trim() !== '' && !meta.custom_head_code) {
+    meta.custom_head_code = seoConfig.custom_head_code.trim();
+    addedCount++;
+    console.log('已将自定义头部代码添加到meta对象', { 
+      codeLength: meta.custom_head_code.length,
+      preview: meta.custom_head_code.substring(0, 50) + '...'
+    });
+  }
+
+  // 添加其他基础SEO字段
+  const basicSeoFields = [
+    'default_author',
+    'site_short_name', 
+    'site_address',
+    'site_description',
+    'site_keywords'
+  ];
+  basicSeoFields.forEach(field => {
+    if (seoConfig[field] && seoConfig[field].trim() !== '' && !meta[field]) {
+      meta[field] = seoConfig[field].trim();
+      addedCount++;
+    }
+  });
+
+  if (addedCount > 0) {
+    console.log('已添加SEO相关标签到meta对象', { 
+      verificationTagsCount: addedCount,
+      hasRobots: !!meta.robots,
+      hasCustomHeadCode: !!meta.custom_head_code
+    });
+  }
+
   return meta;
 }

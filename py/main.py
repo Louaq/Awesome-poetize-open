@@ -24,7 +24,6 @@ from json_config_cache import get_json_config_cache
 
 from email_api import register_email_api  # 仅处理邮箱配置和测试功能，实际邮件发送由Java后端处理
 from captcha_api import register_captcha_api  # 处理滑动验证码配置功能
-from seo_api import register_seo_api  # 处理SEO优化相关功能
 from ai_chat_api import register_ai_chat_api  # 处理AI聊天配置功能
 from translation_api import register_translation_api  # 处理翻译管理功能
 from auth_decorator import admin_required  # 导入管理员权限验证装饰器
@@ -111,7 +110,7 @@ def register_all_apis(app):
     # 注册各个API模块
     register_email_api(app)
     register_captcha_api(app)
-    register_seo_api(app)
+    # SEO功能已完全迁移到Java端
     register_ai_chat_api(app)  # 注册AI聊天配置API
     register_translation_api(app)  # 注册翻译管理API
 

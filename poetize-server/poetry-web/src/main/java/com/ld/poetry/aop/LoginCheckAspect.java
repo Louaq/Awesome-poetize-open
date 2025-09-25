@@ -51,8 +51,8 @@ public class LoginCheckAspect {
         
         String token = PoetryUtil.getTokenWithoutBearer();
         if (!StringUtils.hasText(token)) {
-            log.warn("Token为空，用户未登录");
-            throw new PoetryLoginException(CodeMsg.NOT_LOGIN.getMsg());
+            log.warn("Token为空，登录已过期");
+            throw new PoetryLoginException(CodeMsg.LOGIN_EXPIRED.getMsg());
         }
 
         // 使用PoetryUtil获取用户信息（已集成Redis缓存）

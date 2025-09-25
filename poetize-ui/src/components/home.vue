@@ -42,7 +42,7 @@
                 </li>
                 <el-dropdown-menu slot="dropdown">
                   <el-dropdown-item v-for="(sort, sortIndex) in sortInfo" :key="sortIndex">
-                    <div @click="$router.push({path: '/sort', query: {sortId: sort.id}})">
+                    <div @click="$router.push('/sort/' + sort.id)">
                       {{sort.sortName}}
                     </div>
                   </el-dropdown-item>
@@ -207,7 +207,7 @@
                 <div v-for="(menu, menuIndex) in sortInfo"
                      :key="menuIndex"
                      class="sortMenu"
-                     @click="smallMenu({path: '/sort', query: {sortId: menu.id}})">
+                     @click="smallMenu('/sort/' + menu.id)">
                   {{menu.sortName}}
                 </div>
               </div>
@@ -471,16 +471,7 @@
         return this.$store.state.sortInfo;
       },
       mainContainerStyle() {
-        const height = this.$store.state.webInfo.homePagePullUpHeight;
-        if (typeof height !== 'number' || height < 0 || height > 100) {
-          return {};
-        }
-
-        const marginTop = 3.5 * height;
-
-        return {
-          marginTop: `${marginTop}px`
-        };
+        return {};
       },
       orderedNavItems() {
         try {

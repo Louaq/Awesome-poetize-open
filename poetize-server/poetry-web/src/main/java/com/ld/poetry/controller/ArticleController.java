@@ -149,48 +149,7 @@ public class ArticleController {
                     }
                 }).start();
                 
-                // 如果文章可见，异步更新sitemap（不管是否推送搜索引擎）
-                if (Boolean.TRUE.equals(articleVO.getViewStatus())) {
-                    log.info("文章ID {} 可见，开始异步更新sitemap", articleId);
-                    
-                    // 异步更新sitemap
-                    new Thread(() -> {
-                        try {
-                            // 调用Python服务更新sitemap
-                            Map<String, Object> sitemapData = new HashMap<>();
-                            sitemapData.put("articleId", articleId);
-                            sitemapData.put("action", "add_or_update");
-                            
-                            HttpHeaders headers = new HttpHeaders();
-                            headers.setContentType(MediaType.APPLICATION_JSON);
-                            headers.set("X-Internal-Service", "poetize-java");
-                            headers.set("User-Agent", "poetize-java/1.0.0");
-                            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(sitemapData, headers);
-                            
-                            // 调用专门的sitemap更新接口
-                            String pythonServerUrl = System.getenv().getOrDefault("PYTHON_SERVICE_URL", "http://localhost:5000");
-                            String sitemapApiUrl = pythonServerUrl + "/seo/updateArticleSitemap";
-                            
-                            try {
-                                @SuppressWarnings("unchecked")
-                                Map<String, Object> response = restTemplate.postForObject(
-                                    sitemapApiUrl, 
-                                    requestEntity, 
-                                    Map.class
-                                );
-                                if (response != null && "200".equals(String.valueOf(response.get("code")))) {
-                                    log.info("文章ID {} sitemap更新成功", articleId);
-                                } else {
-                                    log.warn("文章ID {} sitemap更新响应异常: {}", articleId, response);
-                                }
-                            } catch (Exception apiException) {
-                                log.error("调用sitemap更新API失败，文章ID: " + articleId + ", 错误: " + apiException.getMessage(), apiException);
-                            }
-                        } catch (Exception e) {
-                            log.error("更新sitemap失败，但不影响文章保存，文章ID: " + articleId, e);
-                        }
-                    }).start();
-                }
+                log.info("文章ID {} 保存成功，sitemap更新将通过事件监听器自动处理", articleId);
                 
                 // 如果需要推送至搜索引擎且文章可见，异步处理
                 if (Boolean.TRUE.equals(articleVO.getSubmitToSearchEngine()) && Boolean.TRUE.equals(articleVO.getViewStatus())) {
@@ -341,44 +300,8 @@ public class ArticleController {
             // 传递正确的分类ID，确保分类页面也会被重新渲染
             eventPublisher.publishEvent(new ArticleSavedEvent(id, sortId, false, "DELETE"));
             
-            // 异步删除sitemap条目
-            final Integer articleId = id;
-            new Thread(() -> {
-                try {
-                    // 调用Python服务删除sitemap条目
-                    Map<String, Object> sitemapData = new HashMap<>();
-                    sitemapData.put("articleId", articleId);
-                    sitemapData.put("action", "remove");
-                    
-                    HttpHeaders headers = new HttpHeaders();
-                    headers.setContentType(MediaType.APPLICATION_JSON);
-                    headers.set("X-Internal-Service", "poetize-java");
-                    headers.set("User-Agent", "poetize-java/1.0.0");
-                    HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(sitemapData, headers);
-                    
-                    // 调用专门的sitemap更新接口
-                    String pythonServerUrl = System.getenv().getOrDefault("PYTHON_SERVICE_URL", "http://localhost:5000");
-                    String sitemapApiUrl = pythonServerUrl + "/seo/updateArticleSitemap";
-                    
-                    try {
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> response = restTemplate.postForObject(
-                            sitemapApiUrl, 
-                            requestEntity, 
-                            Map.class
-                        );
-                        if (response != null && "200".equals(String.valueOf(response.get("code")))) {
-                            log.info("文章ID {} sitemap删除成功", articleId);
-                        } else {
-                            log.warn("文章ID {} sitemap删除响应异常: {}", articleId, response);
-                        }
-                    } catch (Exception apiException) {
-                        log.error("调用sitemap删除API失败，文章ID: " + articleId + ", 错误: " + apiException.getMessage(), apiException);
-                    }
-                } catch (Exception e) {
-                    log.error("删除sitemap条目失败，但不影响文章删除，文章ID: " + articleId, e);
-                }
-            }).start();
+            // 注意：sitemap更新已通过ArticleEventListener中的updateSitemapAsync方法处理
+            // 无需在这里重复处理sitemap更新逻辑
         }
 
         return result;
@@ -430,51 +353,9 @@ public class ArticleController {
                 }
             }).start();
             
-            // 更新文章时不更新sitemap，因为创建时已经更新过了
-            // 只有当文章变为不可见时才从sitemap中删除
-            if (!Boolean.TRUE.equals(articleVO.getViewStatus())) {
-                log.info("文章ID {} 变为不可见，开始异步删除sitemap条目", articleId);
-                
-                // 异步删除sitemap条目
-                new Thread(() -> {
-                    try {
-                        // 调用Python服务删除sitemap条目
-                        Map<String, Object> sitemapData = new HashMap<>();
-                        sitemapData.put("articleId", articleId);
-                        sitemapData.put("action", "remove");
-                        
-                        HttpHeaders headers = new HttpHeaders();
-                        headers.setContentType(MediaType.APPLICATION_JSON);
-                        headers.set("X-Internal-Service", "poetize-java");
-                        headers.set("User-Agent", "poetize-java/1.0.0");
-                        HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(sitemapData, headers);
-                        
-                        // 调用专门的sitemap更新接口
-                        String pythonServerUrl = System.getenv().getOrDefault("PYTHON_SERVICE_URL", "http://localhost:5000");
-                        String sitemapApiUrl = pythonServerUrl + "/seo/updateArticleSitemap";
-                        
-                        try {
-                            @SuppressWarnings("unchecked")
-                            Map<String, Object> response = restTemplate.postForObject(
-                                sitemapApiUrl, 
-                                requestEntity, 
-                                Map.class
-                            );
-                            if (response != null && "200".equals(String.valueOf(response.get("code")))) {
-                                log.info("文章ID {} sitemap删除成功", articleId);
-                            } else {
-                                log.warn("文章ID {} sitemap删除响应异常: {}", articleId, response);
-                            }
-                        } catch (Exception apiException) {
-                            log.error("调用sitemap删除API失败，文章ID: " + articleId + ", 错误: " + apiException.getMessage(), apiException);
-                        }
-                    } catch (Exception e) {
-                        log.error("删除sitemap条目失败，但不影响文章更新，文章ID: " + articleId, e);
-                    }
-                }).start();
-            } else {
-                log.info("文章ID {} 保持可见状态，无需更新sitemap（创建时已更新）", articleId);
-            }
+            // 注意：sitemap更新（包括文章可见性变更）已经通过 ArticleEventListener.updateSitemapAsync() 方法处理
+            // 无需在这里重复处理sitemap更新
+            log.info("文章ID {} 更新完成，sitemap更新将通过事件监听器自动处理", articleId);
             
             // 如果需要推送至搜索引擎且文章可见，异步处理
             if (Boolean.TRUE.equals(articleVO.getSubmitToSearchEngine()) && Boolean.TRUE.equals(articleVO.getViewStatus())) {
@@ -634,10 +515,6 @@ public class ArticleController {
             String timestamp = notificationData.containsKey("timestamp") ? notificationData.get("timestamp").toString() : 
                 LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
             
-            // 检查是否提供了通知邮箱
-            String notificationEmail = notificationData.containsKey("notificationEmail") ? 
-                notificationData.get("notificationEmail").toString() : null;
-            
             @SuppressWarnings("unchecked")
             Map<String, Object> results = notificationData.containsKey("results") ? 
                 (Map<String, Object>) notificationData.get("results") : new HashMap<>();
@@ -645,13 +522,8 @@ public class ArticleController {
             // 确定收件人列表
             List<String> recipients = new ArrayList<>();
             
-            // 如果提供了通知邮箱，优先使用
-            if (notificationEmail != null && !notificationEmail.isEmpty()) {
-                recipients.add(notificationEmail);
-                log.info("使用SEO配置中指定的通知邮箱: {}", notificationEmail);
-            } 
-            // 如果没有提供通知邮箱，尝试使用文章作者的邮箱
-            else if (articleId != null) {
+            // 直接使用文章作者的邮箱（移除了独立的通知邮箱字段）
+            if (articleId != null) {
                 // 查询文章信息以获取作者ID
                 ArticleVO article = articleService.getArticleById(articleId, null).getData();
                 if (article == null) {

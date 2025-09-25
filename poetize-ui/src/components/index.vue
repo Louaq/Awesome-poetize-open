@@ -64,7 +64,7 @@
                         </svg>
                         {{sort.sortName}}
                       </div>
-                      <div class="article-more" @click="$router.push({path: '/sort', query: {sortId: sort.id}})">
+                      <div class="article-more" @click="$router.push('/sort/' + sort.id)">
                         <svg viewBox="0 0 1024 1024" width="20" height="20"
                              style="vertical-align: -2px;margin-bottom: -2px">
                           <path

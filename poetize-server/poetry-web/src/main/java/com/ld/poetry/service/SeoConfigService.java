@@ -1,0 +1,42 @@
+package com.ld.poetry.service;
+
+import com.ld.poetry.entity.SeoConfig;
+import com.baomidou.mybatisplus.extension.service.IService;
+import java.util.Map;
+
+/**
+ * <p>
+ * SEO配置服务接口
+ * </p>
+ *
+ * @author sara
+ * @since 2024-12-23
+ */
+public interface SeoConfigService extends IService<SeoConfig> {
+    
+    /**
+     * 获取完整的SEO配置（包含所有关联数据）
+     */
+    SeoConfig getFullSeoConfig();
+    
+    /**
+     * 保存完整的SEO配置（包含所有关联数据）
+     */
+    boolean saveFullSeoConfig(SeoConfig seoConfig);
+    
+    /**
+     * 获取兼容Python的JSON格式配置
+     */
+    Map<String, Object> getSeoConfigAsJson();
+    
+    /**
+     * 从JSON格式更新SEO配置
+     */
+    boolean updateSeoConfigFromJson(Map<String, Object> jsonConfig);
+    
+    /**
+     * 初始化默认SEO配置
+     */
+    boolean initDefaultSeoConfig();
+}
+

@@ -46,6 +46,9 @@ public class AdminArticleController {
     
     @Autowired
     private RestTemplate restTemplate;
+    
+    @Autowired
+    private com.ld.poetry.service.SitemapService sitemapService;
 
     /**
      * 用户查询文章
@@ -90,46 +93,15 @@ public class AdminArticleController {
         
         // 如果修改了文章可见性，需要更新sitemap
         if (viewStatus != null) {
-            final Integer finalArticleId = articleId;
-            final Boolean finalViewStatus = viewStatus;
-            
-            // 异步更新sitemap
-            new Thread(() -> {
-                try {
-                    // 调用Python服务更新sitemap
-                    Map<String, Object> sitemapData = new HashMap<>();
-                    sitemapData.put("articleId", finalArticleId);
-                    sitemapData.put("action", finalViewStatus ? "add_or_update" : "remove");
-                    
-                    HttpHeaders headers = new HttpHeaders();
-                    headers.setContentType(MediaType.APPLICATION_JSON);
-                    headers.set("X-Internal-Service", "poetize-java");
-                    headers.set("User-Agent", "poetize-java/1.0.0");
-                    HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(sitemapData, headers);
-                    
-                    // 调用专门的sitemap更新接口
-                    String pythonServerUrl = System.getenv().getOrDefault("PYTHON_SERVICE_URL", "http://localhost:5000");
-                    String sitemapApiUrl = pythonServerUrl + "/seo/updateArticleSitemap";
-                    
-                    try {
-                        @SuppressWarnings("unchecked")
-                        Map<String, Object> response = restTemplate.postForObject(
-                            sitemapApiUrl, 
-                            requestEntity, 
-                            Map.class
-                        );
-                        if (response != null && "200".equals(String.valueOf(response.get("code")))) {
-                            log.info("文章ID {} sitemap{}成功", finalArticleId, finalViewStatus ? "更新" : "删除");
-                        } else {
-                            log.warn("文章ID {} sitemap{}响应异常: {}", finalArticleId, finalViewStatus ? "更新" : "删除", response);
-                        }
-                    } catch (Exception apiException) {
-                        log.error("调用sitemap{}API失败，文章ID: {}, 错误: {}", finalViewStatus ? "更新" : "删除", finalArticleId, apiException.getMessage(), apiException);
-                    }
-                } catch (Exception e) {
-                    log.error("{}sitemap失败，但不影响状态修改，文章ID: {}", finalViewStatus ? "更新" : "删除", finalArticleId, e);
+            try {
+                // 清除sitemap缓存（文章可见性变更会影响sitemap内容）
+                if (sitemapService != null) {
+                    sitemapService.updateArticleSitemap(articleId);
+                    log.info("文章可见性状态变更后已清除sitemap缓存，文章ID: {}, 新状态: {}", articleId, viewStatus);
                 }
-            }).start();
+            } catch (Exception e) {
+                log.warn("文章可见性状态变更后更新sitemap失败，文章ID: {}", articleId, e);
+            }
         }
         
         return PoetryResult.success();
@@ -320,16 +292,18 @@ public class AdminArticleController {
     /**
      * 更新文章sitemap（代理接口）
      */
+    /**
+     * 手动更新文章sitemap（已迁移到Java端）
+     */
     @PostMapping("/article/updateSitemap")
     @LoginCheck(1)
     public PoetryResult updateArticleSitemap(@RequestBody Map<String, Object> requestData) {
         try {
             Integer articleId = (Integer) requestData.get("articleId");
             String action = (String) requestData.get("action");
-            String language = (String) requestData.get("language");
             
-            if (articleId == null || action == null) {
-                return PoetryResult.fail("缺少必要参数");
+            if (articleId == null) {
+                return PoetryResult.fail("缺少文章ID参数");
             }
             
             // 验证文章所有权
@@ -347,44 +321,31 @@ public class AdminArticleController {
                 return PoetryResult.fail("无权限操作此文章的sitemap");
             }
             
-            // 调用Python服务更新sitemap
+            // 使用Java端的sitemap服务
             try {
-                RestTemplate restTemplate = new RestTemplate();
-                HttpHeaders headers = new HttpHeaders();
-                headers.setContentType(MediaType.APPLICATION_JSON);
-                headers.set("X-Internal-Service", "poetize-java");
-                headers.set("X-Admin-Request", "true");
-                headers.set("User-Agent", "poetize-java/1.0.0");
+                log.info("用户 {} 手动更新文章 {} 的sitemap，操作: {}", currentUserId, articleId, action);
                 
-                Map<String, Object> sitemapData = new HashMap<>();
-                sitemapData.put("articleId", articleId);
-                sitemapData.put("action", action);
-                if (language != null) {
-                    sitemapData.put("language", language);
-                }
+                // 调用Java端sitemap服务
+                sitemapService.updateArticleSitemap(articleId);
                 
-                HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(sitemapData, headers);
-                
-                String pythonServerUrl = System.getenv().getOrDefault("PYTHON_SERVICE_URL", "http://localhost:5000");
-                String sitemapApiUrl = pythonServerUrl + "/seo/updateArticleSitemap";
-                
-                Map<String, Object> response = restTemplate.postForObject(
-                    sitemapApiUrl,
-                    requestEntity,
-                    Map.class
-                );
-                
-                if (response != null && "200".equals(String.valueOf(response.get("code")))) {
-                    log.info("用户 {} 成功更新文章 {} 的sitemap，操作: {}, 语言: {}", currentUserId, articleId, action, language);
-                    return PoetryResult.success(response.get("data"));
+                // 如果是手动操作，可以立即重新生成sitemap
+                if ("regenerate".equals(action)) {
+                    String sitemap = sitemapService.generateSitemapDirect();
+                    if (sitemap != null) {
+                        int urlCount = sitemap.split("<url>").length - 1;
+                        log.info("手动重新生成sitemap成功，包含 {} 个URL", urlCount);
+                        return PoetryResult.success("Sitemap已重新生成，包含 " + urlCount + " 个URL");
+                    } else {
+                        return PoetryResult.fail("Sitemap重新生成失败");
+                    }
                 } else {
-                    log.warn("sitemap更新响应异常: {}", response);
-                    return PoetryResult.fail("sitemap更新失败：" + (response != null ? response.get("message") : "未知错误"));
+                    log.info("文章sitemap缓存已清除，下次访问时将包含最新内容");
+                    return PoetryResult.success("文章sitemap已更新，缓存已清除");
                 }
                 
-            } catch (Exception apiException) {
-                log.error("调用sitemap更新API失败，文章ID: {}, 错误: {}", articleId, apiException.getMessage(), apiException);
-                return PoetryResult.fail("sitemap更新失败：" + apiException.getMessage());
+            } catch (Exception serviceException) {
+                log.error("调用Java端sitemap服务失败，文章ID: {}, 错误: {}", articleId, serviceException.getMessage(), serviceException);
+                return PoetryResult.fail("sitemap更新失败：" + serviceException.getMessage());
             }
             
         } catch (Exception e) {

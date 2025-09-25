@@ -64,6 +64,15 @@ public class AdminController {
 
     @Autowired
     private PoetryApplicationRunner poetryApplicationRunner;
+    
+    @Autowired
+    private com.ld.poetry.service.SitemapService sitemapService;
+    
+    @Autowired
+    private com.ld.poetry.service.SearchEnginePushService searchEnginePushService;
+    
+    @Autowired
+    private com.ld.poetry.service.RobotsService robotsService;
 
     /**
      * 获取网站信息
@@ -90,132 +99,6 @@ public class AdminController {
         Page<TreeHole> page = new Page<>(baseRequestVO.getCurrent(), baseRequestVO.getSize());
         Page<TreeHole> resultPage = wrapper.orderByDesc(TreeHole::getCreateTime).page(page);
         return PoetryResult.success(resultPage);
-    }
-
-    @PostMapping("/updateSeoConfig")
-    @LoginCheck(1)
-    public PoetryResult updateSeoConfig(@RequestBody Map<String, Object> seoConfig) {
-        log.info("收到SEO配置更新请求: {}", seoConfig);
-        try {
-            String pythonServerUrl = env.getProperty("PYTHON_SERVICE_URL", "http://localhost:5000");
-            String seoApiUrl = pythonServerUrl + "/seo/updateSeoConfig";
-            
-            // 设置请求头
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.add("X-Internal-Service", "poetize-java");
-            headers.add("X-Admin-Request", "true");
-            
-            // 创建请求实体
-            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(seoConfig, headers);
-            
-            log.info("转发SEO配置更新请求到Python服务: {}", seoApiUrl);
-            
-            // 发送请求到Python服务
-            Map<String, Object> response = restTemplate.postForObject(
-                seoApiUrl,
-                requestEntity,
-                Map.class
-            );
-            
-            log.info("Python服务SEO配置更新响应: {}", response);
-            
-            if (response != null && response.containsKey("code")) {
-                int code = Integer.parseInt(response.get("code").toString());
-                if (code == 200) {
-                    // SEO配置更新成功后，触发完整预渲染
-                    try {
-                        log.info("SEO配置更新成功，开始触发完整预渲染...");
-                        
-                        // 异步触发完整预渲染，避免阻塞响应
-                        new Thread(() -> {
-                            try {
-                                // 调用启动时的完整预渲染方法
-                                poetryApplicationRunner.executeFullPrerender();
-                                log.info("SEO配置更新后的完整预渲染任务已启动");
-                            } catch (Exception e) {
-                                log.error("SEO配置更新后触发完整预渲染失败: {}", e.getMessage(), e);
-                            }
-                        }, "seo-config-prerender-thread").start();
-                        
-                    } catch (Exception e) {
-                        log.error("触发完整预渲染失败，但不影响SEO配置更新结果: {}", e.getMessage());
-                    }
-                    
-                    return PoetryResult.success(response.get("data"));
-                } else {
-                    return PoetryResult.fail(response.get("message") != null ? response.get("message").toString() : "SEO配置更新失败");
-                }
-            } else {
-                return PoetryResult.fail("Python服务响应格式错误");
-            }
-        } catch (Exception e) {
-            log.error("SEO配置更新失败", e);
-            return PoetryResult.fail("SEO配置更新失败: " + e.getMessage());
-        }
-    }
-
-    @PostMapping("/updateSeoEnableStatus")
-    @LoginCheck(1)
-    public PoetryResult updateSeoEnableStatus(@RequestBody Map<String, Object> request) {
-        log.info("收到SEO开关状态更新请求: {}", request);
-        try {
-            String pythonServerUrl = env.getProperty("PYTHON_SERVICE_URL", "http://localhost:5000");
-            String seoApiUrl = pythonServerUrl + "/seo/updateEnableStatus";
-            
-            // 设置请求头
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.add("X-Internal-Service", "poetize-java");
-            headers.add("X-Admin-Request", "true");
-            
-            // 创建请求实体
-            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(request, headers);
-            
-            log.info("转发SEO开关状态更新请求到Python服务: {}", seoApiUrl);
-            
-            // 发送请求到Python服务
-            Map<String, Object> response = restTemplate.postForObject(
-                seoApiUrl,
-                requestEntity,
-                Map.class
-            );
-            
-            log.info("Python服务SEO开关状态更新响应: {}", response);
-            
-            if (response != null && response.containsKey("code")) {
-                int code = Integer.parseInt(response.get("code").toString());
-                if (code == 200) {
-                    // SEO开关状态更新成功后，触发完整预渲染
-                    try {
-                        log.info("SEO开关状态更新成功，开始触发完整预渲染...");
-                        
-                        // 异步触发完整预渲染，避免阻塞响应
-                        new Thread(() -> {
-                            try {
-                                // 调用启动时的完整预渲染方法
-                                poetryApplicationRunner.executeFullPrerender();
-                                log.info("SEO开关状态更新后的完整预渲染任务已启动");
-                            } catch (Exception e) {
-                                log.error("SEO开关状态更新后触发完整预渲染失败: {}", e.getMessage(), e);
-                            }
-                        }, "seo-enable-prerender-thread").start();
-                        
-                    } catch (Exception e) {
-                        log.error("触发完整预渲染失败，但不影响SEO开关状态更新结果: {}", e.getMessage());
-                    }
-                    
-                    return PoetryResult.success(response.get("data"));
-                } else {
-                    return PoetryResult.fail(response.get("message") != null ? response.get("message").toString() : "SEO开关状态更新失败");
-                }
-            } else {
-                return PoetryResult.fail("Python服务响应格式错误");
-            }
-        } catch (Exception e) {
-            log.error("SEO开关状态更新失败", e);
-            return PoetryResult.fail("SEO开关状态更新失败: " + e.getMessage());
-        }
     }
 
     /**

@@ -13,10 +13,22 @@
         </svg>
         SEO 配置
       </el-tag>
+      
+      <!-- 移动端优化提示 -->
+      <div v-if="isMobileDevice" class="mobile-optimization-tip">
+        <el-alert
+          title="📱 移动端界面已优化"
+          description="界面已针对移动设备优化，支持触摸操作和响应式布局"
+          type="info"
+          :closable="true"
+          show-icon
+          style="margin-top: 12px;">
+        </el-alert>
+      </div>
     </div>
 
-    <el-card class="box-card" shadow="hover">
-      <el-form :model="seoConfig" label-width="150px" size="small">
+    <el-card class="box-card" shadow="never">
+      <el-form :model="seoConfig" :label-width="formLabelWidth" :size="buttonSize">
         <el-form-item label="启用SEO优化">
           <el-switch v-model="seoConfig.enable"></el-switch>
         </el-form-item>
@@ -72,11 +84,6 @@
             网站的完整访问地址，用于生成站点地图和其他SEO功能。
             <strong>推荐使用自动检测</strong>，系统会根据当前访问地址自动填写。
           </span>
-        </el-form-item>
-        
-        <el-form-item label="网站标题">
-          <el-input v-model="seoConfig.site_title" placeholder="请输入网站标题" maxlength="60"></el-input>
-          <span class="tip">网站的主要标题，显示在浏览器标题栏和搜索结果中，建议不超过60个字符。<b class="warning-tip">注意：为保持一致性，请优先在"网站设置"中修改网站标题，该处的设置将覆盖此处配置。</b></span>
         </el-form-item>
         
         <el-form-item label="网站描述">
@@ -142,8 +149,8 @@
             <div class="result-card" v-if="generationResults">
               <div class="result-info">
                 <i class="el-icon-success"></i>
-                <span v-if="autoApplySuccess">成功生成 {{ generationResults.summary.successful }} 个图标并自动填入</span>
-                <span v-else>成功生成 {{ generationResults.summary.successful }} 个图标</span>
+                <span v-if="autoApplySuccess">成功生成 {{ generationResults.processed_count }} 个图标并自动填入</span>
+                <span v-else>成功生成 {{ generationResults.processed_count }} 个图标</span>
               </div>
               <div class="result-actions">
                 <el-button 
@@ -151,7 +158,7 @@
                   type="success" 
                   @click="applyGeneratedIcons" 
                   size="small"
-                  :disabled="generationResults.summary.successful === 0">
+                  :disabled="generationResults.processed_count === 0">
                   自动填入所有图标
                 </el-button>
                 <el-button @click="clearGenerationResults" size="small">{{ autoApplySuccess ? '完成' : '清除' }}</el-button>
@@ -752,7 +759,7 @@
         
         <el-form-item label="启用推送结果通知">
           <el-switch v-model="seoConfig.enable_push_notification"></el-switch>
-          <span class="tip">文章推送到搜索引擎后，将结果发送邮件通知给站长</span>
+          <span class="tip">文章推送到搜索引擎后，将结果发送邮件通知给文章作者</span>
         </el-form-item>
         
         <el-form-item label="仅在推送失败时通知">
@@ -760,33 +767,15 @@
           <span class="tip">如果启用，则只有当推送出现错误时才发送邮件通知</span>
         </el-form-item>
         
-        <el-form-item label="通知邮箱">
-          <el-input v-model="seoConfig.notification_email" placeholder="留空则使用文章作者邮箱"></el-input>
-          <span class="tip">如果不填写，系统将使用文章作者的邮箱发送通知</span>
-        </el-form-item>
+        <div class="notification-info">
+          <el-alert title="邮件通知说明" type="info" :closable="false" show-icon>
+            <template slot="default">
+              <p>系统将自动发送邮件通知给文章作者的邮箱地址，无需额外配置。</p>
+              <p>请确保文章作者在个人资料中设置了有效的邮箱地址。</p>
+            </template>
+          </el-alert>
+        </div>
         
-        <el-divider content-position="left">
-          URL 设置
-          <el-tooltip class="item" effect="dark" placement="top">
-            <div slot="content">配置网站URL结构，影响搜索引擎如何解析和索引您的内容页面</div>
-            <i class="el-icon-question help-icon"></i>
-          </el-tooltip>
-        </el-divider>
-        
-        <el-form-item label="文章URL格式">
-          <el-input v-model="seoConfig.article_url_format" placeholder="article/{id}"></el-input>
-          <span class="tip">使用 {id} 作为文章ID的占位符</span>
-        </el-form-item>
-        
-        <el-form-item label="分类URL格式">
-          <el-input v-model="seoConfig.category_url_format" placeholder="category/{id}"></el-input>
-          <span class="tip">使用 {id} 作为分类ID的占位符</span>
-        </el-form-item>
-        
-        <el-form-item label="标签URL格式">
-          <el-input v-model="seoConfig.tag_url_format" placeholder="tag/{id}"></el-input>
-          <span class="tip">使用 {id} 作为标签ID的占位符</span>
-        </el-form-item>
         
         <el-divider content-position="left">
           网站地图设置
@@ -841,13 +830,13 @@
           </el-tooltip>
         </el-divider>
         
-        <el-form-item label="robots.txt 内容">
+        <el-form-item label="robots.txt 内容" class="code-editor-form-item">
           <div class="code-editor-wrapper">
             <el-input 
               v-model="seoConfig.robots_txt" 
               type="textarea" 
               :rows="30" 
-              class="code-textarea code-editor"
+              class="code-textarea code-editor robots-editor"
               spellcheck="false"
               resize="vertical"
               placeholder="# 输入robots.txt内容
@@ -863,13 +852,13 @@ Sitemap: /sitemap.xml"
           <span class="tip">robots.txt 文件内容，控制搜索引擎爬虫对网站的访问。文本框可拖动调整高度。</span>
         </el-form-item>
         
-        <el-form-item label="自定义头部代码">
+        <el-form-item label="自定义头部代码" class="code-editor-form-item">
           <div class="code-editor-wrapper">
             <el-input 
               v-model="seoConfig.custom_head_code" 
               type="textarea" 
               :rows="10" 
-              class="code-textarea code-editor"
+              class="code-textarea code-editor custom-head-editor"
               spellcheck="false"
               resize="vertical"
             ></el-input>
@@ -884,30 +873,20 @@ Sitemap: /sitemap.xml"
         <div class="seo-actions-container">
           <el-button 
             type="primary" 
-            @click="saveSeoConfig" 
-            :loading="loading">
+            @click="isMobile ? saveSeoConfigMobile() : saveSeoConfig()" 
+            :loading="loading"
+            :size="buttonSize">
             {{ loading ? '保存中...' : '保存配置' }}
           </el-button>
           
 
           <el-button 
             @click="analyzeSite" 
-            :loading="analyzeLoading">
+            :loading="analyzeLoading"
+            :size="buttonSize">
             {{ analyzeLoading ? '分析中...' : 'SEO分析' }}
           </el-button>
           
-          <el-dropdown @command="handleAiCommand" placement="bottom">
-            <el-button 
-              :loading="aiAnalyzeLoading">
-              {{ aiAnalyzeLoading ? '分析中...' : 'AI分析' }}
-              <span class="el-dropdown-link-suffix">▼</span>
-            </el-button>
-            <el-dropdown-menu slot="dropdown">
-              <el-dropdown-item command="analyze">立即分析</el-dropdown-item>
-              <el-dropdown-item command="config">配置AI API</el-dropdown-item>
-              <el-dropdown-item command="help">使用帮助</el-dropdown-item>
-            </el-dropdown-menu>
-          </el-dropdown>
         </div>
         </div>
       </el-form>
@@ -949,51 +928,6 @@ Sitemap: /sitemap.xml"
       <span slot="footer" class="dialog-footer">
         <el-button @click="showAnalysisDialog = false">关闭</el-button>
         <el-button type="primary" @click="saveSeoConfig">应用建议优化</el-button>
-      </span>
-    </el-dialog>
-    
-    <!-- AI SEO分析结果弹窗 -->
-    <el-dialog
-      title="AI SEO分析结果"
-      :visible.sync="showAiAnalysisDialog"
-      width="60%">
-      <div v-if="aiSeoAnalysis">
-        <div class="analysis-score">
-          <el-progress type="circle" :percentage="aiSeoAnalysis.seo_score" :status="getSeoScoreStatus(aiSeoAnalysis.seo_score)"></el-progress>
-          <div class="score-label">AI SEO评分</div>
-        </div>
-        
-        <div class="ai-analysis-content" v-if="aiSeoAnalysis.analysis">
-          <h3>AI分析结果:</h3>
-          <div class="ai-analysis-text" v-html="aiSeoAnalysis.analysis"></div>
-        </div>
-        
-        <div class="analysis-suggestions" v-if="aiSeoAnalysis.suggestions && aiSeoAnalysis.suggestions.length > 0">
-          <h3>优化建议:</h3>
-          <el-alert
-            v-for="(suggestion, index) in aiSeoAnalysis.suggestions"
-            :key="index"
-            :title="suggestion.message"
-            :type="getSuggestionType(suggestion.type)"
-            :closable="false"
-            show-icon
-            style="margin-bottom: 10px">
-            <div v-if="suggestion.detail" class="suggestion-detail">{{ suggestion.detail }}</div>
-          </el-alert>
-        </div>
-        
-        <div class="analysis-suggestions" v-else>
-          <el-alert
-            title="AI分析完成，未发现需要改进的问题！"
-            type="success"
-            :closable="false"
-            show-icon>
-          </el-alert>
-        </div>
-      </div>
-      <span slot="footer" class="dialog-footer">
-        <el-button @click="showAiAnalysisDialog = false">关闭</el-button>
-        <el-button type="primary" @click="saveSeoConfig">应用AI建议</el-button>
       </span>
     </el-dialog>
     
@@ -1334,10 +1268,11 @@ export default {
       detectingAddress: false,
       originalSiteAddress: '',
       currentStoreType: null, // 添加当前存储类型属性
+      isMobile: false, // 移动端检测
+      isTouch: false, // 触摸设备检测
       seoConfig: {
         enable: false,
         site_address: "",
-        site_title: "",
         site_description: "Poetize：作诗，有诗意地描写。个人博客，生活倒影，记录生活。",
         site_keywords: "Poetize,博客,个人网站,生活笔记,记录生活",
         default_author: "poetize",
@@ -1384,11 +1319,7 @@ export default {
         shenma_token: "",
         enable_push_notification: false,
         notify_only_on_failure: false,
-        notification_email: "",
         robots_txt: "User-agent: *\nAllow: /\nDisallow: /admin/\nSitemap: /sitemap.xml",
-        article_url_format: "article/{id}",
-        category_url_format: "category/{id}",
-        tag_url_format: "tag/{id}",
         generate_sitemap: true,
         sitemap_change_frequency: "weekly",
         sitemap_priority: "0.7",
@@ -1446,6 +1377,14 @@ export default {
   },
   
   mounted() {
+    // 检测移动端和触摸设备
+    this.detectMobileDevice();
+    
+    // 添加移动端特有的优化
+    if (this.isMobile) {
+      this.addMobileOptimizations();
+    }
+    
     // 组件挂载后，如果网站地址为空则自动检测
     this.$nextTick(async () => {
       if (!this.seoConfig.site_address) {
@@ -1477,8 +1416,142 @@ export default {
       }
     }
   },
+
+  computed: {
+    // 移动端相关的计算属性
+    isMobileDevice() {
+      return this.isMobile;
+    },
+    
+    // 表单项标签宽度
+    formLabelWidth() {
+      return this.isMobile ? '100px' : '140px';
+    },
+    
+    // 对话框宽度
+    dialogWidth() {
+      if (this.isMobile) {
+        return window.innerWidth <= 480 ? '98%' : '95%';
+      }
+      return '60%';
+    },
+    
+    // 按钮大小
+    buttonSize() {
+      return this.isMobile ? 'medium' : 'small';
+    }
+  },
   
   methods: {
+    // 检测移动端设备
+    detectMobileDevice() {
+      // 检测屏幕尺寸
+      this.isMobile = window.innerWidth <= 768;
+      
+      // 检测触摸设备
+      this.isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+      
+      // 检测用户代理
+      const userAgent = navigator.userAgent.toLowerCase();
+      const mobileKeywords = ['mobile', 'android', 'iphone', 'ipad', 'ipod', 'blackberry', 'windows phone'];
+      const isMobileUA = mobileKeywords.some(keyword => userAgent.includes(keyword));
+      
+      this.isMobile = this.isMobile || isMobileUA;
+      
+      console.log('设备检测结果:', {
+        isMobile: this.isMobile,
+        isTouch: this.isTouch,
+        screenWidth: window.innerWidth,
+        userAgent: userAgent.substring(0, 50)
+      });
+    },
+
+    // 添加移动端优化
+    addMobileOptimizations() {
+      // 监听屏幕方向变化
+      window.addEventListener('orientationchange', () => {
+        setTimeout(() => {
+          this.detectMobileDevice();
+          this.$forceUpdate();
+        }, 100);
+      });
+
+      // 监听窗口大小变化
+      window.addEventListener('resize', () => {
+        this.detectMobileDevice();
+      });
+
+      // 移动端特有的消息提示
+      this.$message.closeAll();
+      this.$message({
+        message: '移动端SEO配置已优化，滑动查看更多选项',
+        type: 'info',
+        duration: 3000,
+        showClose: true
+      });
+
+      // 禁用移动端的双击缩放（在表单区域）
+      this.$nextTick(() => {
+        const formElements = document.querySelectorAll('.el-form-item__content');
+        formElements.forEach(el => {
+          el.addEventListener('touchstart', (e) => {
+            if (e.touches.length > 1) {
+              e.preventDefault();
+            }
+          });
+        });
+      });
+    },
+
+    // 移动端优化的保存方法
+    saveSeoConfigMobile() {
+      if (this.isMobile) {
+        // 移动端显示加载遮罩
+        const loading = this.$loading({
+          lock: true,
+          text: '正在保存SEO配置...',
+          spinner: 'el-icon-loading',
+          background: 'rgba(0, 0, 0, 0.7)'
+        });
+        
+        this.saveSeoConfig().finally(() => {
+          loading.close();
+        });
+      } else {
+        this.saveSeoConfig();
+      }
+    },
+
+    // 移动端友好的错误处理
+    showMobileError(message) {
+      if (this.isMobile) {
+        this.$notify({
+          title: '操作失败',
+          message: message,
+          type: 'error',
+          position: 'top-right',
+          duration: 4000
+        });
+      } else {
+        this.$message.error(message);
+      }
+    },
+
+    // 移动端友好的成功提示
+    showMobileSuccess(message) {
+      if (this.isMobile) {
+        this.$notify({
+          title: '操作成功',
+          message: message,
+          type: 'success',
+          position: 'top-right',
+          duration: 3000
+        });
+      } else {
+        this.$message.success(message);
+      }
+    },
+
     // 处理系统配置更新事件
     handleSysConfigUpdate(config) {
       if (config && config['store.type']) {
@@ -1513,7 +1586,7 @@ export default {
         let detectionConsistent = true;
         
         try {
-          const backendResponse = await this.$http.get(this.$constant.pythonBaseURL + '/seo/detectSiteUrl');
+          const backendResponse = await this.$http.get(this.$constant.baseURL + '/admin/seo/detectSiteUrl');
           if (backendResponse && backendResponse.code === 200) {
             backendDetected = backendResponse.data.detected_url;
             detectionConsistent = frontendDetected === backendDetected;
@@ -1574,29 +1647,29 @@ export default {
       const enableStatus = status === undefined ? false : !!status;
       console.log('开始保存SEO开关状态:', enableStatus);
       
-      this.$http.post(this.$constant.baseURL + '/admin/updateSeoEnableStatus', {
+      this.$http.post(this.$constant.baseURL + '/admin/seo/updateEnableStatus', {
         enable: enableStatus
       }, true)
       .then(res => {
         console.log('SEO开关状态保存响应:', res);
         if (res.code === 200) {
           console.log('SEO开关状态保存成功, 新状态:', enableStatus);
-          this.$message.success('SEO开关状态已保存');
+          this.showMobileSuccess('SEO开关状态已保存');
         } else {
           console.error('SEO开关状态保存失败, 错误信息:', res.message);
-          this.$message.error(res.message || 'SEO开关状态保存失败');
+          this.showMobileError(res.message || 'SEO开关状态保存失败');
         }
       })
       .catch(error => {
         console.error('保存SEO开关状态时发生网络错误:', error);
-        this.$message.error('保存SEO开关状态时发生错误');
+        this.showMobileError('保存SEO开关状态时发生错误');
       });
     },
     
     getSeoConfig() {
       console.log('开始获取SEO配置...');
       try {
-        this.$http.get(this.$constant.baseURL + '/admin/seo/getConfig', {}, true)
+        this.$http.get(this.$constant.baseURL + '/admin/seo/getSeoConfig', {}, true)
           .then((res) => {
             console.log('获取SEO配置响应数据:', res);
             
@@ -1657,23 +1730,22 @@ export default {
     saveSeoConfig() {
       this.loading = true;
       console.log('正在保存SEO配置...');
-      this.$http.post(this.$constant.baseURL +'/admin/updateSeoConfig', this.seoConfig, true)
+      this.$http.post(this.$constant.baseURL + '/admin/seo/updateSeoConfig', this.seoConfig, true)
         .then((res) => {
           this.loading = false;
           console.log('保存SEO配置响应:', res);
           if (res && res.code === 200) {
-            this.$message.success('保存SEO配置成功');
+            this.showMobileSuccess('保存SEO配置成功');
             this.showAnalysisDialog = false;
-            this.showAiAnalysisDialog = false;
           } else {
             console.error('保存SEO配置失败，响应数据异常:', res);
-            this.$message.error(res ? res.message || '保存SEO配置失败' : '响应数据为空');
+            this.showMobileError(res ? res.message || '保存SEO配置失败' : '响应数据为空');
           }
         })
         .catch((error) => {
           this.loading = false;
           console.error('保存SEO配置失败:', error);
-          this.$message.error('保存SEO配置失败: ' + (error.message || '网络连接问题'));
+          this.showMobileError('保存SEO配置失败: ' + (error.message || '网络连接问题'));
         });
     },
     
@@ -1697,69 +1769,6 @@ export default {
           this.analyzeLoading = false;
           console.error('SEO分析失败:', error);
           this.$message.error('SEO分析失败: ' + (error.message || '网络连接问题'));
-        });
-    },
-    
-    aiAnalyze() {
-      this.aiAnalyzeLoading = true;
-      console.log('准备进行AI SEO分析...');
-      
-      // 先检查AI API是否已配置
-      this.$http.get(this.$constant.baseURL + '/admin/seo/checkAiApiConfig', {}, true)
-        .then((res) => {
-          if (res && res.code === 200 && res.data && res.data.configured) {
-            // API已配置，询问用户是否使用上次的配置
-            this.aiAnalyzeLoading = false;
-            this.$confirm('检测到已配置的AI API，是否使用上次的配置进行分析？', 'AI SEO分析', {
-              confirmButtonText: '使用上次配置',
-              cancelButtonText: '重新配置',
-              type: 'info'
-            }).then(() => {
-              // 用户确认使用上次的配置
-              this.aiAnalyzeLoading = true;
-              this.executeAiAnalysis();
-            }).catch(() => {
-              // 用户选择重新配置
-              this.showApiConfigDialog = true;
-            });
-          } else {
-            // API未配置，显示配置弹窗
-            this.aiAnalyzeLoading = false;
-            this.showApiConfigDialog = true;
-            this.$message.warning('请先配置AI API才能进行AI SEO分析');
-          }
-        })
-        .catch((error) => {
-          this.aiAnalyzeLoading = false;
-          console.error('检查AI API配置失败:', error);
-          this.$message.error('检查AI API配置失败: ' + (error.message || '网络连接问题'));
-          this.showApiConfigDialog = true;
-        });
-    },
-    
-    executeAiAnalysis() {
-      console.log('正在进行AI SEO分析...');
-      this.$http.get(this.$constant.baseURL + '/admin/seo/aiAnalyzeSite', {}, true)
-        .then((res) => {
-          this.aiAnalyzeLoading = false;
-          console.log('AI SEO分析响应:', res);
-          if (res && res.code === 200) {
-            this.aiSeoAnalysis = res.data;
-            this.showAiAnalysisDialog = true;
-          } else {
-            console.error('AI SEO分析失败，响应数据异常:', res);
-            this.$message.error(res ? res.message || 'AI SEO分析失败' : '响应数据为空');
-            
-            // 如果错误是由于API配置问题，显示API配置弹窗
-            if (res && res.code === 401) {
-              this.showApiConfigDialog = true;
-            }
-          }
-        })
-        .catch((error) => {
-          this.aiAnalyzeLoading = false;
-          console.error('AI SEO分析失败:', error);
-          this.$message.error('AI SEO分析失败: ' + (error.message || '网络连接问题'));
         });
     },
     
@@ -1846,7 +1855,7 @@ export default {
         this.updateCustomHeaders();
       }
       
-      this.$http.post(this.$constant.baseURL + '/admin/seo/saveAiApiConfig', configToSave, true)
+      this.$http.post(this.$constant.pythonBaseURL + '/seo/saveAiApiConfig', configToSave, true)
         .then((res) => {
           this.apiConfigLoading = false;
           console.log('保存AI API配置响应:', res);
@@ -1998,13 +2007,14 @@ export default {
         // 创建FormData
         const formData = new FormData();
         formData.append('image', this.uploadedImage);
-        formData.append('icon_types', 'favicon,apple_touch,pwa_192,pwa_512,logo,social');
+        formData.append('iconTypes', 'favicon,apple-touch-icon,icon-192,icon-512,logo,banner');
 
         // 打印调试信息
         console.log('准备上传的文件:', this.uploadedImage);
         console.log('文件名:', this.uploadedImage.name);
         console.log('文件大小:', this.uploadedImage.size);
         console.log('文件类型:', this.uploadedImage.type);
+        console.log('请求的图标类型:', 'favicon,apple-touch-icon,icon-192,icon-512,logo,banner');
         console.log('管理员token:', localStorage.getItem("adminToken"));
 
         // 更新进度
@@ -2022,6 +2032,10 @@ export default {
         this.generationStatus = '处理完成，准备显示结果...';
 
         if (response && response.code === 200) {
+          console.log('后端响应成功，返回数据:', response);
+          console.log('生成的图标数量:', response.data?.processed_count || 0);
+          console.log('生成的图标类型:', Object.keys(response.data?.icons || {}));
+          
           this.generationResults = response.data;
           this.generationProgress = 100;
           this.generationStatus = '生成完成，正在自动填入...';
@@ -2079,21 +2093,21 @@ export default {
     },
 
     async applyGeneratedIcons() {
-      if (!this.generationResults || !this.generationResults.results) {
+      if (!this.generationResults || !this.generationResults.icons) {
         this.$message.error('没有可应用的图标结果');
         return;
       }
 
-      const results = this.generationResults.results;
+      const results = this.generationResults.icons;
 
       // 映射图标类型到配置字段
       const iconMapping = {
         'favicon': 'site_icon',
-        'apple_touch': 'apple_touch_icon',
-        'pwa_192': 'site_icon_192',
-        'pwa_512': 'site_icon_512',
+        'apple-touch-icon': 'apple_touch_icon',
+        'icon-192': 'site_icon_192',
+        'icon-512': 'site_icon_512',
         'logo': 'site_logo',
-        'social': 'og_image'
+        'banner': 'og_image'
       };
 
       console.log('开始自动填入图标，生成结果:', this.generationResults);
@@ -2108,20 +2122,22 @@ export default {
 
              for (const [iconType, result] of Object.entries(results)) {
           console.log(`处理图标类型: ${iconType}`, result);
-         if (result.success && result.base64_data) {
+         if (result && result.base64_data) {
            const configField = iconMapping[iconType];
            if (configField) {
-              console.log(`将要上传 ${iconType} 到字段 ${configField}`);
+              console.log(`✅ ${iconType} -> ${configField} (${result.format}, ${result.size}字节)`);
               // 创建上传任务
               const uploadPromise = this.uploadIconToServer(result.base64_data, result.format, iconType, configField);
               uploadPromises.push(uploadPromise);
             } else {
-              console.warn(`未找到图标类型 ${iconType} 的映射字段`);
+              console.warn(`❌ 未找到图标类型 ${iconType} 的映射字段，可用映射:`, Object.keys(iconMapping));
             }
           } else {
-            console.warn(`图标 ${iconType} 生成失败或数据缺失:`, result);
+            console.warn(`❌ 图标 ${iconType} 生成失败或数据缺失:`, result);
           }
         }
+        
+        console.log(`准备上传 ${uploadPromises.length} 个图标...`);
 
         // 并行上传所有图标
         const uploadResults = await Promise.allSettled(uploadPromises);
@@ -2151,11 +2167,11 @@ export default {
         if (uploadedCount > 0) {
           const iconTypeMap = {
             'favicon': '网站标签页图标',
-            'apple_touch': 'Apple Touch图标',
-            'pwa_192': 'PWA图标(192x192)',
-            'pwa_512': 'PWA图标(512x512)',
+            'apple-touch-icon': 'Apple Touch图标',
+            'icon-192': 'PWA图标(192x192)',
+            'icon-512': 'PWA图标(512x512)',
             'logo': '网站Logo',
-            'social': '默认封面图'
+            'banner': '默认封面图'
           };
           const successNames = successDetails.map(type => iconTypeMap[type] || type).join('、');
           
@@ -3547,14 +3563,133 @@ export default {
     flex-shrink: 0;
   }
 
-  /* 响应式设计 */
+  /* PC端样式优化 */
+  @media (min-width: 769px) {
+    ::v-deep .el-card__body {
+      padding: 40px !important;
+    }
+  }
+
+  /* robots.txt和自定义头部代码表单项 - 标签独立占一行（PC端和移动端通用） */
+  ::v-deep .code-editor-form-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  ::v-deep .code-editor-form-item .el-form-item__label {
+    width: 100% !important;
+    text-align: left !important;
+    margin-bottom: 12px !important;
+    margin-right: 0 !important;
+    float: none !important;
+    display: block !important;
+    line-height: 1.5 !important;
+    font-weight: 600 !important;
+    color: #303133 !important;
+  }
+
+  ::v-deep .code-editor-form-item .el-form-item__content {
+    width: 100% !important;
+    margin-left: 0 !important;
+    flex: 1;
+  }
+
+  /* PC端代码编辑器样式 - 保持原有高度 */
+  @media (min-width: 769px) {
+    ::v-deep .code-editor-form-item .el-textarea__inner {
+      font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace !important;
+      border-radius: 6px;
+      /* 不设置具体高度，让:rows属性生效 */
+      height: auto !important; /* 确保:rows属性生效 */
+      min-height: auto !important;
+      max-height: none !important;
+    }
+
+    /* PC端确保行号正常显示 */
+    .code-line-numbers {
+      display: block !important;
+    }
+  }
+
+  /* 响应式设计 - 移动端优化 */
   @media (max-width: 768px) {
+    /* 主容器适配 */
+    ::v-deep .el-card {
+      margin: 8px !important;
+      border-radius: 12px !important;
+    }
+
+    ::v-deep .el-card__body {
+      padding: 12px !important;
+    }
+
+    /* 表单项移动端适配 */
+    ::v-deep .el-form-item {
+      margin-bottom: 16px !important;
+    }
+
+    ::v-deep .el-form-item__label {
+      font-size: 14px !important;
+      line-height: 1.4 !important;
+      padding-bottom: 4px !important;
+    }
+
+    ::v-deep .el-form-item__content {
+      margin-left: 0 !important;
+    }
+
+    /* 输入框移动端优化 */
+    ::v-deep .el-input__inner {
+      font-size: 16px !important; /* 防止iOS缩放 */
+      height: 44px !important; /* 更好的触摸体验 */
+    }
+
+    ::v-deep .el-textarea__inner {
+      font-size: 16px !important;
+      min-height: 80px !important;
+    }
+
+    /* 按钮移动端适配 */
     .seo-actions-container {
       flex-direction: column;
       gap: 12px;
+      padding: 16px 0;
     }
-    
-    /* 地址操作按钮移动端适配 */
+
+    .seo-actions-container .el-button {
+      height: 44px !important;
+      font-size: 16px !important;
+      border-radius: 8px !important;
+    }
+
+    /* 选项卡移动端适配 */
+    ::v-deep .el-tabs__nav-wrap {
+      padding: 0 8px;
+    }
+
+    ::v-deep .el-tabs__item {
+      font-size: 14px !important;
+      padding: 0 12px !important;
+    }
+
+    /* 开关和复选框适配 */
+    ::v-deep .el-switch {
+      margin-right: 8px;
+    }
+
+    ::v-deep .el-checkbox {
+      line-height: 1.4;
+    }
+
+    /* 提示文本适配 */
+    .tip {
+      font-size: 12px !important;
+      line-height: 1.4 !important;
+      margin-top: 4px !important;
+    }
+
+    /* 地址操作移动端适配 */
     .site-address-container {
       flex-direction: column;
       gap: 12px;
@@ -3567,92 +3702,455 @@ export default {
     .simple-address-actions {
       align-self: stretch;
       justify-content: center;
+      gap: 8px;
+      flex-wrap: wrap;
     }
     
     .simple-address-btn {
       flex: 1;
-      min-width: auto;
+      min-width: 120px; /* 确保按钮有足够宽度显示文字 */
+      height: 44px !important; /* 符合触摸规范 */
+      font-size: 14px !important;
+      border-radius: 8px !important;
     }
-    
+
+    /* robots.txt和自定义头部代码输入框移动端适配 */
+    .code-editor-wrapper {
+      position: relative;
+      width: 100%;
+    }
+
+    /* robots.txt编辑器移动端样式 */
+    ::v-deep .robots-editor .el-textarea__inner {
+      font-size: 14px !important;
+      line-height: 1.5 !important;
+      padding: 12px !important;
+      border-radius: 8px !important;
+      font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace !important;
+      resize: vertical !important;
+      box-sizing: border-box !important;
+      width: 100% !important;
+      height: 200px !important; /* robots.txt固定200px高度 */
+      overflow-y: auto !important;
+    }
+
+    /* 自定义头部代码编辑器移动端样式 */
+    ::v-deep .custom-head-editor .el-textarea__inner {
+      font-size: 14px !important;
+      line-height: 1.5 !important;
+      padding: 12px !important;
+      border-radius: 8px !important;
+      font-family: 'SF Mono', 'Monaco', 'Menlo', 'Consolas', monospace !important;
+      resize: vertical !important;
+      box-sizing: border-box !important;
+      width: 100% !important;
+      height: 140px !important; /* 自定义头部代码140px高度 */
+      overflow-y: auto !important;
+    }
+
+    /* 行号在移动端隐藏 */
+    .code-line-numbers {
+      display: none !important; /* 移动端隐藏行号，节省空间 */
+    }
+
+    /* 代码编辑器容器适配 */
+    .code-editor-wrapper {
+      border-radius: 8px;
+      overflow: hidden;
+      width: 100%;
+    }
+
     /* 图标上传移动端适配 */
     .icon-upload-container {
       gap: 8px;
     }
-    
+
     .icon-preview {
+      flex-wrap: wrap;
       justify-content: center;
-      gap: 12px;
+      gap: 8px;
     }
-    
+
     .preview-item {
-      min-width: 80px;
+      min-width: 60px;
+      text-align: center;
     }
-    
+
+    .table-td-thumb {
+      width: 40px !important;
+      height: 40px !important;
+    }
+
     /* PWA配置移动端适配 */
     .native-app-config {
       padding: 12px;
     }
-    
+
     .app-config-item {
       flex-direction: column;
       align-items: flex-start;
       gap: 6px;
     }
-    
+
     .app-config-item label {
       min-width: auto;
       font-size: 14px;
     }
-    
+
     .pwa-preview {
       flex-direction: column;
       gap: 16px;
       padding: 16px;
     }
-    
+
     .phone-screen {
-      width: 150px;
-      height: 267px;
+      width: 120px;
+      height: 213px;
+      margin: 0 auto;
     }
-    
+
     .preview-info {
       min-width: auto;
+      text-align: center;
     }
-    
-    /* 智能图标生成器移动端适配 */
-    .upload-card {
-      padding: 16px;
+
+    /* 搜索引擎配置移动端适配 */
+    .search-engine-section {
+      padding: 12px;
     }
-    
-    .simple-upload .el-upload-dragger {
-      height: 100px;
+
+    /* 社交媒体配置移动端适配 */
+    .social-media-section {
+      padding: 12px;
     }
-    
-    .upload-content i {
-      font-size: 24px;
+
+    /* 对话框移动端适配 */
+    ::v-deep .el-dialog {
+      width: 95% !important;
+      margin: 2.5vh auto !important;
+      max-height: 90vh;
+      overflow-y: auto;
     }
-    
-    .upload-content p {
-      font-size: 13px;
+
+    ::v-deep .el-dialog__body {
+      padding: 16px !important;
+      max-height: 70vh;
+      overflow-y: auto;
     }
-    
-    .upload-content span {
-      font-size: 11px;
+
+    ::v-deep .el-dialog__header {
+      padding: 12px 16px !important;
     }
-    
-    .actions {
+
+    ::v-deep .el-dialog__footer {
+      padding: 12px 16px !important;
+    }
+
+    /* 分析结果移动端适配 */
+    .analysis-score {
+      margin-bottom: 20px;
+    }
+
+    ::v-deep .el-progress-circle {
+      width: 80px !important;
+      height: 80px !important;
+    }
+
+    .analysis-suggestions {
+      margin-top: 16px;
+    }
+
+    ::v-deep .el-alert {
+      margin-bottom: 8px !important;
+    }
+
+    ::v-deep .el-alert__title {
+      font-size: 14px !important;
+      line-height: 1.4 !important;
+    }
+  }
+
+  /* 超小屏幕适配 */
+  @media (max-width: 480px) {
+    ::v-deep .el-card {
+      margin: 4px !important;
+      border-radius: 8px !important;
+    }
+
+    ::v-deep .el-card__body {
+      padding: 12px !important;
+    }
+
+    ::v-deep .el-form-item__label {
+      font-size: 13px !important;
+    }
+
+    ::v-deep .el-input__inner {
+      height: 40px !important;
+    }
+
+    .seo-actions-container .el-button {
+      height: 40px !important;
+      font-size: 14px !important;
+    }
+
+    /* 网站地址按钮超小屏适配 */
+    .simple-address-btn {
+      min-width: 100px !important;
+      height: 40px !important;
+      font-size: 13px !important;
+      padding: 8px 12px !important;
+    }
+
+    .simple-address-actions {
+      gap: 6px !important;
+    }
+
+    /* 代码编辑器超小屏适配 */
+    ::v-deep .robots-editor .el-textarea__inner {
+      height: 150px !important; /* robots.txt在超小屏适当减少高度 */
+      font-size: 13px !important;
+      padding: 10px !important;
+      line-height: 1.4 !important;
+    }
+
+    ::v-deep .custom-head-editor .el-textarea__inner {
+      height: 120px !important; /* 自定义头部代码在超小屏 */
+      font-size: 13px !important;
+      padding: 10px !important;
+      line-height: 1.4 !important;
+    }
+
+    .tip {
+      font-size: 11px !important;
+    }
+
+    /* 超小屏幕对话框 */
+    ::v-deep .el-dialog {
+      width: 98% !important;
+      margin: 1vh auto !important;
+    }
+
+    ::v-deep .el-dialog__body {
+      padding: 12px !important;
+    }
+
+    .phone-screen {
+      width: 100px;
+      height: 178px;
+    }
+
+    ::v-deep .el-progress-circle {
+      width: 60px !important;
+      height: 60px !important;
+    }
+  }
+
+  /* 平板适配 */
+  @media (min-width: 769px) and (max-width: 1024px) {
+    ::v-deep .el-card {
+      margin: 12px;
+    }
+
+    ::v-deep .el-form-item__label {
+      min-width: 140px;
+    }
+
+    .site-address-container {
+      gap: 12px;
+    }
+
+    .icon-preview {
+      gap: 16px;
+    }
+
+    .pwa-preview {
+      padding: 20px;
+    }
+
+    ::v-deep .el-dialog {
+      width: 80%;
+    }
+  }
+
+  /* 移动端特殊优化 */
+  @media (max-width: 768px) {
+    /* 表单标签适配 */
+    ::v-deep .el-form-item--small .el-form-item__label {
+      width: 100% !important;
+      text-align: left !important;
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+
+    ::v-deep .el-form-item--small .el-form-item__content {
+      width: 100% !important;
+      margin-left: 0 !important;
+    }
+
+    /* 选择器移动端优化 */
+    ::v-deep .el-select {
+      width: 100% !important;
+    }
+
+    ::v-deep .el-select__caret {
+      font-size: 18px;
+    }
+
+    /* 颜色选择器移动端适配 */
+    ::v-deep .el-color-picker {
+      height: 44px !important;
+    }
+
+    /* 开关移动端适配 */
+    ::v-deep .el-switch__core {
+      width: 50px !important;
+      height: 24px !important;
+    }
+
+    ::v-deep .el-switch__core::after {
+      width: 20px !important;
+      height: 20px !important;
+    }
+
+    /* 文件上传移动端适配 */
+    ::v-deep .el-upload-dragger {
+      width: 100% !important;
+      min-height: 120px !important;
+    }
+
+    /* 图标预览移动端适配 */
+    .icon-preview {
       flex-direction: column;
-      align-items: stretch;
+      align-items: center;
+      gap: 12px;
     }
-    
-    .result-actions {
-      flex-direction: column;
+
+    .icon-preview > div {
+      width: 100%;
+      text-align: center;
     }
-    
-    /* 移动端图片预览适配 */
-    .table-td-thumb {
-      width: 36px !important;
-      height: 36px !important;
+
+    /* 分割线移动端适配 */
+    ::v-deep .el-divider {
+      margin: 16px 0 !important;
+    }
+
+    /* 警告提示移动端适配 */
+    ::v-deep .el-alert__content {
+      padding-right: 8px !important;
+    }
+
+    /* 加载状态移动端优化 */
+    ::v-deep .el-loading-spinner {
+      margin-top: -20px;
+    }
+
+    /* 消息提示移动端适配 */
+    ::v-deep .el-message {
+      min-width: auto !important;
+      width: 90% !important;
+      left: 5% !important;
+    }
+  }
+
+  /* 移动端横屏适配 */
+  @media (max-width: 768px) and (orientation: landscape) {
+    ::v-deep .el-dialog {
+      max-height: 85vh !important;
+    }
+
+    ::v-deep .el-dialog__body {
+      max-height: 65vh !important;
+      overflow-y: auto;
+    }
+
+    .phone-screen {
+      width: 80px;
+      height: 142px;
+    }
+  }
+
+  /* 移动端优化提示样式 */
+  .mobile-optimization-tip {
+    margin-top: 12px;
+  }
+
+  .mobile-optimization-tip ::v-deep .el-alert {
+    border-radius: 8px;
+    border: none;
+    background: linear-gradient(135deg, #e3f2fd, #f0f8ff);
+  }
+
+  .mobile-optimization-tip ::v-deep .el-alert__icon {
+    color: #2196f3;
+  }
+
+  .mobile-optimization-tip ::v-deep .el-alert__title {
+    color: #1976d2;
+    font-weight: 500;
+  }
+
+  .mobile-optimization-tip ::v-deep .el-alert__description {
+    color: #666;
+    font-size: 13px;
+  }
+
+  /* 邮件通知说明样式 */
+  .notification-info {
+    margin: 10px 0 20px 0;
+  }
+
+  .notification-info ::v-deep .el-alert {
+    border-radius: 8px;
+    border: none;
+    background: linear-gradient(135deg, #e8f5e8, #f0f9ff);
+  }
+
+  .notification-info ::v-deep .el-alert__icon {
+    color: #52c41a;
+  }
+
+  .notification-info ::v-deep .el-alert__title {
+    color: #389e0d;
+    font-weight: 500;
+  }
+
+  .notification-info ::v-deep .el-alert__description {
+    color: #666;
+  }
+
+  .notification-info ::v-deep .el-alert__description p {
+    margin: 4px 0;
+    line-height: 1.5;
+  }
+
+  /* 触摸设备优化 */
+  @media (hover: none) and (pointer: coarse) {
+    /* 增加触摸目标大小 */
+    ::v-deep .el-button {
+      min-height: 44px !important;
+      padding: 8px 16px !important;
+    }
+
+    ::v-deep .el-switch {
+      min-height: 44px !important;
+      display: flex !important;
+      align-items: center !important;
+    }
+
+    /* 防止点击延迟 */
+    ::v-deep .el-button,
+    ::v-deep .el-switch,
+    ::v-deep .el-checkbox,
+    ::v-deep .el-radio {
+      touch-action: manipulation;
+    }
+
+    /* 改善滚动性能 */
+    ::v-deep .el-dialog__body,
+    ::v-deep .el-tabs__content {
+      -webkit-overflow-scrolling: touch;
     }
   }
 </style>

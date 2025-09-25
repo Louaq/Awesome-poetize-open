@@ -213,6 +213,78 @@ public class PrerenderClient {
     }
 
     /**
+     * 渲染关于页面
+     */
+    public void renderAboutPage() {
+        try {
+            renderPage("about", null);
+            log.info("已提交关于页面到 prerender-worker");
+        } catch (Exception e) {
+            log.warn("渲染关于页面失败: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 渲染留言板页面
+     */
+    public void renderMessagePage() {
+        try {
+            renderPage("message", null);
+            log.info("已提交留言板页面到 prerender-worker");
+        } catch (Exception e) {
+            log.warn("渲染留言板页面失败: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 渲染微言页面
+     */
+    public void renderWeiYanPage() {
+        try {
+            renderPage("weiYan", null);
+            log.info("已提交微言页面到 prerender-worker");
+        } catch (Exception e) {
+            log.warn("渲染微言页面失败: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 渲染恋爱记录页面
+     */
+    public void renderLovePage() {
+        try {
+            renderPage("love", null);
+            log.info("已提交恋爱记录页面到 prerender-worker");
+        } catch (Exception e) {
+            log.warn("渲染恋爱记录页面失败: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 渲染旅行日记页面
+     */
+    public void renderTravelPage() {
+        try {
+            renderPage("travel", null);
+            log.info("已提交旅行日记页面到 prerender-worker");
+        } catch (Exception e) {
+            log.warn("渲染旅行日记页面失败: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * 渲染隐私政策页面
+     */
+    public void renderPrivacyPage() {
+        try {
+            renderPage("privacy", null);
+            log.info("已提交隐私政策页面到 prerender-worker");
+        } catch (Exception e) {
+            log.warn("渲染隐私政策页面失败: {}", e.getMessage());
+        }
+    }
+
+    /**
      * 渲染主要页面（首页和百宝箱）
      */
     public void renderMainPages() {
@@ -222,6 +294,62 @@ public class PrerenderClient {
             renderFavoritePage();
         } catch (Exception e) {
             log.warn("渲染主要页面失败: {}", e.getMessage());
+        }
+    }
+
+
+    /**
+     * 渲染信件页面
+     */
+    public void renderLetterPage() {
+        try {
+            renderPage("letter", null);
+            log.info("已提交信件页面到 prerender-worker");
+        } catch (Exception e) {
+            log.warn("渲染信件页面失败: {}", e.getMessage());
+        }
+    }
+
+
+    /**
+     * 渲染所有静态页面（一键预渲染）
+     */
+    public void renderAllStaticPages() {
+        try {
+            log.info("开始批量预渲染所有静态页面");
+            
+            renderHomePage();
+            Thread.sleep(500); // 避免并发过高
+            
+            renderFavoritePage();
+            Thread.sleep(500);
+            
+            renderAboutPage();
+            Thread.sleep(500);
+            
+            renderMessagePage();
+            Thread.sleep(500);
+            
+            renderWeiYanPage();
+            Thread.sleep(500);
+            
+            renderLovePage();
+            Thread.sleep(500);
+            
+            renderTravelPage();
+            Thread.sleep(500);
+            
+            renderPrivacyPage();
+            Thread.sleep(500);
+            
+            renderLetterPage();
+            
+            log.info("所有静态页面预渲染请求已发送");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("静态页面预渲染被中断: {}", e.getMessage());
+        } catch (Exception e) {
+            log.error("批量预渲染静态页面失败: {}", e.getMessage(), e);
         }
     }
 
@@ -359,9 +487,9 @@ public class PrerenderClient {
             deleteUrl.append("/").append(type);
             
             if ("sort".equals(type) && sortId != null) {
-                deleteUrl.append("?sortId=").append(sortId);
+                deleteUrl.append("/").append(sortId);
                 if (labelId != null) {
-                    deleteUrl.append("&labelId=").append(labelId);
+                    deleteUrl.append("?labelId=").append(labelId);
                 }
             }
             

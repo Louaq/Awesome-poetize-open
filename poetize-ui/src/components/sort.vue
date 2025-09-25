@@ -52,7 +52,7 @@
 
     data() {
       return {
-        sortId: this.$route.query.sortId,
+        sortId: this.$route.params.id || null,
         labelId: this.$route.query.labelId,
         sort: null,
         pagination: {
@@ -60,7 +60,7 @@
           size: 10,
           total: 0,
           searchKey: "",
-          sortId: this.$route.query.sortId,
+          sortId: this.$route.params.id || null,
           labelId: this.$route.query.labelId
         },
         articles: []
@@ -76,11 +76,11 @@
           size: 10,
           total: 0,
           searchKey: "",
-          sortId: this.$route.query.sortId,
+          sortId: this.$route.params.id || null,
           labelId: this.$route.query.labelId
         };
         this.articles.splice(0, this.articles.length);
-        this.sortId = this.$route.query.sortId;
+        this.sortId = this.$route.params.id || null;
         this.labelId = this.$route.query.labelId;
         this.getSort();
         this.getArticles();
@@ -104,11 +104,17 @@
       getSort() {
         let sortInfo = this.$store.state.sortInfo;
         if (!this.$common.isEmpty(sortInfo)) {
-          let sortArray = sortInfo.filter(f => {
-            return f.id === parseInt(this.sortId);
-          });
-          if (!this.$common.isEmpty(sortArray)) {
-            this.sort = sortArray[0];
+          if (this.sortId) {
+            // 有分类ID，查找对应分类
+            let sortArray = sortInfo.filter(f => {
+              return f.id === parseInt(this.sortId);
+            });
+            if (!this.$common.isEmpty(sortArray)) {
+              this.sort = sortArray[0];
+            }
+          } else {
+            // 没有分类ID，设置为null，表示显示所有分类的文章
+            this.sort = null;
           }
         }
       },
@@ -119,7 +125,7 @@
           size: 10,
           total: 0,
           searchKey: "",
-          sortId: this.$route.query.sortId,
+          sortId: this.$route.params.id || null,
           labelId: label.id
         };
         this.articles.splice(0, this.articles.length);

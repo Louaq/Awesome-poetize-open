@@ -158,7 +158,7 @@
         <div v-for="(sort, index) in sortInfo"
              :key="index"
              class="post-sort"
-             @click="$router.push({path: '/sort', query: {sortId: sort.id}})">
+             @click="$router.push('/sort/' + sort.id)">
           <div>
             <span v-for="(s, i) in sort.sortName.split('')" :key="i">{{ s }}</span>
           </div>

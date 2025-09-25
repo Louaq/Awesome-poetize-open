@@ -58,7 +58,6 @@
   "sitemap_exclude": "/love",
   "push_delay_seconds": 300,
   "site_address": "http://localhost",
-  "site_title": "POETIZE",
   "site_icon": "",
   "site_icon_192": "",
   "site_icon_512": "",

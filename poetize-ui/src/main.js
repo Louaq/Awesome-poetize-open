@@ -417,4 +417,143 @@ app.$nextTick(() => {
   if (window.PRERENDER_DATA) {
     console.log('预渲染页面客户端接管完成，FOUC防护已激活');
   }
+  
+  // ===== PWA Service Worker 注册 =====
+  registerServiceWorker();
 });
+
+// Service Worker 注册函数
+function registerServiceWorker() {
+  // 检查浏览器是否支持Service Worker
+  if (!('serviceWorker' in navigator)) {
+    console.warn('PWA: 当前浏览器不支持Service Worker');
+    return;
+  }
+  
+  // 注册Service Worker
+  navigator.serviceWorker.register('/sw.js')
+    .then(function(registration) {
+      console.log('✅ PWA: Service Worker注册成功', registration.scope);
+      
+      // 检查是否有等待中的Service Worker
+      if (registration.waiting) {
+        console.log('PWA: 发现新版本Service Worker');
+        handleSwUpdate(registration.waiting);
+      }
+      
+      // 监听Service Worker更新
+      registration.addEventListener('updatefound', function() {
+        console.log('PWA: Service Worker更新中...');
+        
+        const newWorker = registration.installing;
+        if (newWorker) {
+          newWorker.addEventListener('statechange', function() {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              console.log('PWA: 新版本已安装，等待激活');
+              handleSwUpdate(newWorker);
+            }
+          });
+        }
+      });
+      
+      // 监听Service Worker状态变化
+      registration.addEventListener('controllerchange', function() {
+        console.log('PWA: Service Worker已切换到新版本');
+        // 可以在这里通知用户页面将重新加载
+      });
+    })
+    .catch(function(error) {
+      console.warn('❌ PWA: Service Worker注册失败', error);
+    });
+  
+  // 监听Service Worker消息
+  navigator.serviceWorker.addEventListener('message', function(event) {
+    if (event.data && event.data.type === 'SW_UPDATED') {
+      console.log('PWA: Service Worker已更新');
+    }
+  });
+}
+
+// 获取PWA通知图标
+async function getPwaNotificationIcon() {
+  try {
+    // 优先级：Manifest图标 > SEO配置图标 > 网站头像 > 默认图标
+    
+    // 1. 尝试从manifest.json获取图标（最准确的PWA图标）
+    try {
+      const manifestResponse = await fetch('/manifest.json');
+      if (manifestResponse.ok) {
+        const manifest = await manifestResponse.json();
+        if (manifest.icons && manifest.icons.length > 0) {
+          // 优先选择192x192或更大的图标，适合通知显示
+          const preferredIcon = manifest.icons.find(icon => 
+            icon.sizes && (icon.sizes.includes('192x192') || icon.sizes.includes('256x256') || icon.sizes.includes('512x512'))
+          );
+          if (preferredIcon) return preferredIcon.src;
+          
+          // 如果没有合适尺寸，使用第一个图标
+          return manifest.icons[0].src;
+        }
+      }
+    } catch (e) {
+      console.warn('从manifest.json获取图标失败:', e);
+    }
+    
+    // 2. 尝试从缓存的SEO配置获取PWA图标
+    const cachedSeoConfig = localStorage.getItem('seoConfig');
+    if (cachedSeoConfig) {
+      try {
+        const seoConfig = JSON.parse(cachedSeoConfig);
+        if (seoConfig.site_icon_192) return seoConfig.site_icon_192;
+        if (seoConfig.site_icon_512) return seoConfig.site_icon_512;
+        if (seoConfig.site_icon) return seoConfig.site_icon;
+        if (seoConfig.apple_touch_icon) return seoConfig.apple_touch_icon;
+      } catch (e) {
+        console.warn('解析SEO配置缓存失败:', e);
+      }
+    }
+    
+    // 3. 使用网站信息中的头像
+    const webInfo = store.state.webInfo || {};
+    if (webInfo.avatar) return webInfo.avatar;
+    
+    // 4. 默认图标
+    return '/poetize.jpg';
+  } catch (error) {
+    console.warn('获取PWA图标失败，使用默认图标:', error);
+    return '/poetize.jpg';
+  }
+}
+
+// 处理Service Worker更新
+async function handleSwUpdate(worker) {
+  try {
+    // 使用Vue的全局通知系统
+    Vue.prototype.$notify.info(
+      'PWA更新', 
+      '应用有新版本可用，刷新页面以使用最新功能', 
+      5000
+    );
+  } catch (error) {
+    // 降级到浏览器原生通知
+    console.log('PWA: 检测到新版本，建议刷新页面');
+    
+    // 尝试使用浏览器通知API（如果可用）
+    if ('Notification' in window && Notification.permission === 'granted') {
+      try {
+        const icon = await getPwaNotificationIcon();
+        new Notification('PWA更新', {
+          body: '应用有新版本可用，刷新页面以使用最新功能',
+          icon: icon
+        });
+        console.log('PWA: 已显示浏览器通知，图标:', icon);
+      } catch (e) {
+        // 图标获取失败时仍显示通知，只是没有图标
+        new Notification('PWA更新', {
+          body: '应用有新版本可用，刷新页面以使用最新功能'
+        });
+        console.log('PWA: 已显示浏览器通知（无图标）');
+      }
+    }
+  }
+}

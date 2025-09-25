@@ -274,7 +274,8 @@
     },
     computed: {},
     created() {
-
+      // 动态设置页面SEO信息
+      this.updatePageSEO();
     },
     mounted() {
       // 获取第三方登录配置
@@ -282,12 +283,81 @@
 
       // 监听第三方登录配置变更事件
       this.$bus.$on('thirdPartyLoginConfigChanged', this.handleThirdPartyConfigChange);
+      
+      // 监听登录状态变化，动态更新SEO
+      this.$watch('$store.state.currentUser', () => {
+        this.updatePageSEO();
+      });
     },
     beforeDestroy() {
       // 移除事件监听
       this.$bus.$off('thirdPartyLoginConfigChanged', this.handleThirdPartyConfigChange);
     },
     methods: {
+      // 根据登录状态动态更新页面SEO信息
+      updatePageSEO() {
+        // 优先使用webTitle，fallback到webName，最后使用默认值
+        const webTitle = this.$store.state.webInfo?.webTitle || 
+                        this.$store.state.webInfo?.webName || 
+                        'Poetize';
+        const isLoggedIn = !this.$common.isEmpty(this.$store.state.currentUser);
+        
+        let title, description, keywords;
+        
+        if (isLoggedIn) {
+          // 已登录：个人中心
+          const userName = this.$store.state.currentUser?.username || '用户';
+          title = `个人中心 - ${webTitle}`;
+          description = `${userName}的个人中心，管理个人资料和账户设置`;
+          keywords = `个人中心,用户资料,账户设置,${webTitle}`;
+        } else {
+          // 未登录：登录页面
+          title = `登录 - ${webTitle}`;
+          description = `登录${webTitle}，开始您的精彩之旅`;
+          keywords = `登录,注册,用户登录,${webTitle}`;
+        }
+        
+        // 更新页面title
+        document.title = title;
+        window.OriginTitile = title;
+        
+        // 更新meta标签
+        this.updateMetaTags({
+          title,
+          description,
+          keywords,
+          'og:title': title,
+          'og:description': description,
+          'og:type': 'website'
+        });
+      },
+      
+      // 更新meta标签的通用方法
+      updateMetaTags(metaData) {
+        // 移除旧的动态meta标签
+        document.querySelectorAll('meta[data-dynamic-seo="true"]').forEach(el => el.remove());
+        
+        // 添加新的meta标签
+        Object.entries(metaData).forEach(([key, value]) => {
+          if (!value || key === 'title') return; // title已经设置过
+          
+          const meta = document.createElement('meta');
+          const isProperty = key.startsWith('og:') || key.startsWith('twitter:');
+          
+          if (isProperty) {
+            meta.setAttribute('property', key);
+          } else {
+            meta.setAttribute('name', key);
+          }
+          
+          meta.setAttribute('content', value);
+          meta.setAttribute('data-dynamic-seo', 'true');
+          
+          if (document.head) {
+            document.head.appendChild(meta);
+          }
+        });
+      },
       addPicture(res) {
         this.avatar = res;
         this.submitDialog()

@@ -60,7 +60,8 @@ export default new Vuex.Store({
       "backgroundImage": "", 
       "avatar": "",
       "minimalFooter": false,
-      "navConfig": "[]"  // 初始为空数组字符串
+      "navConfig": "[]",  // 初始为空数组字符串
+      "homePagePullUpHeight": 50  // 首页横幅高度默认值
     }),
     visitCounts: {},
     // 验证码相关状态
@@ -150,6 +151,12 @@ export default new Vuex.Store({
       if (!webInfo.navConfig || webInfo.navConfig === "{}" || webInfo.navConfig === "") {
         webInfo.navConfig = "[]";
         console.log("Vuex store: 导航栏配置为空，设置为默认空数组");
+      }
+      
+      // 确保homePagePullUpHeight有默认值
+      if (!webInfo.homePagePullUpHeight || webInfo.homePagePullUpHeight <= 0) {
+        webInfo.homePagePullUpHeight = 50;
+        console.log("Vuex store: 首页横幅高度为空或无效，设置为默认50vh");
       }
       
       // 不再将webTitle分割为数组，保持原始字符串格式

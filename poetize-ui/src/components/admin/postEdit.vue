@@ -16,7 +16,7 @@
       文章信息
     </el-tag>
     <el-form :model="article" :rules="rules" ref="ruleForm" label-width="150px"
-             class="demo-ruleForm">
+             class="demo-ruleForm mobile-responsive-form">
       <el-form-item label="标题" prop="articleTitle">
         <el-input v-model="article.articleTitle" maxlength="500" show-word-limit></el-input>
       </el-form-item>
@@ -107,16 +107,23 @@
       </el-form-item>
 
       <el-form-item label="封面" prop="articleCover">
-        <div style="display: flex">
-          <el-input v-model="article.articleCover"></el-input>
-          <el-image class="table-td-thumb"
-                    lazy
-                    style="margin-left: 10px"
-                    :preview-src-list="[article.articleCover]"
-                    :src="article.articleCover"
-                    fit="cover"></el-image>
+        <div class="cover-input-container">
+          <el-input 
+            v-model="article.articleCover" 
+            placeholder="请输入图片链接或使用下方上传功能"></el-input>
+          <el-image 
+            class="table-td-thumb"
+            lazy
+            :preview-src-list="[article.articleCover]"
+            :src="article.articleCover"
+            fit="cover">
+            <div slot="error" class="image-slot">
+              <i class="el-icon-picture-outline"></i>
+              <div class="image-placeholder-text">封面预览</div>
+            </div>
+          </el-image>
         </div>
-        <uploadPicture :isAdmin="true" :prefix="'articleCover'" style="margin-top: 10px" @addPicture="addArticleCover"
+        <uploadPicture :isAdmin="true" :prefix="'articleCover'" class="cover-upload" @addPicture="addArticleCover"
                        :maxSize="2"
                        :maxNumber="1"></uploadPicture>
       </el-form-item>
@@ -246,6 +253,7 @@
         <el-form-item label="翻译内容" prop="translatedContent">
           <mavon-editor
             ref="translationMd"
+            class="translation-editor"
             v-model="translationForm.translatedContent"
             placeholder="请输入翻译后的文章内容（支持Markdown格式）"/>
         </el-form-item>
@@ -349,6 +357,8 @@
           content: '',
           language: ''
         },
+        // 响应式布局相关
+        resizeTimer: null,
         rules: {
           articleTitle: [
             {required: true, message: '请输入标题', trigger: 'change'},
@@ -404,11 +414,20 @@
       
       // 监听系统配置更新事件
       this.$bus.$on('sysConfigUpdated', this.handleSysConfigUpdate);
+      
+      // 初始化移动端表单适配
+      this.initMobileFormLayout();
+      
+      // 监听窗口大小变化
+      window.addEventListener('resize', this.handleWindowResize);
     },
     
     beforeDestroy() {
       // 移除事件监听，避免内存泄漏
       this.$bus.$off('sysConfigUpdated', this.handleSysConfigUpdate);
+      
+      // 移除窗口大小变化监听
+      window.removeEventListener('resize', this.handleWindowResize);
     },
 
 
@@ -1204,6 +1223,42 @@
           content: '',
           language: ''
         };
+      },
+
+      // 移动端表单布局适配相关方法
+      initMobileFormLayout() {
+        this.$nextTick(() => {
+          this.updateFormLabelPosition();
+        });
+      },
+
+      handleWindowResize() {
+        // 防抖处理
+        if (this.resizeTimer) {
+          clearTimeout(this.resizeTimer);
+        }
+        this.resizeTimer = setTimeout(() => {
+          this.updateFormLabelPosition();
+        }, 300);
+      },
+
+      updateFormLabelPosition() {
+        const form = this.$refs.ruleForm;
+        if (!form || !form.$el) return;
+
+        const isMobile = window.innerWidth <= 768;
+        
+        if (isMobile) {
+          // 移动端：使用顶部标签布局
+          form.labelPosition = 'top';
+          form.$el.classList.add('el-form--label-top');
+          form.$el.classList.remove('el-form--label-left');
+        } else {
+          // 桌面端：使用左侧标签布局
+          form.labelPosition = 'left';
+          form.$el.classList.add('el-form--label-left');
+          form.$el.classList.remove('el-form--label-top');
+        }
       }
     }
   }
@@ -1228,6 +1283,47 @@
     height: 40px;
   }
 
+  /* 封面相关样式 */
+  .cover-input-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .cover-upload {
+    margin-top: 10px;
+  }
+
+  /* 封面输入框样式 */
+  .cover-input-container .el-input {
+    flex: 1;
+    min-width: 0; /* 防止flex子项溢出 */
+  }
+
+  /* 封面预览占位符样式 */
+  .table-td-thumb .image-slot {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 100%;
+    background: #f5f7fa;
+    color: #909399;
+    font-size: 12px;
+  }
+
+  .table-td-thumb .image-slot i {
+    font-size: 20px;
+    margin-bottom: 4px;
+  }
+
+  .table-td-thumb .image-placeholder-text {
+    font-size: 10px;
+    text-align: center;
+  }
+
   .el-switch {
     margin-left: 10px;
   }
@@ -1242,5 +1338,491 @@
 
   .el-form-item {
     margin-bottom: 40px;
+  }
+
+  /* ===========================================
+     移动端响应式设计优化
+     =========================================== */
+  
+  /* 768px及以下 - 移动端和平板 */
+  @media screen and (max-width: 768px) {
+    /* 主容器移动端适配 */
+    .my-tag {
+      margin-bottom: 16px;
+      height: 36px;
+      line-height: 36px;
+      font-size: 14px;
+      padding: 0 12px;
+    }
+
+    /* 表单移动端适配 */
+    ::v-deep .mobile-responsive-form.el-form--label-top .el-form-item__label {
+      width: 100% !important;
+      text-align: left !important;
+      margin-bottom: 8px !important;
+      font-weight: 500 !important;
+      font-size: 14px !important;
+      padding-bottom: 0 !important;
+    }
+
+    ::v-deep .mobile-responsive-form .el-form-item__content {
+      margin-left: 0 !important;
+      width: 100% !important;
+    }
+
+    ::v-deep .mobile-responsive-form .el-form-item {
+      margin-bottom: 24px !important;
+    }
+
+    /* 输入框移动端适配 */
+    ::v-deep .el-input__inner {
+      font-size: 16px !important; /* 防止iOS自动放大 */
+      height: 44px !important; /* 更好的触摸体验 */
+      border-radius: 8px !important;
+    }
+
+    ::v-deep .el-textarea__inner {
+      font-size: 16px !important;
+      min-height: 100px !important;
+      border-radius: 8px !important;
+    }
+
+    /* 选择器移动端适配 */
+    ::v-deep .el-select {
+      width: 100% !important;
+    }
+
+    ::v-deep .el-select .el-input__inner {
+      height: 44px !important;
+      line-height: 44px !important;
+    }
+
+    /* 开关移动端适配 */
+    ::v-deep .el-switch {
+      margin-left: 8px;
+    }
+
+    ::v-deep .el-switch__core {
+      width: 50px !important;
+      height: 24px !important;
+    }
+
+    ::v-deep .el-switch__core::after {
+      width: 20px !important;
+      height: 20px !important;
+    }
+
+    /* 提示文本移动端适配 */
+    .tip-text {
+      margin-left: 0 !important;
+      margin-top: 8px !important;
+      display: block !important;
+    }
+
+    /* 封面区域移动端适配 - 完整重设计 */
+    .cover-input-container {
+      flex-direction: column !important;
+      align-items: stretch !important;
+      gap: 12px !important;
+      width: 100% !important;
+    }
+
+    /* 封面输入框移动端优化 */
+    .cover-input-container .el-input {
+      width: 100% !important;
+      order: 1 !important;
+    }
+
+    .cover-input-container .el-input .el-input__inner {
+      height: 44px !important;
+      font-size: 16px !important;
+      border-radius: 8px !important;
+      padding: 0 12px !important;
+    }
+
+    /* 封面图片预览移动端优化 */
+    .table-td-thumb {
+      width: 100px !important;
+      height: 100px !important;
+      margin: 0 !important;
+      align-self: center !important;
+      order: 2 !important;
+      border-radius: 8px !important;
+      border: 2px solid #e4e7ed !important;
+      object-fit: cover !important;
+      overflow: hidden !important;
+    }
+
+    /* 移动端占位符图标优化 */
+    .table-td-thumb .image-slot i {
+      font-size: 24px !important;
+      margin-bottom: 6px !important;
+    }
+
+    .table-td-thumb .image-placeholder-text {
+      font-size: 11px !important;
+    }
+
+    /* 封面上传组件移动端适配 */
+    .cover-upload {
+      margin-top: 16px !important;
+      width: 100% !important;
+    }
+
+    /* 上传组件内部优化 */
+    ::v-deep .cover-upload .el-upload {
+      width: 100% !important;
+    }
+
+    ::v-deep .cover-upload .el-upload .el-upload-dragger {
+      width: 100% !important;
+      height: 100px !important;
+      border-radius: 8px !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: center !important;
+      align-items: center !important;
+    }
+
+    ::v-deep .cover-upload .el-upload .el-upload-dragger .el-upload__text {
+      font-size: 14px !important;
+      margin-top: 8px !important;
+    }
+
+    /* 翻译相关按钮组移动端适配 */
+    ::v-deep .el-form-item .el-form-item__content > div {
+      flex-direction: column !important;
+      gap: 12px !important;
+      align-items: flex-start !important;
+    }
+
+    ::v-deep .el-form-item .el-form-item__content > div > div {
+      width: 100%;
+    }
+
+    /* 按钮组移动端适配 */
+    .myCenter {
+      flex-direction: column;
+      gap: 12px;
+      padding: 20px 0;
+    }
+
+    .myCenter .el-button {
+      width: 100% !important;
+      height: 44px !important;
+      font-size: 16px !important;
+      border-radius: 8px !important;
+      margin: 0 !important;
+    }
+
+    /* 对话框移动端适配 */
+    ::v-deep .el-dialog {
+      width: 95% !important;
+      margin-top: 5vh !important;
+      margin-bottom: 5vh !important;
+    }
+
+    ::v-deep .el-dialog__header {
+      padding: 20px 20px 10px !important;
+    }
+
+    ::v-deep .el-dialog__body {
+      padding: 10px 20px 20px !important;
+      max-height: 70vh !important;
+      overflow-y: auto !important;
+    }
+
+    ::v-deep .el-dialog__footer {
+      padding: 10px 20px 20px !important;
+    }
+
+    /* 翻译弹窗按钮适配 */
+    .dialog-footer {
+      display: flex !important;
+      flex-direction: column !important;
+      gap: 12px !important;
+    }
+
+    .dialog-footer .el-button {
+      width: 100% !important;
+      height: 44px !important;
+      font-size: 16px !important;
+      border-radius: 8px !important;
+      margin: 0 !important;
+    }
+
+    /* Markdown编辑器移动端适配 - 重新设计 */
+    ::v-deep .v-note-wrapper {
+      height: auto !important;
+      min-height: 400px !important;
+      max-height: 600px !important;
+    }
+
+    /* 工具栏移动端优化 - 关键修复 */
+    ::v-deep .v-note-wrapper .v-note-op {
+      height: auto !important; /* 允许工具栏自然扩展 */
+      min-height: 40px !important;
+      flex-wrap: wrap !important;
+      padding: 8px 4px !important;
+      overflow: visible !important;
+      position: relative !important;
+      z-index: 10 !important;
+    }
+
+    /* 工具栏按钮优化 */
+    ::v-deep .v-note-wrapper .v-note-op .v-left-item,
+    ::v-deep .v-note-wrapper .v-note-op .v-right-item {
+      height: auto !important;
+      flex-wrap: wrap !important;
+      gap: 4px !important;
+    }
+
+    /* 工具栏按钮尺寸适配 */
+    ::v-deep .v-note-wrapper .v-note-op .op-icon {
+      width: 32px !important;
+      height: 32px !important;
+      font-size: 14px !important;
+      margin: 2px !important;
+      border-radius: 4px !important;
+      /* 触摸优化 */
+      touch-action: manipulation !important;
+      -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1) !important;
+    }
+
+    /* 工具栏按钮悬停效果优化 */
+    ::v-deep .v-note-wrapper .v-note-op .op-icon:active {
+      background-color: rgba(0, 0, 0, 0.1) !important;
+      transform: scale(0.95) !important;
+    }
+
+    /* 编辑区域适配 */
+    ::v-deep .v-note-wrapper .v-note-panel {
+      height: calc(100% - 80px) !important; /* 为工具栏留出足够空间 */
+      min-height: 320px !important;
+      position: relative !important;
+    }
+
+    /* 编辑器和预览面板 */
+    ::v-deep .v-note-wrapper .v-note-panel .v-note-edit.divarea-wrapper,
+    ::v-deep .v-note-wrapper .v-note-panel .v-note-show {
+      height: 100% !important;
+    }
+
+    /* 文本输入区域 */
+    ::v-deep .v-note-wrapper .v-note-panel .v-note-edit.divarea-wrapper .ace-editor {
+      height: 100% !important;
+    }
+
+    /* 输入区域文本优化 */
+    ::v-deep .v-note-wrapper .v-note-panel .v-note-edit.divarea-wrapper textarea,
+    ::v-deep .v-note-wrapper .v-note-panel .v-note-edit.divarea-wrapper .ace-editor .ace_text-input {
+      font-size: 16px !important; /* 防止iOS自动放大 */
+      line-height: 1.5 !important;
+      -webkit-user-select: text !important;
+      user-select: text !important;
+    }
+
+    /* 防止双击缩放 */
+    ::v-deep .v-note-wrapper .v-note-panel {
+      touch-action: pan-y !important;
+    }
+
+    /* 图片上传组件移动端适配 */
+    ::v-deep .el-upload-dragger {
+      width: 100% !important;
+      height: 80px !important;
+    }
+  }
+
+  /* 600px及以下 - 小屏移动设备 */
+  @media screen and (max-width: 600px) {
+    /* 进一步优化小屏幕 */
+    ::v-deep .mobile-responsive-form {
+      padding: 0 8px;
+    }
+
+    .my-tag {
+      margin: 0 -8px 16px;
+      border-radius: 0;
+    }
+
+    .myCenter {
+      padding: 16px 0;
+    }
+
+    /* 封面区域小屏优化 */
+    .table-td-thumb {
+      width: 80px !important;
+      height: 80px !important;
+    }
+
+    /* 小屏占位符优化 */
+    .table-td-thumb .image-slot i {
+      font-size: 20px !important;
+      margin-bottom: 4px !important;
+    }
+
+    .table-td-thumb .image-placeholder-text {
+      font-size: 9px !important;
+    }
+
+    ::v-deep .cover-upload .el-upload .el-upload-dragger {
+      height: 80px !important;
+    }
+
+    ::v-deep .cover-upload .el-upload .el-upload-dragger .el-upload__text {
+      font-size: 12px !important;
+    }
+
+    /* Markdown编辑器进一步适配 */
+    ::v-deep .v-note-wrapper {
+      min-height: 350px !important;
+      max-height: 500px !important;
+    }
+
+    ::v-deep .v-note-wrapper .v-note-panel {
+      min-height: 280px !important;
+    }
+
+    /* 工具栏按钮更紧凑 */
+    ::v-deep .v-note-wrapper .v-note-op .op-icon {
+      width: 30px !important;
+      height: 30px !important;
+      font-size: 13px !important;
+      margin: 1px !important;
+    }
+  }
+
+  /* 480px及以下 - 极小屏移动设备 */
+  @media screen and (max-width: 480px) {
+    /* 标题区域适配 */
+    .my-tag {
+      font-size: 13px;
+      height: 32px;
+      line-height: 32px;
+    }
+
+    .my-tag svg {
+      width: 16px !important;
+      height: 16px !important;
+    }
+
+    /* 表单标签进一步缩小 */
+    ::v-deep .mobile-responsive-form.el-form--label-top .el-form-item__label {
+      font-size: 13px !important;
+    }
+
+    /* 封面区域极小屏优化 */
+    .cover-input-container {
+      gap: 8px !important;
+    }
+
+    .table-td-thumb {
+      width: 70px !important;
+      height: 70px !important;
+    }
+
+    /* 极小屏占位符优化 */
+    .table-td-thumb .image-slot i {
+      font-size: 18px !important;
+      margin-bottom: 3px !important;
+    }
+
+    .table-td-thumb .image-placeholder-text {
+      font-size: 8px !important;
+      line-height: 1.1 !important;
+    }
+
+    ::v-deep .cover-upload .el-upload .el-upload-dragger {
+      height: 70px !important;
+      padding: 8px !important;
+    }
+
+    ::v-deep .cover-upload .el-upload .el-upload-dragger .el-upload__text {
+      font-size: 11px !important;
+      line-height: 1.2 !important;
+    }
+
+    /* 按钮进一步适配 */
+    .myCenter .el-button {
+      height: 40px !important;
+      font-size: 15px !important;
+    }
+
+    .dialog-footer .el-button {
+      height: 40px !important;
+      font-size: 15px !important;
+    }
+
+    /* 输入框高度调整 */
+    ::v-deep .el-input__inner,
+    ::v-deep .el-select .el-input__inner {
+      height: 40px !important;
+      line-height: 40px !important;
+    }
+
+    /* Markdown编辑器小屏适配 */
+    ::v-deep .v-note-wrapper {
+      min-height: 300px !important;
+      max-height: 450px !important;
+    }
+
+    ::v-deep .v-note-wrapper .v-note-panel {
+      min-height: 220px !important;
+    }
+
+    /* 工具栏按钮进一步压缩 */
+    ::v-deep .v-note-wrapper .v-note-op {
+      padding: 6px 2px !important;
+    }
+
+    ::v-deep .v-note-wrapper .v-note-op .op-icon {
+      width: 28px !important;
+      height: 28px !important;
+      font-size: 12px !important;
+      margin: 1px !important;
+    }
+
+    /* 隐藏部分不常用的工具栏按钮以节省空间 */
+    ::v-deep .v-note-wrapper .v-note-op .op-icon.fa-columns,
+    ::v-deep .v-note-wrapper .v-note-op .op-icon.fa-header,
+    ::v-deep .v-note-wrapper .v-note-op .op-icon.fa-underline {
+      display: none !important;
+    }
+  }
+
+  /* 翻译编辑器移动端特殊适配 */
+  @media screen and (max-width: 768px) {
+    /* 翻译弹窗中的Markdown编辑器 */
+    ::v-deep .translation-editor.v-note-wrapper {
+      min-height: 250px !important;
+      max-height: 350px !important;
+    }
+
+    ::v-deep .translation-editor .v-note-panel {
+      min-height: 180px !important;
+    }
+  }
+
+  @media screen and (max-width: 600px) {
+    ::v-deep .translation-editor.v-note-wrapper {
+      min-height: 200px !important;
+      max-height: 300px !important;
+    }
+
+    ::v-deep .translation-editor .v-note-panel {
+      min-height: 140px !important;
+    }
+  }
+
+  @media screen and (max-width: 480px) {
+    ::v-deep .translation-editor.v-note-wrapper {
+      min-height: 180px !important;
+      max-height: 250px !important;
+    }
+
+    ::v-deep .translation-editor .v-note-panel {
+      min-height: 120px !important;
+    }
   }
 </style>

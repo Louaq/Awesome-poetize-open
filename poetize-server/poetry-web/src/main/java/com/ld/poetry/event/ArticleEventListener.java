@@ -1,5 +1,6 @@
 package com.ld.poetry.event;
 
+import com.ld.poetry.service.SitemapService;
 import com.ld.poetry.utils.PrerenderClient;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +25,9 @@ public class ArticleEventListener {
     @Autowired
     private PrerenderClient prerenderClient;
     
+    @Autowired
+    private SitemapService sitemapService;
+    
     // 用于去重的延迟调度器
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     
@@ -46,6 +50,9 @@ public class ArticleEventListener {
                         // 新建可见文章，使用延迟去重机制进行预渲染
                         scheduleRenderWithDeduplication(event.getArticleId(), event.getSortId(), "CREATE");
                         log.info("已安排新文章预渲染任务: ID={}", event.getArticleId());
+                        
+                        // 文章创建后更新sitemap
+                        updateSitemapAsync(event.getArticleId(), "CREATE");
                     } else {
                         // 新建不可见文章，不需要预渲染
                         log.info("新建文章不可见，跳过预渲染: ID={}", event.getArticleId());
@@ -62,12 +69,18 @@ public class ArticleEventListener {
                         scheduleRenderWithDeduplication(event.getArticleId(), event.getSortId(), "DELETE");
                         log.info("已安排文章预渲染删除任务: ID={}", event.getArticleId());
                     }
+                    
+                    // 文章更新后更新sitemap
+                    updateSitemapAsync(event.getArticleId(), "UPDATE");
                     break;
                     
                 case "DELETE":
                     // 删除操作立即执行，不需要去重
                     scheduleRenderWithDeduplication(event.getArticleId(), event.getSortId(), "DELETE");
                     log.info("已安排文章删除预渲染任务: ID={}, 分类ID={}", event.getArticleId(), event.getSortId());
+                    
+                    // 文章删除后更新sitemap
+                    updateSitemapAsync(event.getArticleId(), "DELETE");
                     break;
                     
                 default:
@@ -177,5 +190,22 @@ public class ArticleEventListener {
         
         // 延迟2秒执行，给翻译服务一点时间
         scheduler.schedule(renderTask, 2, TimeUnit.SECONDS);
+    }
+    
+    /**
+     * 异步更新sitemap并推送到搜索引擎
+     * 
+     * @param articleId 文章ID
+     * @param operation 操作类型
+     */
+    private void updateSitemapAsync(Integer articleId, String operation) {
+        try {
+            String reason = String.format("文章%s (ID=%d)", operation, articleId);
+            log.info("文章{}操作，更新sitemap并推送: ID={}", operation, articleId);
+            sitemapService.updateSitemapAndPush(reason);
+        } catch (Exception e) {
+            log.warn("更新sitemap和推送失败: ID={}, 操作={}, 错误={}", 
+                     articleId, operation, e.getMessage());
+        }
     }
 } 

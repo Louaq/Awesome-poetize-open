@@ -25,6 +25,9 @@ public class ScheduleTask {
 
     @Autowired
     private CacheService cacheService;
+    
+    @Autowired
+    private com.ld.poetry.service.SitemapService sitemapService;
 
     /**
      * 每天凌晨执行的完整清理和统计任务
@@ -121,6 +124,52 @@ public class ScheduleTask {
     public void initializeCacheOnStartup() {
         log.info("应用启动，初始化统计缓存");
         ensureStatisticsCache();
+    }
+    
+    /**
+     * 每小时清理sitemap缓存，确保sitemap数据新鲜度
+     * 在每小时的第30分钟执行，避免与其他任务冲突
+     */
+    @Scheduled(cron = "0 30 * * * ?")
+    public void refreshSitemapCache() {
+        try {
+            log.info("====================开始执行定期sitemap缓存清理任务====================");
+            
+            if (sitemapService != null) {
+                sitemapService.clearSitemapCache();
+                log.info("定期sitemap缓存清理完成，下次访问时将重新生成");
+            }
+            
+        } catch (Exception e) {
+            log.error("定期sitemap缓存清理任务执行失败", e);
+        }
+    }
+    
+    /**
+     * 每天凌晨2点强制刷新sitemap，确保数据完整性
+     * 在系统负载较低的时间执行完整的sitemap重新生成
+     */
+    @Scheduled(cron = "0 0 2 * * ?")
+    public void dailySitemapRefresh() {
+        try {
+            log.info("====================开始执行每日sitemap完整刷新任务====================");
+            
+            if (sitemapService != null) {
+                // 清除缓存并通过带缓存的方法预热sitemap，避免访问空窗
+                sitemapService.clearSitemapCache();
+                String sitemap = sitemapService.generateSitemap();
+                
+                if (sitemap != null) {
+                    int urlCount = sitemap.split("<url>").length - 1;
+                    log.info("每日sitemap完整刷新成功，包含 {} 个URL", urlCount);
+                } else {
+                    log.warn("每日sitemap完整刷新失败");
+                }
+            }
+            
+        } catch (Exception e) {
+            log.error("每日sitemap完整刷新任务执行失败", e);
+        }
     }
     
     /**

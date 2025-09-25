@@ -42,6 +42,9 @@ public class TranslationServiceImpl implements TranslationService {
     @Autowired
     private com.ld.poetry.utils.PrerenderClient prerenderClient;
     
+    @Autowired
+    private com.ld.poetry.service.SitemapService sitemapService;
+    
     public TranslationServiceImpl() {
         this.restTemplate = new RestTemplate();
     }
@@ -251,6 +254,9 @@ public class TranslationServiceImpl implements TranslationService {
                     existingTranslation.setUpdateTime(LocalDateTime.now());
                     articleTranslationMapper.updateById(existingTranslation);
                     log.info("更新文章翻译成功，文章ID: {}, 目标语言: {} (尝试第{}次)", articleId, targetLanguage, attempt);
+                    
+                    // 翻译更新成功后，清除sitemap缓存（翻译URL可能需要更新）
+                    updateSitemapForTranslation(articleId, "翻译更新");
                     return true;
                 } else {
                     // 创建新翻译
@@ -265,6 +271,9 @@ public class TranslationServiceImpl implements TranslationService {
                     try {
                         articleTranslationMapper.insert(newTranslation);
                         log.info("创建文章翻译成功，文章ID: {}, 目标语言: {} (尝试第{}次)", articleId, targetLanguage, attempt);
+                        
+                        // 翻译创建成功后，清除sitemap缓存（新增翻译URL）
+                        updateSitemapForTranslation(articleId, "翻译创建");
                         return true;
                     } catch (org.springframework.dao.DuplicateKeyException e) {
                         // 如果遇到重复键异常，说明在我们检查后有其他线程插入了记录
@@ -281,6 +290,9 @@ public class TranslationServiceImpl implements TranslationService {
                                 existingTranslation.setUpdateTime(LocalDateTime.now());
                                 articleTranslationMapper.updateById(existingTranslation);
                                 log.info("最终更新文章翻译成功，文章ID: {}, 目标语言: {}", articleId, targetLanguage);
+                                
+                                // 翻译最终更新成功后，清除sitemap缓存
+                                updateSitemapForTranslation(articleId, "翻译最终更新");
                                 return true;
                             }
                         }
@@ -312,6 +324,9 @@ public class TranslationServiceImpl implements TranslationService {
             int rows = articleTranslationMapper.delete(queryWrapper);
             if (rows > 0) {
                 translateAndSaveArticle(articleId); // 重新翻译并将在内部触发 prerender
+                
+                // 刷新翻译后，清除sitemap缓存（翻译URL可能发生变化）
+                updateSitemapForTranslation(articleId, "刷新翻译");
             }
             log.info("删除文章翻译成功，文章ID: {}", articleId);
         } catch (Exception e) {
@@ -459,6 +474,7 @@ public class TranslationServiceImpl implements TranslationService {
                 result.put("success", true);
                 result.put("message", "翻译保存成功");
                 log.info("手动翻译保存成功，文章ID: {}, 目标语言: {}", articleId, targetLanguage);
+                // 注意：sitemap更新已经在saveOrUpdateTranslation方法中处理
             } else {
                 result.put("success", false);
                 result.put("message", "翻译保存失败");
@@ -570,6 +586,11 @@ public class TranslationServiceImpl implements TranslationService {
             queryWrapper.eq(ArticleTranslation::getArticleId, articleId);
             int rows = articleTranslationMapper.delete(queryWrapper);
             log.info("仅删除文章翻译，无重译，文章ID: {}, 行数: {}", articleId, rows);
+            
+            // 删除翻译后，清除sitemap缓存（翻译URL需要从sitemap中移除）
+            if (rows > 0) {
+                updateSitemapForTranslation(articleId, "删除所有翻译");
+            }
         } catch (Exception e) {
             log.error("删除文章翻译失败，文章ID: {}", articleId, e);
         }
@@ -584,6 +605,11 @@ public class TranslationServiceImpl implements TranslationService {
             
             int rows = articleTranslationMapper.delete(queryWrapper);
             log.info("删除文章特定语言翻译，文章ID: {}, 语言: {}, 删除行数: {}", articleId, language, rows);
+            
+            // 删除特定语言翻译后，清除sitemap缓存（该语言的翻译URL需要从sitemap中移除）
+            if (rows > 0) {
+                updateSitemapForTranslation(articleId, "删除" + language + "翻译");
+            }
             
             return rows > 0;
         } catch (Exception e) {
@@ -638,6 +664,23 @@ public class TranslationServiceImpl implements TranslationService {
     @Override
     public Map<String, String> getTranslationLanguageConfig() {
         return getLanguageConfig();
+    }
+
+    /**
+     * 翻译操作后更新sitemap的辅助方法
+     * @param articleId 文章ID
+     * @param operation 操作描述
+     */
+    private void updateSitemapForTranslation(Integer articleId, String operation) {
+        try {
+            if (sitemapService != null) {
+                String reason = String.format("文章翻译%s (文章ID=%d)", operation, articleId);
+                sitemapService.updateSitemapAndPush(reason);
+                log.debug("{}后已更新sitemap并推送到搜索引擎，文章ID: {}", operation, articleId);
+            }
+        } catch (Exception e) {
+            log.warn("{}后更新sitemap和推送失败，不影响翻译操作，文章ID: {}, 错误: {}", operation, articleId, e.getMessage());
+        }
     }
 
 }

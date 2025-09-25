@@ -1,8 +1,8 @@
 #!/bin/bash
 ## 作者: LeapYa
-## 修改时间: 2025-09-20
+## 修改时间: 2025-09-25
 ## 描述: Poetize 博客系统全局管理命令
-## 版本: 1.5.1
+## 版本: 1.5.2
 
 # 定义颜色
 RED='\033[0;31m'
@@ -988,7 +988,7 @@ extract_domains_from_nginx_config() {
     if [ -f "$nginx_config_file" ]; then
         info "从nginx配置文件中提取域名..." >&2
         # 提取server_name行中的域名，排除example.com
-        domains=$(grep "server_name" "$nginx_config_file" | sed 's/server_name \(.*\);/\1/' | tr -d ' ' | tr ';' '\n' | grep -v "example.com" | grep -v "^$" | sort -u)
+        domains=$(grep "server_name" "$nginx_config_file" | sed 's/server_name \(.*\);/\1/' | tr ';' '\n' | grep -v "example.com" | grep -v "^$" | sort -u | sed 's/^[[:space:]]*//')
         
         if [ -n "$domains" ]; then
             info "提取到域名: $domains" >&2
@@ -1172,6 +1172,64 @@ EOF
     exit 0
 }
 
+# 执行额外的SQL脚本（除了poetry.sql之外的新增表脚本）
+execute_additional_sql_scripts() {
+    info "检查并执行新增的SQL脚本..."
+    
+    # 获取数据库连接信息
+    local db_root_password=""
+    if [ -f ".config/db_credentials.txt" ]; then
+        db_root_password=$(grep "数据库ROOT密码:" .config/db_credentials.txt | cut -d':' -f2 | tr -d ' ')
+    fi
+    
+    if [ -z "$db_root_password" ]; then
+        warning "无法获取数据库密码，跳过额外SQL脚本执行"
+        return 1
+    fi
+    
+    # 等待数据库容器启动
+    info "等待数据库容器启动..."
+    sleep 15
+    
+    # 查找MariaDB容器
+    local mariadb_container=$(sudo docker ps --format "{{.Names}}" | grep "mariadb" | head -1)
+    if [ -z "$mariadb_container" ]; then
+        warning "未找到MariaDB容器，跳过额外SQL脚本执行"
+        return 1
+    fi
+    
+    # 查找poetize-server/sql目录下除poetry.sql外的所有.sql文件
+    if [ -d "poetize-server/sql" ]; then
+        local sql_files=$(find poetize-server/sql -name "*.sql" -not -name "poetry.sql" -type f | sort)
+        
+        if [ -z "$sql_files" ]; then
+            info "未找到需要执行的额外SQL脚本"
+            return 0
+        fi
+        
+        info "发现以下额外SQL脚本需要执行:"
+        echo "$sql_files" | while read -r file; do
+            info "  - $file"
+        done
+        
+        # 执行每个SQL脚本
+        echo "$sql_files" | while read -r sql_file; do
+            if [ -f "$sql_file" ]; then
+                info "执行SQL脚本: $sql_file"
+                if sudo docker exec -i "$mariadb_container" mariadb -u root -p"$db_root_password" poetize < "$sql_file" 2>/dev/null; then
+                    success "SQL脚本执行成功: $sql_file"
+                else
+                    warning "SQL脚本执行失败或已存在: $sql_file（这通常是正常的，如果表已存在）"
+                fi
+            fi
+        done
+        
+        success "额外SQL脚本执行完成"
+    else
+        warning "poetize-server/sql目录不存在，跳过额外SQL脚本执行"
+    fi
+}
+
 # 重新安装最新系统
 reinstall_latest_system() {
     info "开始重新安装最新版本的POETIZE系统..."
@@ -1302,7 +1360,16 @@ restore_full_backup() {
         info "备份中未找到Redis数据"
     fi
     
-    # 4. 重启相关服务以应用恢复的配置（不重启前端构建容器以避免文件名变化）
+    # 4. 执行新增的SQL脚本
+    info "执行新增的SQL脚本以确保数据库结构最新..."
+    execute_additional_sql_scripts
+    if [ $? -eq 0 ]; then
+        info "新增SQL脚本执行完成"
+    else
+        warning "新增SQL脚本执行过程中出现问题，但系统仍可正常使用"
+    fi
+    
+    # 5. 重启相关服务以应用恢复的配置（不重启前端构建容器以避免文件名变化）
     info "重启相关服务以应用恢复的配置..."
     
     # 只重启需要应用配置的服务，不重启前端构建容器
@@ -1313,7 +1380,7 @@ restore_full_backup() {
         warning "部分服务重启失败，可能需要手动重启"
     fi
     
-    # 5. 清理备份目录
+    # 6. 清理备份目录
     info "清理临时备份目录..."
     if [ -n "$latest_backup" ] && [ -d "$latest_backup" ]; then
         rm -rf "$latest_backup"

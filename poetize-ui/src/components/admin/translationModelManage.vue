@@ -125,7 +125,7 @@
                     :closable="false"
                     show-icon>
                     <template slot="default">
-                      系统中已有文章数据，为保证数据一致性，源语言配置已被锁定，无法修改。
+                      系统中已有文章数据，为保证数据一致性和SEO效果，源语言配置已被锁定，无法修改。如需修改源语言，请备份数据后清空所有文章。
                     </template>
                   </el-alert>
                 </div>
@@ -972,18 +972,39 @@ Vue.js具有响应式数据绑定和组件化的特性，这使得开发者可�
       } catch (error) {
         console.error('保存API配置失败:', error);
         
-        // 检查是否是源语言修改被拒绝的错误
-        if (error.response && error.response.data && error.response.data.message) {
-          const errorMessage = error.response.data.message;
+        // 增强错误处理逻辑
+        if (error.response && error.response.data) {
+          const errorData = error.response.data;
+          const errorMessage = errorData.message || errorData.msg || '未知错误';
+          
+          // 检查是否是源语言修改被拒绝的错误
           if (errorMessage.includes('源语言配置') || errorMessage.includes('文章数据')) {
             this.$message.error(errorMessage);
             // 重新检查文章状态
             this.checkArticlesExist();
             return;
           }
+          
+          // 检查是否是业务逻辑错误 (400状态码)
+          if (error.response.status === 400) {
+            this.$message.error('配置保存失败：' + errorMessage);
+            return;
+          }
+          
+          // 显示具体的服务器错误信息
+          this.$message.error('保存失败：' + errorMessage);
+        } else if (error.request) {
+          // 网络请求发出但没有收到响应
+          console.error('请求超时或网络不通:', error.request);
+          this.$message.error('保存失败，请检查网络连接或服务器状态');
+        } else if (error.message) {
+          // 请求配置或其他错误
+          console.error('请求配置错误:', error.message);
+          this.$message.error('保存失败：' + error.message);
+        } else {
+          // 未知错误
+          this.$message.error('保存失败，发生未知错误');
         }
-        
-        this.$message.error('保存失败，请检查网络连接');
       } finally {
         this.loading = false;
       }
@@ -1258,6 +1279,7 @@ Vue.js具有响应式数据绑定和组件化的特性，这使得开发者可�
 }
 
 .section-content {
+  padding: 16px 0;
 }
 
 
@@ -1757,20 +1779,28 @@ Vue.js具有响应式数据绑定和组件化的特性，这使得开发者可�
   color: var(--black);
 }
 
-/* 源语言保护警告样式 */
-.source-lang-warning {
+/* 源语言状态提示样式 */
+.source-lang-warning,
+.source-lang-info {
   margin-top: 12px;
 }
 
-.source-lang-warning .el-alert {
+.source-lang-warning .el-alert,
+.source-lang-info .el-alert {
   border-radius: 4px;
   padding: 12px 16px;
 }
 
-.source-lang-warning .el-alert__title {
+.source-lang-warning .el-alert__title,
+.source-lang-info .el-alert__title {
   font-size: 13px;
   font-weight: 500;
   line-height: 1.4;
+}
+
+.source-lang-info .el-alert__content {
+  font-size: 12px;
+  color: #67C23A;
 }
 
 .source-lang-warning .el-alert__content {

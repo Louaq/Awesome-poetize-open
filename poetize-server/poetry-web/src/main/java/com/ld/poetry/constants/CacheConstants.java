@@ -264,6 +264,28 @@ public class CacheConstants {
      * 格式: poetize:translate:{hash}
      */
     public static final String TRANSLATE_PREFIX = CACHE_PREFIX + "translate:";
+    
+    // ================================ SEO相关缓存 ================================
+    
+    /**
+     * Sitemap缓存键
+     */
+    public static final String SITEMAP_KEY = CACHE_PREFIX + "seo:sitemap";
+    
+    /**
+     * Sitemap过期时间（秒）- 1小时
+     */
+    public static final long SITEMAP_EXPIRE_TIME = 3600;
+    
+    /**
+     * 搜索引擎推送结果缓存键
+     */
+    public static final String SEARCH_ENGINE_PING_RESULT_KEY = CACHE_PREFIX + "seo:ping:result";
+    
+    /**
+     * 搜索引擎推送结果缓存过期时间（秒）- 6小时
+     */
+    public static final long SEARCH_ENGINE_PING_RESULT_EXPIRE_TIME = 21600;
 
     // ================================ 缓存过期时间常量 ================================
     

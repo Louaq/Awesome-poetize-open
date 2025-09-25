@@ -1,8 +1,8 @@
 #!/bin/bash
 ## 作者: LeapYa
-## 修改时间: 2025-09-18
+## 修改时间: 2025-09-26
 ## 描述: 部署 Poetize 博客系统安装脚本
-## 版本: 1.6.1
+## 版本: 1.6.2
 
 # 定义颜色
 RED='\033[0;31m'
@@ -226,8 +226,23 @@ print_summary() {
       printf "  安全连接: ${GREEN}可用${NC}\n"
     else
       printf "  ${RED}HTTPS未正确配置${NC}\n"
-      printf "  启用命令: ${YELLOW}docker exec --user root poetize-nginx /enable-https.sh${NC}\n"
-      printf "  请检查域名DNS解析和防火墙配置\n"
+      
+      # 检查是否是速率限制问题
+      local certbot_logs=$(sudo docker logs poetize-certbot 2>&1 || echo "")
+      if echo "$certbot_logs" | grep -q "too many certificates.*already issued"; then
+        local retry_after=$(echo "$certbot_logs" | grep -o "retry after [0-9-]* [0-9:]* UTC" | sed 's/retry after //')
+        if [ -n "$retry_after" ]; then
+          printf "  ${YELLOW}原因: Let's Encrypt速率限制${NC}\n"
+          printf "  ${YELLOW}等待到: ${retry_after}${NC}\n"
+          printf "  ${YELLOW}解决方案: poetize -update 或重新启动certbot${NC}\n"
+        else
+          printf "  启用命令: ${YELLOW}docker exec --user root poetize-nginx /enable-https.sh${NC}\n"
+          printf "  请检查域名DNS解析和防火墙配置\n"
+        fi
+      else
+        printf "  启用命令: ${YELLOW}docker start poetize-certbot && sleep 60 && docker exec --user root poetize-nginx /enable-https.sh${NC}\n"
+        printf "  请检查域名DNS解析和防火墙配置\n"
+      fi
     fi
     printf "\n"
   fi
@@ -3449,6 +3464,56 @@ start_services() {
   return 0
 }
 
+# 处理Let's Encrypt速率限制错误
+handle_rate_limit_error() {
+  local cert_error="$1"
+  
+  # 检查是否是速率限制错误
+  if echo "$cert_error" | grep -q "too many certificates.*already issued"; then
+    warning "检测到Let's Encrypt速率限制错误"
+    
+    # 立即停止certbot容器，避免浪费申请配额
+    info "停止certbot容器以避免浪费申请配额..."
+    sudo docker stop poetize-certbot 2>/dev/null || true
+    
+    # 尝试提取等待时间
+    local retry_after=$(echo "$cert_error" | grep -o "retry after [0-9-]* [0-9:]* UTC" | sed 's/retry after //')
+    
+    if [ -n "$retry_after" ]; then
+      echo ""
+      echo -e "${RED}═══════════════════════════════════════════════════════════════════${NC}"
+      echo -e "${RED}║                     Let's Encrypt 速率限制                        ║${NC}"
+      echo -e "${RED}═══════════════════════════════════════════════════════════════════${NC}"
+      echo ""
+      echo -e "${YELLOW}错误原因：${NC}您在过去7天内为这个域名组合已申请了5个证书（Let's Encrypt限制）"
+      echo -e "${YELLOW}需要等待到：${NC}${GREEN}$retry_after${NC}"
+      echo ""
+      echo -e "${YELLOW}自动处理：${NC}已停止certbot容器，避免浪费宝贵的申请配额"
+      echo ""
+      echo -e "${BLUE}解决方案：${NC}"
+      echo "1. 等待到上述时间后，运行以下命令重新启用HTTPS："
+      echo -e "   ${GREEN}docker start poetize-certbot && sleep 60 && docker exec --user root poetize-nginx /enable-https.sh${NC}"
+      echo ""
+      echo "2. 或者使用不同的域名重新部署"
+      echo ""
+      echo "3. 如果急需HTTPS，可以考虑使用其他CA或CDN"
+      echo ""
+      echo -e "${YELLOW}重要提醒：${NC}"
+      echo "- 等待时间到后，通常只能再申请1次就会再次被限制"
+      echo "- 申请前请确保域名DNS解析正确，80/443端口开放"
+      echo "- 成功申请后证书会自动续期，无需重复申请"
+      echo ""
+      echo -e "${YELLOW}当前状态：${NC}系统以HTTP模式运行，功能完全正常"
+      echo -e "${RED}═══════════════════════════════════════════════════════════════════${NC}"
+      echo ""
+      
+      return 0
+    fi
+  fi
+  
+  return 1
+}
+
 # 等待并应用SSL证书
 setup_https() {
   info "等待SSL证书生成..."
@@ -3567,9 +3632,19 @@ setup_https() {
   else
     warning "SSL证书申请失败 (退出代码: $CERTBOT_EXIT_CODE)"
     info "检查证书申请日志..."
-    CERT_ERROR=$(sudo docker logs poetize-certbot 2>&1 | grep -A 5 "Certbot failed" || echo "未找到明确错误信息")
     
-    echo "$CERT_ERROR"
+    # 获取更完整的错误日志
+    CERT_ERROR=$(sudo docker logs poetize-certbot 2>&1)
+    
+    # 首先检查是否是速率限制错误
+    if handle_rate_limit_error "$CERT_ERROR"; then
+      # 速率限制错误已处理，直接返回
+      return 2
+    fi
+    
+    # 显示其他类型的错误信息
+    local brief_error=$(echo "$CERT_ERROR" | grep -A 5 "Certbot failed" || echo "未找到明确错误信息")
+    echo "$brief_error"
     
     warning "系统将继续以HTTP模式运行"
     info "可能的原因:"
@@ -3582,6 +3657,11 @@ setup_https() {
     info "  docker restart poetize-certbot"
     info "然后启用HTTPS:"
     info "  sudo docker exec --user root poetize-nginx /enable-https.sh"
+    
+    # 如果需要查看完整错误日志
+    echo ""
+    info "完整错误日志已保存，如需查看请运行："
+    info "  docker logs poetize-certbot"
     
     # 继续执行，跳过HTTPS配置
     return 2

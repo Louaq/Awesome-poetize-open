@@ -44,6 +44,9 @@ public class SortLabelController {
     @Autowired
     private PrerenderClient prerenderClient;
 
+    @Autowired
+    private com.ld.poetry.service.SitemapService sitemapService;
+
     /**
      * 获取分类标签信息
      */
@@ -75,14 +78,21 @@ public class SortLabelController {
         sortMapper.insert(sort);
         log.info("分类新增成功，分类名称: {}", sort.getSortName());
 
-        // 分类新增后，重新渲染首页和分类索引页面
+        // 分类新增后，清除sitemap缓存并重新渲染首页和分类索引页面
         try {
+            // 1. 更新sitemap并推送（新增分类会影响sitemap中的分类页面）
+            if (sitemapService != null) {
+                sitemapService.updateSitemapAndPush("分类新增 (ID=" + sort.getId() + ", 名称=" + sort.getSortName() + ")");
+                log.info("分类新增后已更新sitemap并推送到搜索引擎");
+            }
+            
+            // 2. 重新渲染页面
             prerenderClient.renderHomePage();
             prerenderClient.renderSortIndexPage();
-            log.debug("分类新增后成功触发页面预渲染");
+            log.debug("分类新增后成功触发sitemap更新和页面预渲染");
         } catch (Exception e) {
             // 预渲染失败不影响主流程
-            log.warn("分类新增后页面预渲染失败", e);
+            log.warn("分类新增后sitemap更新和页面预渲染失败", e);
         }
         
         return PoetryResult.success();
@@ -98,15 +108,22 @@ public class SortLabelController {
         sortMapper.deleteById(id);
         log.info("分类删除成功，分类ID: {}", id);
 
-        // 分类删除后，删除对应分类页面的预渲染文件，并重新渲染首页和分类索引页面
+        // 分类删除后，清除sitemap缓存，删除对应分类页面的预渲染文件，并重新渲染首页和分类索引页面
         try {
+            // 1. 更新sitemap并推送（删除分类会影响sitemap中的分类页面）
+            if (sitemapService != null) {
+                sitemapService.updateSitemapAndPush("分类删除 (ID=" + id + ")");
+                log.info("分类删除后已更新sitemap并推送到搜索引擎");
+            }
+            
+            // 2. 删除预渲染文件并重新渲染页面
             prerenderClient.deleteCategoryPage(id);
             prerenderClient.renderHomePage();
             prerenderClient.renderSortIndexPage();
-            log.debug("分类删除后成功触发页面预渲染");
+            log.debug("分类删除后成功触发sitemap更新和页面预渲染");
         } catch (Exception e) {
             // 预渲染失败不影响主流程
-            log.warn("分类删除后页面预渲染失败", e);
+            log.warn("分类删除后sitemap更新和页面预渲染失败", e);
         }
 
         return PoetryResult.success();
@@ -138,17 +155,24 @@ public class SortLabelController {
         sortMapper.updateById(sort);
         log.info("分类更新成功，分类ID: {}", sort.getId());
 
-        // 分类更新后，重新渲染对应分类页面、首页和分类索引页面
+        // 分类更新后，清除sitemap缓存并重新渲染对应分类页面、首页和分类索引页面
         try {
+            // 1. 更新sitemap并推送（分类信息变更会影响sitemap中的分类页面）
+            if (sitemapService != null) {
+                sitemapService.updateSitemapAndPush("分类更新 (ID=" + sort.getId() + ", 名称=" + sort.getSortName() + ")");
+                log.info("分类更新后已更新sitemap并推送到搜索引擎");
+            }
+            
+            // 2. 重新渲染页面
             if (sort.getId() != null) {
                 prerenderClient.renderCategoryPage(sort.getId());
             }
             prerenderClient.renderHomePage();
             prerenderClient.renderSortIndexPage();
-            log.debug("分类更新后成功触发页面预渲染");
+            log.debug("分类更新后成功触发sitemap更新和页面预渲染");
         } catch (Exception e) {
             // 预渲染失败不影响主流程
-            log.warn("分类更新后页面预渲染失败", e);
+            log.warn("分类更新后sitemap更新和页面预渲染失败", e);
         }
 
         return PoetryResult.success();
@@ -185,13 +209,20 @@ public class SortLabelController {
         labelMapper.insert(label);
         log.info("标签新增成功，标签名称: {}", label.getLabelName());
 
-        // 标签新增后，重新渲染对应分类页面
+        // 标签新增后，清除sitemap缓存并重新渲染对应分类页面
         try {
+            // 1. 清除sitemap缓存（标签信息可能影响sitemap生成）
+            if (sitemapService != null) {
+                sitemapService.clearSitemapCache();
+                log.info("标签新增后已清除sitemap缓存");
+            }
+            
+            // 2. 重新渲染页面
             prerenderClient.renderCategoryPage(label.getSortId());
-            log.debug("标签新增后成功触发页面预渲染");
+            log.debug("标签新增后成功触发sitemap更新和页面预渲染");
         } catch (Exception e) {
             // 预渲染失败不影响主流程
-            log.warn("标签新增后页面预渲染失败", e);
+            log.warn("标签新增后sitemap更新和页面预渲染失败", e);
         }
         
         return PoetryResult.success();
@@ -210,14 +241,21 @@ public class SortLabelController {
         labelMapper.deleteById(id);
         log.info("标签删除成功，标签ID: {}", id);
 
-        // 标签删除后，重新渲染对应分类页面
+        // 标签删除后，清除sitemap缓存并重新渲染对应分类页面
         if (label != null && label.getSortId() != null) {
             try {
+                // 1. 清除sitemap缓存（标签删除可能影响sitemap生成）
+                if (sitemapService != null) {
+                    sitemapService.clearSitemapCache();
+                    log.info("标签删除后已清除sitemap缓存");
+                }
+                
+                // 2. 重新渲染页面
                 prerenderClient.renderCategoryPage(label.getSortId());
-                log.debug("标签删除后成功触发页面预渲染");
+                log.debug("标签删除后成功触发sitemap更新和页面预渲染");
             } catch (Exception e) {
                 // 预渲染失败不影响主流程
-                log.warn("标签删除后页面预渲染失败", e);
+                log.warn("标签删除后sitemap更新和页面预渲染失败", e);
             }
         }
         
@@ -247,15 +285,22 @@ public class SortLabelController {
         labelMapper.updateById(label);
         log.info("标签更新成功，标签ID: {}", label.getId());
 
-        // 标签更新后，重新渲染对应分类页面
+        // 标签更新后，清除sitemap缓存并重新渲染对应分类页面
         try {
+            // 1. 清除sitemap缓存（标签信息变更可能影响sitemap生成）
+            if (sitemapService != null) {
+                sitemapService.clearSitemapCache();
+                log.info("标签更新后已清除sitemap缓存");
+            }
+            
+            // 2. 重新渲染页面
             if (label.getSortId() != null) {
                 prerenderClient.renderCategoryPage(label.getSortId());
-                log.debug("标签更新后成功触发页面预渲染");
+                log.debug("标签更新后成功触发sitemap更新和页面预渲染");
             }
         } catch (Exception e) {
             // 预渲染失败不影响主流程
-            log.warn("标签更新后页面预渲染失败", e);
+            log.warn("标签更新后sitemap更新和页面预渲染失败", e);
         }
 
         return PoetryResult.success();

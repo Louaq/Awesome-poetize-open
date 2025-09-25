@@ -38,8 +38,8 @@ public interface WebInfoMapper extends BaseMapper<WebInfo> {
                          @Param("email") String email,
                          @Param("minimalFooter") Boolean minimalFooter,
                          @Param("enableAutoNight") Boolean enableAutoNight,
-                         @Param("autoNightStart") String autoNightStart,
-                         @Param("autoNightEnd") String autoNightEnd,
+                         @Param("autoNightStart") Integer autoNightStart,
+                         @Param("autoNightEnd") Integer autoNightEnd,
                          @Param("enableGrayMode") Boolean enableGrayMode);
 
     /**

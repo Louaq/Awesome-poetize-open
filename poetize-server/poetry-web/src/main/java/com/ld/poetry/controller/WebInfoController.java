@@ -17,6 +17,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
@@ -26,6 +29,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
@@ -78,6 +82,35 @@ public class WebInfoController {
     @Autowired
     private RedisTemplate<String, Object> redisTemplate;
 
+    @Autowired
+    private com.ld.poetry.service.SitemapService sitemapService;
+
+    @Autowired
+    private com.ld.poetry.config.PoetryApplicationRunner poetryApplicationRunner;
+
+    /**
+     * 清除nginx SEO缓存
+     * 在网站信息更新后调用，确保nginx不使用旧的缓存数据作为fallback
+     */
+    private void clearNginxSeoCache() {
+        try {
+            String nginxUrl = "http://nginx";
+            String clearCacheUrl = nginxUrl + "/flush_seo_cache";
+            
+            HttpHeaders headers = new HttpHeaders();
+            headers.set("X-Internal-Service", "poetize-java");
+            headers.set("User-Agent", "poetize-java/1.0.0");
+            
+            HttpEntity<?> request = new HttpEntity<>(headers);
+            
+            restTemplate.exchange(clearCacheUrl, HttpMethod.GET, request, String.class);
+            log.info("nginx SEO缓存清除成功");
+        } catch (Exception e) {
+            log.warn("清除nginx SEO缓存失败: {}", e.getMessage());
+            // 不抛出异常，避免影响主流程
+        }
+    }
+
     /**
      * 更新完整网站信息（用于基本信息保存）
      */
@@ -104,8 +137,8 @@ public class WebInfoController {
             String email = (String) params.get("email");
             Boolean minimalFooter = (Boolean) params.get("minimalFooter");
             Boolean enableAutoNight = (Boolean) params.get("enableAutoNight");
-            String autoNightStart = (String) params.get("autoNightStart");
-            String autoNightEnd = (String) params.get("autoNightEnd");
+            Integer autoNightStart = (Integer) params.get("autoNightStart");
+            Integer autoNightEnd = (Integer) params.get("autoNightEnd");
             Boolean enableGrayMode = (Boolean) params.get("enableGrayMode");
 
             // 记录更新前的详细信息
@@ -141,13 +174,35 @@ public class WebInfoController {
                 log.info("网站信息缓存更新成功 - webName: {}, webTitle: {}",
                         latestWebInfo.getWebName(), latestWebInfo.getWebTitle());
 
-                // 网站信息更新时，重新渲染首页和百宝箱页面
+                // 网站信息更新时，清除各种缓存并重新渲染页面
                 try {
-                    prerenderClient.renderMainPages();
-                    log.debug("网站信息更新后成功触发页面预渲染");
+                    // 1. 清除sitemap缓存（网站名称、标题等可能影响sitemap内容）
+                    if (sitemapService != null) {
+                        sitemapService.clearSitemapCache();
+                        log.info("网站信息更新后已清除sitemap缓存");
+                    }
+                    
+                    // 2. 清除nginx SEO缓存（确保nginx fallback不使用旧缓存）
+                    clearNginxSeoCache();
+                    
+                    // 3. 异步触发预渲染，避免阻塞主流程，并确保缓存数据已完全生效
+                    CompletableFuture.runAsync(() -> {
+                        try {
+                            // 等待2秒确保Redis缓存完全生效并可被预渲染服务读取
+                            Thread.sleep(2000);
+                            
+                            log.info("开始触发预渲染，此时Redis缓存和nginx缓存清除应已完全生效");
+                            poetryApplicationRunner.executeFullPrerender();
+                            log.info("网站信息更新后成功触发页面预渲染");
+                        } catch (Exception e) {
+                            log.warn("异步预渲染失败", e);
+                        }
+                    });
+                    
+                    log.debug("网站信息更新后已清除相关缓存并异步触发预渲染");
                 } catch (Exception e) {
                     // 预渲染失败不影响主流程，只记录日志
-                    log.warn("网站信息更新后页面预渲染失败", e);
+                    log.warn("网站信息更新后缓存清除和页面预渲染失败", e);
                 }
             } else {
                 log.warn("更新后未找到网站信息数据");

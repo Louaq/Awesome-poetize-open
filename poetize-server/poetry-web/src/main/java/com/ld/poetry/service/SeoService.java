@@ -33,11 +33,16 @@ public class SeoService {
     @Lazy
     private ArticleService articleService;
     
+    
+    @Autowired
+    private SearchEnginePushService searchEnginePushService;
+    
     @Value("${PYTHON_SERVICE_URL:http://poetize-python:5000}")
     private String pythonServerUrl;
 
     /**
      * 将文章提交到搜索引擎
+     * 已完全迁移到Java端，使用SearchEnginePushService实现
      *
      * @param articleId 文章ID
      * @return 是否提交成功
@@ -55,68 +60,52 @@ public class SeoService {
                 return false;
             }
             
-            // 构建请求数据
-            Map<String, Object> requestData = new HashMap<>();
-            requestData.put("articleId", articleId);
-            requestData.put("title", article.getArticleTitle());
-            requestData.put("url", null); // 由Python服务根据文章ID构建URL
-            
-            // 设置请求头
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            headers.add("Accept-Charset", "UTF-8");
-            headers.set("X-Internal-Service", "poetize-java");
-            headers.set("User-Agent", "poetize-java/1.0.0");
-            
-            // 创建RestTemplate配置并设置字符编码
-            if (restTemplate.getMessageConverters() != null) {
-                for (HttpMessageConverter<?> converter : restTemplate.getMessageConverters()) {
-                    if (converter instanceof StringHttpMessageConverter) {
-                        ((StringHttpMessageConverter) converter).setDefaultCharset(java.nio.charset.StandardCharsets.UTF_8);
-                    }
-                }
+            // 检查文章是否可见
+            if (!Boolean.TRUE.equals(article.getViewStatus())) {
+                log.info("文章不可见，跳过搜索引擎推送，文章ID: {}", articleId);
+                System.out.println("【SEO服务】文章不可见，跳过搜索引擎推送，文章ID: " + articleId);
+                return true; // 跳过推送也视为成功
             }
             
-            // 创建请求实体
-            HttpEntity<Map<String, Object>> requestEntity = new HttpEntity<>(requestData, headers);
-            
-            // 发送请求到Python SEO服务
-            String url = pythonServerUrl + "/seo/submitArticle";
-            log.info("发送SEO推送请求到Python服务: {}, 请求数据: {}", url, new ObjectMapper().writeValueAsString(requestData));
-            System.out.println("【SEO服务】发送SEO推送请求到Python服务: " + url);
-            System.out.println("【SEO服务】请求数据: " + new ObjectMapper().writeValueAsString(requestData));
-            
-            try {
-                System.out.println("【SEO服务】开始发送HTTP POST请求...");
-                // 发送请求并获取响应
-                @SuppressWarnings("unchecked")
-                Map<String, Object> response = restTemplate.postForObject(
-                    url, 
-                    requestEntity, 
-                    Map.class
-                );
-                System.out.println("【SEO服务】收到HTTP响应: " + (response != null ? new ObjectMapper().writeValueAsString(response) : "null"));
+            // 使用Java端的完整搜索引擎推送功能
+            if (searchEnginePushService != null && searchEnginePushService.isPushEnabled()) {
+                log.info("使用Java端完整搜索引擎推送功能");
+                System.out.println("【SEO服务】使用Java端完整搜索引擎推送功能");
                 
-                // 检查响应结果
-                if (response != null && response.containsKey("code")) {
-                    int code = Integer.parseInt(response.get("code").toString());
-                    boolean success = code == 200;
-                    log.info("SEO推送请求响应: code={}, message={}, success={}, 完整响应: {}", 
-                             code, response.get("message"), success, new ObjectMapper().writeValueAsString(response));
-                    System.out.println("【SEO服务】推送结果: " + (success ? "成功" : "失败") + ", 状态码: " + code);
+                // 获取SEO配置并构建文章URL - 使用固定的URL格式（与前端路由一致）
+                Map<String, Object> seoConfig = searchEnginePushService.getSeoConfig();
+                String siteAddress = (String) seoConfig.get("site_address");
+                
+                if (org.springframework.util.StringUtils.hasText(siteAddress)) {
+                    
+                    String articleUrl = siteAddress + "/article/" + articleId;
+                    log.info("推送文章URL到搜索引擎: {}", articleUrl);
+                    System.out.println("【SEO服务】推送文章URL到搜索引擎: " + articleUrl);
+                    
+                    // 推送到所有启用的搜索引擎
+                    Map<String, Object> pushResult = searchEnginePushService.pushUrlToAllEngines(articleUrl);
+                    boolean success = Boolean.TRUE.equals(pushResult.get("success"));
+                    
+                    Integer successCount = (Integer) pushResult.get("successCount");
+                    Integer totalEngines = (Integer) pushResult.get("totalEngines");
+                    
+                    log.info("Java端搜索引擎推送结果: {}, 详情: 成功{}/{}个引擎", 
+                            success ? "成功" : "失败", successCount, totalEngines);
+                    System.out.println("【SEO服务】Java端搜索引擎推送结果: " + (success ? "成功" : "失败") + 
+                                     ", 成功推送到" + successCount + "/" + totalEngines + "个搜索引擎");
+                    
                     return success;
                 } else {
-                    log.error("SEO推送响应格式不正确: {}", response != null ? new ObjectMapper().writeValueAsString(response) : "null");
-                    System.out.println("【SEO服务】SEO推送响应格式不正确");
+                    log.error("网站地址或文章URL格式未配置，无法进行搜索引擎推送");
+                    System.out.println("【SEO服务】网站地址或文章URL格式未配置，无法进行搜索引擎推送");
                     return false;
                 }
-            } catch (Exception e) {
-                log.error("SEO推送请求发送失败，可能Python服务未运行或配置错误: URL={}", url, e);
-                log.error("详细错误信息:", e);
-                System.out.println("【SEO服务】SEO推送请求发送失败，可能Python服务未运行或配置错误: " + e.getMessage());
-                e.printStackTrace();
-                return false;
+            } else {
+                log.info("Java端搜索引擎推送功能未启用");
+                System.out.println("【SEO服务】Java端搜索引擎推送功能未启用");
+                return true; // 功能未启用也视为成功
             }
+            
         } catch (Exception e) {
             log.error("推送文章至搜索引擎出错", e);
             System.out.println("【SEO服务】推送文章至搜索引擎出错: " + e.getMessage());

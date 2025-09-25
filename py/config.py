@@ -20,8 +20,6 @@ print(f"Redis配置: {REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}")
 
 # 自动检测后端地址
 def detect_backend_url():
-    print("开始检测Java后端地址...")
-    
     # 1. 优先使用环境变量
     if 'JAVA_BACKEND_HOST' in os.environ:
         host = os.environ.get('JAVA_BACKEND_HOST')
@@ -30,45 +28,7 @@ def detect_backend_url():
         print(f"从环境变量检测到Java后端: {url}")
         return url
     
-    # 2. 尝试通过域名解析
-    try:
-        # 尝试解析"java-backend"，常见的Docker Compose或K8s服务名
-        socket.gethostbyname("java-backend")
-        url = "http://java-backend:8081"
-        print(f"通过域名解析检测到Java后端: {url}")
-        return url
-    except socket.gaierror:
-        print("无法解析'java-backend'域名")
-    
-    # 3. 尝试连接常见地址
-    candidates = [
-        "http://localhost:8081",  # 优先尝试8081端口
-        "http://127.0.0.1:8081", 
-        "http://host.docker.internal:8081",  # Docker on Mac/Windows
-        "http://poetize-java:8081"
-    ]
-    
-    for url in candidates:
-        try:
-            print(f"尝试连接Java后端: {url}")
-            # 尝试连接可能的API端点
-            endpoints = ['/actuator/health', '/health', '/api/health', '/mail/test', '/api/mail/test', '/']
-            
-            for endpoint in endpoints:
-                try:
-                    test_url = f"{url}{endpoint}"
-                    print(f"尝试连接: {test_url}")
-                    response = httpx.get(test_url, timeout=3.0)
-                    print(f"成功连接到 {test_url}, 状态码: {response.status_code}")
-                    return url
-                except Exception as e:
-                    print(f"连接 {test_url} 失败: {str(e)}")
-                    continue
-        except Exception as e:
-            print(f"无法连接到 {url}: {str(e)}")
-            continue
-    
-    # 4. 使用默认地址
+    # 2. 使用默认地址
     default_url = "http://localhost:8081"
     print(f"无法检测到Java后端，使用默认地址: {default_url}")
     return default_url

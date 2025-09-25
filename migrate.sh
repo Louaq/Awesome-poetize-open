@@ -1,8 +1,8 @@
 #!/bin/bash
 ## 作者: LeapYa
-## 修改时间: 2025-09-20
+## 修改时间: 2025-09-25
 ## 描述: Poetize 博客系统自动迁移脚本
-## 版本: 1.0.0
+## 版本: 1.1.0
 
 # 定义颜色
 RED='\033[0;31m'
@@ -60,6 +60,7 @@ STEP_DETECT_ENV="detect_env"
 STEP_PULL_CODE="pull_code"
 STEP_TRANSFER_FILES="transfer_files"
 STEP_DEPLOY="deploy"
+STEP_EXECUTE_SQL="execute_sql"
 STEP_CLEANUP="cleanup"
 
 # 状态管理函数
@@ -94,8 +95,8 @@ is_step_completed() {
 
 show_migration_progress() {
     info "迁移进度状态:"
-    local steps=("$STEP_PREREQUISITES" "$STEP_READ_CREDENTIALS" "$STEP_USER_INPUT" "$STEP_EXTRACT_DOMAINS" "$STEP_BACKUP_DB" "$STEP_TEST_SSH" "$STEP_DETECT_ENV" "$STEP_PULL_CODE" "$STEP_TRANSFER_FILES" "$STEP_DEPLOY" "$STEP_CLEANUP")
-    local step_names=("前置条件检查" "读取数据库凭据" "用户输入收集" "域名提取" "数据库备份" "SSH连接测试" "环境检测" "代码拉取" "文件传输" "部署执行" "清理工作")
+    local steps=("$STEP_PREREQUISITES" "$STEP_READ_CREDENTIALS" "$STEP_USER_INPUT" "$STEP_EXTRACT_DOMAINS" "$STEP_BACKUP_DB" "$STEP_TEST_SSH" "$STEP_DETECT_ENV" "$STEP_PULL_CODE" "$STEP_TRANSFER_FILES" "$STEP_DEPLOY" "$STEP_EXECUTE_SQL" "$STEP_CLEANUP")
+    local step_names=("前置条件检查" "读取数据库凭据" "用户输入收集" "域名提取" "数据库备份" "SSH连接测试" "环境检测" "代码拉取" "文件传输" "部署执行" "执行SQL脚本" "清理工作")
     
     for i in "${!steps[@]}"; do
         local step="${steps[$i]}"
@@ -387,7 +388,7 @@ check_prerequisites() {
         exit 1
     fi
     
-    # 检查docker-compose是否运行
+    # 检查docker-compose是否运行（假设源服务器上只有一个要迁移的MariaDB容器）
     local running_container=$(sudo docker ps --format "{{.Names}}" | grep "mariadb" | head -1)
     if [ -z "$running_container" ]; then
         error "数据库容器未运行，请先启动服务: docker-compose up -d"
@@ -600,7 +601,7 @@ backup_database() {
     # 备份数据库
     info "正在导出数据库到 $BACKUP_DIR/poetry.sql..."
     
-    # 动态获取实际的MariaDB容器名称
+    # 动态获取实际的MariaDB容器名称（假设源服务器上只有一个要备份的MariaDB容器）
     local actual_container=$(sudo docker ps --format "{{.Names}}" | grep "mariadb" | head -1)
     if [ -z "$actual_container" ]; then
         # 如果没有找到运行中的容器，尝试查找所有容器（包括停止的）
@@ -991,6 +992,137 @@ deploy_on_target() {
     fi
 }
 
+# 在目标服务器上执行新增的SQL脚本
+execute_sql_scripts_on_target() {
+    # 检查是否已完成
+    if is_step_completed "$STEP_EXECUTE_SQL"; then
+        success "SQL脚本执行已完成，跳过此步骤"
+        return 0
+    fi
+    
+    save_state "$STEP_EXECUTE_SQL" "in_progress"
+    info "在目标服务器上执行新增的SQL脚本..."
+    
+    local target_path
+    target_path="$CURRENT_DIR/$extract_dir"
+    
+    # 在目标服务器上执行SQL脚本
+    local ssh_cmd="
+        cd $target_path
+        
+        # 获取数据库连接信息
+        db_root_password=\"\"
+        if [ -f \".config/db_credentials.txt\" ]; then
+            db_root_password=\$(grep \"数据库ROOT密码:\" .config/db_credentials.txt | cut -d':' -f2 | xargs)
+        fi
+        
+        if [ -z \"\$db_root_password\" ]; then
+            echo \"WARNING: 无法获取数据库密码，跳过额外SQL脚本执行\"
+            exit 1
+        fi
+        
+        # 等待数据库容器启动
+        echo \"INFO: 等待数据库容器启动...\"
+        sleep 15
+        
+        # 根据项目目录名确定对应的MariaDB容器名
+        mariadb_container=\"\"
+        
+        # 根据extract_dir确定容器名
+        if [[ \"$extract_dir\" == *\"-blog\"* ]]; then
+            # 提取blog编号，例如: Awesome-poetize-open-blog2 -> blog2
+            blog_suffix=\$(echo \"$extract_dir\" | sed 's/.*-blog/blog/')
+            mariadb_container=\"poetize-mariadb-\$blog_suffix\"
+        else
+            # 默认实例使用poetize-mariadb
+            mariadb_container=\"poetize-mariadb\"
+        fi
+        
+        # 检查容器是否存在并运行
+        if ! sudo docker ps --format \"{{.Names}}\" | grep -q \"^\$mariadb_container\$\"; then
+            mariadb_container=\"\"
+        fi
+        
+        if [ -z \"\$mariadb_container\" ]; then
+            echo \"WARNING: 未找到对应的MariaDB容器，跳过额外SQL脚本执行\"
+            echo \"项目目录: $extract_dir\"
+            if [[ \"$extract_dir\" == *\"-blog\"* ]]; then
+                expected_name=\$(echo \"$extract_dir\" | sed 's/.*-blog/blog/')
+                echo \"期望的容器名: poetize-mariadb-\$expected_name\"
+            else
+                echo \"期望的容器名: poetize-mariadb\"
+            fi
+            echo \"运行中的容器:\"
+            sudo docker ps --format \"table {{.Names}}\\t{{.Image}}\\t{{.Status}}\"
+            exit 1
+        fi
+        
+        echo \"INFO: 使用MariaDB容器: \$mariadb_container\"
+        
+        # 查找poetize-server/sql目录下除poetry.sql外的所有.sql文件
+        if [ -d \"poetize-server/sql\" ]; then
+            sql_files=\$(find poetize-server/sql -name \"*.sql\" -not -name \"poetry.sql\" -type f | sort)
+            
+            if [ -z \"\$sql_files\" ]; then
+                echo \"INFO: 未找到需要执行的额外SQL脚本\"
+                exit 0
+            fi
+            
+            echo \"INFO: 发现以下额外SQL脚本需要执行:\"
+            echo \"\$sql_files\" | while read -r file; do
+                echo \"  - \$file\"
+            done
+            
+            # 执行每个SQL脚本
+            echo \"\$sql_files\" | while read -r sql_file; do
+                if [ -f \"\$sql_file\" ]; then
+                    echo \"INFO: 执行SQL脚本: \$sql_file\"
+                    if sudo docker exec -i \"\$mariadb_container\" mariadb -u root -p\"\$db_root_password\" poetize < \"\$sql_file\" 2>/dev/null; then
+                        echo \"SUCCESS: SQL脚本执行成功: \$sql_file\"
+                    else
+                        echo \"WARNING: SQL脚本执行失败或已存在: \$sql_file（这通常是正常的，如果表已存在）\"
+                    fi
+                fi
+            done
+            
+            echo \"SUCCESS: 额外SQL脚本执行完成\"
+            
+            # 重启所有服务以确保数据库结构变更被正确识别
+            echo \"INFO: 重启服务以应用数据库结构变更...\"
+            
+            if sudo docker compose restart; then
+                echo \"SUCCESS: 服务重启成功\"
+                
+                # 等待服务启动完成
+                echo \"INFO: 等待服务启动完成...\"
+                sleep 45
+                
+                # 检查服务状态
+                echo \"INFO: 检查服务状态...\"
+                sudo docker compose ps
+                echo \"SUCCESS: 服务重启完成\"
+            else
+                echo \"WARNING: 服务重启失败，请手动重启\"
+                echo \"可以使用以下命令手动重启:\"
+                echo \"  cd $target_path\"
+                echo \"  sudo docker compose restart\"
+            fi
+        else
+            echo \"WARNING: poetize-server/sql目录不存在，跳过额外SQL脚本执行\"
+        fi
+    "
+    
+    # 使用重试机制执行SQL脚本
+    if ssh_retry "执行新增SQL脚本" "$ssh_cmd" "true"; then
+        save_state "$STEP_EXECUTE_SQL" "completed"
+        success "新增SQL脚本执行成功"
+    else
+        save_state "$STEP_EXECUTE_SQL" "failed"
+        warning "新增SQL脚本执行失败，但系统仍可正常使用"
+        # 不要退出，因为这不是致命错误
+    fi
+}
+
 # 用户上传文件迁移函数
 migrate_uploads() {
     if [ "$MIGRATE_UPLOADS" != "yes" ]; then
@@ -1204,6 +1336,7 @@ main() {
     pull_code_on_target
     transfer_files
     deploy_on_target
+    execute_sql_scripts_on_target
     
     # 执行volume数据迁移
     info "开始volume数据迁移..."
@@ -1272,6 +1405,9 @@ show_migration_summary() {
     step_status=$(get_step_status "$STEP_DEPLOY")
     echo -e "  ✓ 项目部署: ${GREEN}$step_status${NC}"
     
+    step_status=$(get_step_status "$STEP_EXECUTE_SQL")
+    echo -e "  ✓ 执行SQL脚本: ${GREEN}$step_status${NC}"
+    
     echo -e ""
     echo -e "${GREEN}目标服务器信息:${NC}"
     echo -e "  IP地址: $TARGET_IP"
@@ -1282,7 +1418,7 @@ show_migration_summary() {
     
     # 检查是否所有步骤都完成
     local all_completed=true
-    for step in "$STEP_PREREQUISITES" "$STEP_READ_CREDENTIALS" "$STEP_USER_INPUT" "$STEP_EXTRACT_DOMAINS" "$STEP_BACKUP_DB" "$STEP_TEST_SSH" "$STEP_DETECT_ENV" "$STEP_PULL_CODE" "$STEP_TRANSFER_FILES" "$STEP_DEPLOY"; do
+    for step in "$STEP_PREREQUISITES" "$STEP_READ_CREDENTIALS" "$STEP_USER_INPUT" "$STEP_EXTRACT_DOMAINS" "$STEP_BACKUP_DB" "$STEP_TEST_SSH" "$STEP_DETECT_ENV" "$STEP_PULL_CODE" "$STEP_TRANSFER_FILES" "$STEP_DEPLOY" "$STEP_EXECUTE_SQL"; do
         if ! is_step_completed "$step"; then
             all_completed=false
             break

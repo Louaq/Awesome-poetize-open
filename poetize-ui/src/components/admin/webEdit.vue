@@ -124,6 +124,12 @@
             </span>
         </el-form-item>
 
+        <!-- 首页横幅高度 -->
+        <el-form-item label="首页横幅高度" prop="homePagePullUpHeight">
+          <el-input-number v-model="webInfo.homePagePullUpHeight" :min="10" :max="100" style="width: 120px;"></el-input-number>
+          <span style="margin-left: 8px; color: #909399;">vh</span>
+        </el-form-item>
+
         <!-- 导航栏配置 -->
         <el-form-item label="导航栏配置">
           <el-popover
@@ -1461,7 +1467,7 @@ X-API-KEY: {{apiConfig.apiKey}}
           autoNightStart: 23,
           autoNightEnd: 7,
           enableGrayMode: false,
-          homePagePullUpHeight: -1,
+          homePagePullUpHeight: 50,
         },
         notices: [],
         randomAvatar: [],
@@ -1841,7 +1847,7 @@ X-API-KEY: {{apiConfig.apiKey}}
               this.webInfo.autoNightStart = res.data.autoNightStart ?? 23;
               this.webInfo.autoNightEnd = res.data.autoNightEnd ?? 7;
               
-              this.webInfo.homePagePullUpHeight = res.data.homePagePullUpHeight ?? -1;
+              this.webInfo.homePagePullUpHeight = res.data.homePagePullUpHeight > 0 ? res.data.homePagePullUpHeight : 50;
               
               // 加载页脚背景配置
               if (this.webInfo.footerBackgroundConfig) {

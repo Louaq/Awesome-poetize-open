@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import lombok.extern.slf4j.Slf4j;
 
 /**
  * <p>
@@ -26,11 +27,18 @@ import java.util.stream.Collectors;
  */
 @RestController
 @RequestMapping("/sysConfig")
+@Slf4j
 public class SysConfigController {
 
     @Autowired
     private SysConfigService sysConfigService;
     
+    @Autowired
+    private com.ld.poetry.service.SitemapService sitemapService;
+
+    @Autowired
+    private com.ld.poetry.service.RobotsService robotsService;
+
     @Autowired
     private CacheService cacheService;
 
@@ -74,6 +82,25 @@ public class SysConfigController {
         
         boolean success = sysConfigService.saveOrUpdate(sysConfig);
         
+        // 检查是否是影响sitemap的关键配置
+        if (success && isConfigAffectingSitemap(sysConfig.getConfigKey(), oldValue, sysConfig.getConfigValue())) {
+            try {
+                // 清除sitemap缓存，让下次访问时重新生成
+                if (sitemapService != null) {
+                    sitemapService.clearSitemapCache();
+                    log.info("系统配置更新后已清除sitemap缓存，配置项: {}", sysConfig.getConfigKey());
+                }
+                
+                // 清除robots.txt缓存，让下次访问时重新生成
+                if (robotsService != null) {
+                    robotsService.clearRobotsCache();
+                    log.info("系统配置更新后已清除robots.txt缓存，配置项: {}", sysConfig.getConfigKey());
+                }
+            } catch (Exception e) {
+                log.warn("系统配置更新后清除SEO缓存失败，配置项: {}", sysConfig.getConfigKey(), e);
+            }
+        }
+        
         return PoetryResult.success();
     }
 
@@ -87,6 +114,25 @@ public class SysConfigController {
         SysConfig config = sysConfigService.getById(id);
         if (config != null) {
             boolean success = sysConfigService.removeById(id);
+            
+            // 检查删除的配置是否影响sitemap
+            if (success && isConfigAffectingSitemap(config.getConfigKey(), config.getConfigValue(), null)) {
+                try {
+                    // 清除sitemap缓存
+                    if (sitemapService != null) {
+                        sitemapService.clearSitemapCache();
+                        log.info("系统配置删除后已清除sitemap缓存，配置项: {}", config.getConfigKey());
+                    }
+                    
+                    // 清除robots.txt缓存
+                    if (robotsService != null) {
+                        robotsService.clearRobotsCache();
+                        log.info("系统配置删除后已清除robots.txt缓存，配置项: {}", config.getConfigKey());
+                    }
+                } catch (Exception e) {
+                    log.warn("系统配置删除后清除SEO缓存失败，配置项: {}", config.getConfigKey(), e);
+                }
+            }
         }
         return PoetryResult.success();
     }
@@ -98,5 +144,38 @@ public class SysConfigController {
     @LoginCheck(0)
     public PoetryResult<List<SysConfig>> listConfig() {
         return PoetryResult.success(new LambdaQueryChainWrapper<>(sysConfigService.getBaseMapper()).list());
+    }
+    
+    /**
+     * 判断配置变更是否影响sitemap生成
+     * @param configKey 配置键
+     * @param oldValue 旧值
+     * @param newValue 新值
+     * @return 是否需要更新sitemap
+     */
+    private boolean isConfigAffectingSitemap(String configKey, String oldValue, String newValue) {
+        if (configKey == null || java.util.Objects.equals(oldValue, newValue)) {
+            return false;
+        }
+        
+        // 定义影响sitemap的配置键列表
+        String[] sitemapAffectingKeys = {
+            "SITEMAP_EXCLUDE",   // sitemap排除页面
+            "SITEMAP_PRIORITY",  // sitemap优先级
+            "SITEMAP_CHANGE_FREQUENCY",  // sitemap更新频率
+            "SEARCH_ENGINE_PING_ENABLED",  // 搜索引擎推送启用状态
+            "SEARCH_ENGINE_PING_MIN_INTERVAL",  // 搜索引擎推送最小间隔
+            "ENABLED_SEARCH_ENGINES"  // 启用的搜索引擎列表
+            // 注意：网站URL现在从Python SEO配置或环境变量获取，不再依赖Java数据库配置
+        };
+        
+        for (String key : sitemapAffectingKeys) {
+            if (key.equalsIgnoreCase(configKey)) {
+                log.info("检测到影响sitemap的配置变更: {} 从 '{}' 变为 '{}'", configKey, oldValue, newValue);
+                return true;
+            }
+        }
+        
+        return false;
     }
 }

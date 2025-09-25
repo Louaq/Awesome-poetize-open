@@ -63,6 +63,9 @@ public class PoetryApplicationRunner implements ApplicationRunner {
 
     @Autowired
     private RestTemplate restTemplate;
+    
+    @Autowired
+    private com.ld.poetry.service.SitemapService sitemapService;
 
     @Autowired
     private TranslationService translationService;
@@ -148,6 +151,29 @@ public class PoetryApplicationRunner implements ApplicationRunner {
         TioWebsocketStarter websocketStarter = TioUtil.getTio();
         if (websocketStarter != null) {
             websocketStarter.start();
+        }
+
+        // 启动时预热sitemap缓存
+        try {
+            if (sitemapService != null) {
+                // 异步预热sitemap，避免阻塞应用启动
+                new Thread(() -> {
+                    try {
+                        Thread.sleep(5000); // 延迟5秒，确保应用完全启动
+                        String sitemap = sitemapService.generateSitemap();
+                        if (sitemap != null) {
+                            int urlCount = sitemap.split("<url>").length - 1;
+                            log.info("应用启动时sitemap预热成功，包含 {} 个URL", urlCount);
+                        } else {
+                            log.warn("应用启动时sitemap预热失败");
+                        }
+                    } catch (Exception e) {
+                        log.warn("应用启动时sitemap预热失败，不影响应用启动", e);
+                    }
+                }, "sitemap-warmup-thread").start();
+            }
+        } catch (Exception e) {
+            log.warn("启动sitemap预热任务失败，不影响应用启动", e);
         }
 
         // 启动时自动预渲染
@@ -248,12 +274,8 @@ public class PoetryApplicationRunner implements ApplicationRunner {
         try {
             log.info("开始预渲染主要页面...");
             
-            // 预渲染首页
-            prerenderClient.renderHomePage();
-            Thread.sleep(1000); // 避免并发过高
-            
-            // 预渲染百宝箱页面
-            prerenderClient.renderFavoritePage();
+            // 预渲染所有静态页面（包含首页、百宝箱等）
+            prerenderClient.renderAllStaticPages();
             Thread.sleep(1000);
             
             // 预渲染分类索引页面

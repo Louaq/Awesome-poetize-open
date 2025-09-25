@@ -950,7 +950,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         userToken = new String(SecureUtil.aes(CommonConst.CRYPOTJS_KEY.getBytes(StandardCharsets.UTF_8)).decrypt(userToken));
 
         if (!StringUtils.hasText(userToken)) {
-            throw new PoetryRuntimeException("未登陆，请登陆后再进行操作！");
+            throw new PoetryRuntimeException("登录已过期，请重新登陆！");
         }
 
         // 首先验证token的安全性和有效性
@@ -973,23 +973,25 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             }
         }
 
-        // 如果缓存中都没有，尝试从token中提取用户ID并从数据库获取
+        // 如果缓存中都没有，说明token可能已过期或用户已退出登录
         if (user == null) {
+            // 检查token是否在有效期内且格式正确
             Integer userIdFromToken = TokenValidationUtil.extractUserId(userToken);
             if (userIdFromToken != null) {
-                user = getById(userIdFromToken);
-                if (user != null) {
-                    log.info("从token中提取用户ID并从数据库重新加载用户信息: {}", userIdFromToken);
-                    // 重新缓存用户信息
-                    cacheService.cacheUserSession(userToken, user.getId());
-                    cacheService.cacheUser(user);
-                    userCacheManager.cacheUserByToken(userToken, user);
-                }
+                // 虽然token格式有效，但Redis中没有对应的会话信息
+                // 这通常意味着：
+                // 1. token已过期（Redis中的会话过期被清理）
+                // 2. 用户已退出登录（会话被主动清理）
+                // 3. 服务重启导致Redis数据丢失
+                log.warn("Token格式有效但Redis中无会话信息，可能已过期或已退出登录 - userId: {}", userIdFromToken);
+                
+                // 不应该自动重新激活已过期的token，而是要求用户重新登录
+                // 这是为了安全考虑，避免过期token被意外复活
+                throw new PoetryRuntimeException("登录已过期，请重新登陆！");
+            } else {
+                // token格式无效
+                throw new PoetryRuntimeException("Token无效，请重新登陆！");
             }
-        }
-
-        if (user == null) {
-            throw new PoetryRuntimeException("登录已过期，请重新登陆！");
         }
 
         // 根据用户实际权限判断是否为管理员
