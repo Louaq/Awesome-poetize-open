@@ -47,6 +47,7 @@ def get_oauth_login_config():
         headers = {
             "Content-Type": "application/json",
             "X-Internal-Service": "poetize-python-oauth",
+            "X-Admin-Request": "true",
             "User-Agent": "poetize-python-oauth/1.0.0"
         }
 
@@ -566,6 +567,7 @@ async def call_java_bind_api_direct(provider: str, code: str, state: str, state_
         headers = {
             'Content-Type': 'application/x-www-form-urlencoded',
             'X-Internal-Service': 'poetize-python',
+            'X-Admin-Request': 'true',
             'User-Agent': 'poetize-python/1.0.0'
         }
 
@@ -607,6 +609,7 @@ async def call_java_login_api(unified_data: dict):
             headers = {
                 'Content-Type': 'application/json',
                 'X-Internal-Service': 'poetize-python',
+                'X-Admin-Request': 'true',
                 'User-Agent': 'poetize-python/1.0.0'
             }
             response = await client.post(

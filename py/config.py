@@ -50,8 +50,15 @@ def detect_frontend_url():
     # 1. 优先使用环境变量
     if 'FRONTEND_HOST' in os.environ:
         host = os.environ.get('FRONTEND_HOST')
-        port = os.environ.get('FRONTEND_PORT', '80')  # 默认使用80端口
         protocol = os.environ.get('FRONTEND_PROTOCOL', 'http')  # 支持HTTPS
+        
+        # 根据协议设置正确的默认端口
+        if protocol == 'https':
+            default_port = '443'
+        else:
+            default_port = '80'
+        
+        port = os.environ.get('FRONTEND_PORT', default_port)
         url = f"{protocol}://{host}"
         # 只有当端口不是标准端口(80/443)时才添加
         if (protocol == 'http' and port != '80') or (protocol == 'https' and port != '443'):

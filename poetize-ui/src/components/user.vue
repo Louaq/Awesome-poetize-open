@@ -1171,7 +1171,7 @@
   .form-container div {
     background: var(--background);
     flex-direction: column;
-    padding: 0 20px;
+    padding: 10px 20px;
     height: 100%;
     color: var(--fontColor);
   }

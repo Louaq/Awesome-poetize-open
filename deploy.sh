@@ -2,7 +2,7 @@
 ## 作者: LeapYa
 ## 修改时间: 2025-09-26
 ## 描述: 部署 Poetize 博客系统安装脚本
-## 版本: 1.6.2
+## 版本: 1.7.0
 
 # 定义颜色
 RED='\033[0;31m'
@@ -240,7 +240,7 @@ print_summary() {
           printf "  请检查域名DNS解析和防火墙配置\n"
         fi
       else
-        printf "  启用命令: ${YELLOW}docker start poetize-certbot && sleep 60 && docker exec --user root poetize-nginx /enable-https.sh${NC}\n"
+        printf "  启用命令: ${YELLOW}docker start poetize-certbot && sleep 120 && docker exec --user root poetize-nginx /enable-https.sh${NC}\n"
         printf "  请检查域名DNS解析和防火墙配置\n"
       fi
     fi
@@ -390,10 +390,8 @@ parse_arguments() {
     case "$1" in
       -d|--domain)
         DOMAINS+=("$2")
-        # 如果 PRIMARY_DOMAIN 还没有设置，将第一个域名设为主域名
-        if [ -z "$PRIMARY_DOMAIN" ]; then
-          PRIMARY_DOMAIN="$2"
-        fi
+        # 每次添加域名后重新选择最合适的主域名
+        select_primary_domain
         shift 2
         ;;
       -e|--email)
@@ -3492,7 +3490,7 @@ handle_rate_limit_error() {
       echo ""
       echo -e "${BLUE}解决方案：${NC}"
       echo "1. 等待到上述时间后，运行以下命令重新启用HTTPS："
-      echo -e "   ${GREEN}docker start poetize-certbot && sleep 60 && docker exec --user root poetize-nginx /enable-https.sh${NC}"
+      echo -e "   ${GREEN}docker start poetize-certbot && sleep 120 && docker exec --user root poetize-nginx /enable-https.sh${NC}"
       echo ""
       echo "2. 或者使用不同的域名重新部署"
       echo ""
@@ -3517,13 +3515,14 @@ handle_rate_limit_error() {
 # 等待并应用SSL证书
 setup_https() {
   info "等待SSL证书生成..."
+  info "注意：证书申请包含5次重试机制，可能需要10-15分钟完成"
   
-  # 给certbot容器更多时间来完成，并增加重试机制
-  # 最多等待2分钟
-  local max_wait=120
+  # 给certbot容器足够时间完成所有重试
+  # certbot有5次重试，指数退避：30s + 60s + 120s + 240s = ~15分钟
+  local max_wait=900  # 15分钟
   local wait_time=0
-  # 每10秒检查一次
-  local interval=10  
+  # 每15秒检查一次，减少日志噪音
+  local interval=15  
   
   while [ $wait_time -lt $max_wait ]; do
     # 检查certbot容器状态
@@ -3532,15 +3531,41 @@ setup_https() {
     
     # 如果certbot已完成且成功
     if [ "$CERTBOT_EXIT_CODE" = "0" ] && [ "$CERTBOT_RUNNING" = "false" ]; then
+      info "certbot执行成功，退出等待循环"
       break
     fi
     
-    # 如果certbot失败
+    # 如果certbot失败且确实已经停止运行
     if [ "$CERTBOT_EXIT_CODE" != "0" ] && [ "$CERTBOT_EXIT_CODE" != "-1" ] && [ "$CERTBOT_RUNNING" = "false" ]; then
-      break
+      # 额外检查：确保certbot已经完成所有重试
+      local recent_logs=$(sudo docker logs --tail 20 poetize-certbot 2>&1)
+      if echo "$recent_logs" | grep -q "已达到最大重试次数\|证书申请最终失败\|too many certificates"; then
+        info "certbot已完成所有重试，退出等待循环"
+        break
+      else
+        # 如果没有看到最终失败消息，可能是容器意外退出，继续等待
+        warning "certbot容器意外退出（退出码: $CERTBOT_EXIT_CODE），但可能还未完成所有重试，继续等待..."
+      fi
     fi
     
-    info "等待证书申请完成... (${wait_time}s/${max_wait}s)"
+    # 实时检测速率限制错误，避免无谓等待
+    if [ $((wait_time % 60)) -eq 0 ] && [ $wait_time -gt 0 ]; then
+      local current_logs=$(sudo docker logs poetize-certbot 2>&1 || echo "")
+      if echo "$current_logs" | grep -q "too many certificates.*already issued"; then
+        warning "在等待过程中检测到速率限制错误，立即处理..."
+        handle_rate_limit_error "$current_logs"
+        return 2
+      fi
+    fi
+    
+    # 显示更友好的进度信息
+    local minutes=$((wait_time / 60))
+    local max_minutes=$((max_wait / 60))
+    if [ $minutes -eq 0 ]; then
+      info "等待证书申请完成... (${wait_time}秒/${max_wait}秒) - certbot可能正在重试中"
+    else
+      info "等待证书申请完成... (${minutes}分钟/${max_minutes}分钟) - certbot可能正在重试中"
+    fi
     sleep $interval
     wait_time=$((wait_time + interval))
   done
@@ -3627,10 +3652,17 @@ setup_https() {
       info "3. 检查enable-https.sh脚本内容:"
       sudo docker exec --user root poetize-nginx head -10 /enable-https.sh 2>/dev/null || echo "脚本文件不存在或不可读"
       
+      # HTTPS启用失败，回退到HTTP协议
+      revert_to_http_protocol
+      
       return 1
     fi
   else
     warning "SSL证书申请失败 (退出代码: $CERTBOT_EXIT_CODE)"
+    
+    # SSL证书申请失败，回退到HTTP协议
+    revert_to_http_protocol
+    
     info "检查证书申请日志..."
     
     # 获取更完整的错误日志
@@ -3826,6 +3858,130 @@ setup_directories() {
   success "目录和权限设置完成"
 }
 
+# 检查是否为根域名（如 example.com，只有两个部分且不以www开头）
+is_root_domain() {
+  local domain="$1"
+  # 检查域名是否以www开头
+  if [[ "$domain" =~ ^www\. ]]; then
+    return 1
+  fi
+  
+  # 统计点的数量，根域名应该只有一个点
+  local dot_count=$(echo "$domain" | tr -cd '.' | wc -c)
+  if [ "$dot_count" -eq 1 ]; then
+    return 0  # 是根域名
+  else
+    return 1  # 不是根域名
+  fi
+}
+
+# 让用户手动选择主域名（带30秒超时）
+prompt_primary_domain_with_timeout() {
+  info "检测到的域名都是子域名，请手动选择主域名："
+  for i in "${!DOMAINS[@]}"; do
+    echo "  $((i+1)). ${DOMAINS[i]}"
+  done
+  echo "  0. 手动输入其他域名"
+  
+  echo -n "请选择主域名 (1-${#DOMAINS[@]} 或 0，30秒后自动选择第一个): "
+  
+  # 使用read的超时功能
+  if read -t 30 choice; then
+    # 验证输入
+    if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 0 ] && [ "$choice" -le "${#DOMAINS[@]}" ]; then
+      if [ "$choice" -eq 0 ]; then
+        echo -n "请输入主域名: "
+        read custom_domain
+        if [ -n "$custom_domain" ]; then
+          PRIMARY_DOMAIN="$custom_domain"
+          info "使用手动输入的主域名: $PRIMARY_DOMAIN"
+        else
+          PRIMARY_DOMAIN="${DOMAINS[0]}"
+          info "输入为空，使用第一个域名: $PRIMARY_DOMAIN"
+        fi
+      else
+        PRIMARY_DOMAIN="${DOMAINS[$((choice-1))]}"
+        info "选择的主域名: $PRIMARY_DOMAIN"
+      fi
+    else
+      warn "输入无效，使用第一个域名: ${DOMAINS[0]}"
+      PRIMARY_DOMAIN="${DOMAINS[0]}"
+    fi
+  else
+    # 超时后使用第一个域名
+    echo ""
+    warn "输入超时，使用第一个域名: ${DOMAINS[0]}"
+    PRIMARY_DOMAIN="${DOMAINS[0]}"
+  fi
+}
+
+# 当HTTPS启用失败时，将FRONTEND_PROTOCOL从https替换为http
+revert_to_http_protocol() {
+  info "HTTPS启用失败，正在将FRONTEND_PROTOCOL从https替换为http..."
+  
+  if [ -f "docker-compose.yml" ]; then
+    # 检查当前是否为https
+    if grep -q "FRONTEND_PROTOCOL=https" docker-compose.yml; then
+      # 替换为http
+      sed_i "s/FRONTEND_PROTOCOL=https/FRONTEND_PROTOCOL=http/g" docker-compose.yml
+      success "已将FRONTEND_PROTOCOL替换为http"
+      
+      # 重启Python后端以使新配置生效
+      info "重启Python后端以使新配置生效..."
+      if sudo docker compose restart python-backend 2>/dev/null; then
+        success "Python后端重启成功"
+      else
+        warning "Python后端重启失败，可能需要手动重启: docker compose restart python-backend"
+      fi
+    else
+      info "FRONTEND_PROTOCOL已经是http或未找到相关配置"
+    fi
+  else
+    warning "未找到docker-compose.yml文件"
+  fi
+}
+
+# 选择最合适的主域名
+# 优先级: 根域名 > www域名 > 用户手动选择
+select_primary_domain() {
+  local root_domain=""
+  local www_domain=""
+  local subdomain=""
+  
+  # 遍历所有域名，分类收集
+  for domain in "${DOMAINS[@]}"; do
+    if is_root_domain "$domain"; then
+      # 根域名
+      if [ -z "$root_domain" ]; then
+        root_domain="$domain"
+      fi
+    elif [[ "$domain" =~ ^www\. ]]; then
+      # www子域名
+      if [ -z "$www_domain" ]; then
+        www_domain="$domain"
+      fi
+    else
+      # 其他子域名
+      if [ -z "$subdomain" ]; then
+        subdomain="$domain"
+      fi
+    fi
+  done
+  
+  # 优先级1: 根域名
+  if [ -n "$root_domain" ]; then
+    PRIMARY_DOMAIN="$root_domain"
+    info "选择根域名作为主域名: $PRIMARY_DOMAIN"
+  # 优先级2: www域名（当没有根域名时）
+  elif [ -n "$www_domain" ]; then
+    PRIMARY_DOMAIN="$www_domain"
+    info "选择www域名作为主域名: $PRIMARY_DOMAIN"
+  # 优先级3: 让用户手动选择
+  else
+    prompt_primary_domain_with_timeout
+  fi
+}
+
 # 提示用户输入域名
 prompt_for_domains() {
   echo -n "请输入域名 (多个域名用空格分隔，Ctrl+U可重新输入): "
@@ -3836,8 +3992,8 @@ prompt_for_domains() {
     exit 1
   fi
   
-  # 设置主域名为第一个域名
-  PRIMARY_DOMAIN=${DOMAINS[0]}
+  # 选择合适的主域名（优先不带www的域名）
+  select_primary_domain
 }
 
 # # 提示用户输入邮箱
@@ -6494,7 +6650,7 @@ main() {
   
   # 确保PRIMARY_DOMAIN已设置
   if [ -z "$PRIMARY_DOMAIN" ]; then
-    PRIMARY_DOMAIN=${DOMAINS[0]}
+    select_primary_domain
   fi
   
   # 确认输入信息
@@ -6574,9 +6730,16 @@ main() {
     
     if [ $SSL_STATUS -eq 2 ]; then
       warning "SSL证书申请失败，但将继续以HTTP模式运行"
+      
+      # SSL证书申请失败，回退到HTTP协议
+      revert_to_http_protocol
+      
       info "您可以在部署完成后手动配置HTTPS"
     elif [ $SSL_STATUS -ne 0 ]; then
       warning "HTTPS配置过程中出现错误"
+      
+      # HTTPS配置失败，回退到HTTP协议
+      revert_to_http_protocol
     fi
   else
     # 本地域名环境不支持HTTPS，跳过询问
@@ -6591,9 +6754,16 @@ main() {
         ENABLE_HTTPS=true
       elif [ $SSL_STATUS -eq 2 ]; then
         warning "SSL证书申请失败，但将继续以HTTP模式运行"
+        
+        # SSL证书申请失败，回退到HTTP协议
+        revert_to_http_protocol
+        
         info "您可以在部署完成后手动配置HTTPS"
       else
         warning "HTTPS启用失败。如果需要，请稍后手动运行: docker exec --user root poetize-nginx /enable-https.sh"
+        
+        # HTTPS启用失败，回退到HTTP协议
+        revert_to_http_protocol
       fi
     else
       info "本地域名环境不支持HTTPS，如需使用HTTPS请配置有效域名"

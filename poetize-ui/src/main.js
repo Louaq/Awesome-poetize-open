@@ -7,6 +7,7 @@ import http from './utils/request'
 import common from './utils/common'
 import constant from './utils/constant'
 import mavonEditor from 'mavon-editor'
+import initAntiDebug from './utils/anti-debug'
 // 导入字体加载器
 import { loadFonts } from './utils/font-loader'
 
@@ -107,6 +108,9 @@ import 'mavon-editor/dist/css/index.css'
 
 import {vueBaberrage} from 'vue-baberrage'
 import AsyncNotification from './components/common/AsyncNotification.vue'
+
+// 初始化反调试逻辑
+const disposeAntiDebug = initAntiDebug();
 
 Vue.use(ElementUI)
 Vue.use(vueBaberrage)
@@ -421,6 +425,14 @@ app.$nextTick(() => {
   // ===== PWA Service Worker 注册 =====
   registerServiceWorker();
 });
+
+// 提供钩子便于在特殊场景下禁用反调试
+if (disposeAntiDebug) {
+  window.__disableAntiDebug = () => {
+    disposeAntiDebug();
+    delete window.__disableAntiDebug;
+  };
+}
 
 // Service Worker 注册函数
 function registerServiceWorker() {

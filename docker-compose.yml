@@ -179,6 +179,7 @@ services:
       - JAVA_BACKEND_HOST=poetize-java
       - JAVA_BACKEND_PORT=8081
       - FRONTEND_HOST=example.com
+      - FRONTEND_PROTOCOL=https
       - NGINX_URL=http://nginx/flush_seo_cache
       - PRERENDER_URL=http://poetize-prerender:4000
       - DOCKER_SUBNET=172.28.147.0/28
