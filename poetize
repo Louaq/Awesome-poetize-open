@@ -1198,9 +1198,9 @@ execute_additional_sql_scripts() {
         return 1
     fi
     
-    # 查找poetize-server/sql目录下除poetry.sql外的所有.sql文件
+    # 查找poetize-server/sql目录下除poetry.sql和poetry_old.sql外的所有.sql文件
     if [ -d "poetize-server/sql" ]; then
-        local sql_files=$(find poetize-server/sql -name "*.sql" -not -name "poetry.sql" -type f | sort)
+        local sql_files=$(find poetize-server/sql -name "*.sql" -not -name "poetry.sql" -not -name "poetry_old.sql" -type f | sort)
         
         if [ -z "$sql_files" ]; then
             info "未找到需要执行的额外SQL脚本"

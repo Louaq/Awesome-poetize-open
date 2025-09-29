@@ -3,13 +3,25 @@
 
 USE `poetize`;
 
--- 添加IP地址字段
-ALTER TABLE `comment` 
-ADD COLUMN `ip_address` varchar(45) DEFAULT NULL COMMENT 'IP地址' AFTER `comment_info`;
+-- 添加IP地址字段（如果不存在）
+SET @column_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS 
+    WHERE TABLE_SCHEMA='poetize' AND TABLE_NAME='comment' AND COLUMN_NAME='ip_address');
+SET @sql = IF(@column_exists = 0, 
+    'ALTER TABLE `comment` ADD COLUMN `ip_address` varchar(45) DEFAULT NULL COMMENT ''IP地址'' AFTER `comment_info`', 
+    'SELECT ''Column ip_address already exists'' as message');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
--- 添加地理位置字段
-ALTER TABLE `comment` 
-ADD COLUMN `location` varchar(100) DEFAULT NULL COMMENT '地理位置' AFTER `ip_address`;
+-- 添加地理位置字段（如果不存在）
+SET @column_exists = (SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS 
+    WHERE TABLE_SCHEMA='poetize' AND TABLE_NAME='comment' AND COLUMN_NAME='location');
+SET @sql = IF(@column_exists = 0, 
+    'ALTER TABLE `comment` ADD COLUMN `location` varchar(100) DEFAULT NULL COMMENT ''地理位置'' AFTER `ip_address`', 
+    'SELECT ''Column location already exists'' as message');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- 验证字段是否添加成功
 DESCRIBE `comment`;

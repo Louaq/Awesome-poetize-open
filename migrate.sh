@@ -1059,9 +1059,9 @@ execute_sql_scripts_on_target() {
         
         echo \"INFO: 使用MariaDB容器: \$mariadb_container\"
         
-        # 查找poetize-server/sql目录下除poetry.sql外的所有.sql文件
+        # 查找poetize-server/sql目录下除poetry.sql和poetry_old.sql外的所有.sql文件
         if [ -d \"poetize-server/sql\" ]; then
-            sql_files=\$(find poetize-server/sql -name \"*.sql\" -not -name \"poetry.sql\" -type f | sort)
+            sql_files=\$(find poetize-server/sql -name \"*.sql\" -not -name \"poetry.sql\" -not -name \"poetry_old.sql\" -type f | sort)
             
             if [ -z \"\$sql_files\" ]; then
                 echo \"INFO: 未找到需要执行的额外SQL脚本\"
