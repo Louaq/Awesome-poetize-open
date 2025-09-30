@@ -1,8 +1,8 @@
 #!/bin/bash
 ## 作者: LeapYa
-## 修改时间: 2025-09-26
+## 修改时间: 2025-10-01
 ## 描述: 部署 Poetize 博客系统安装脚本
-## 版本: 1.7.0
+## 版本: 1.7.1
 
 # 定义颜色
 RED='\033[0;31m'
@@ -390,8 +390,6 @@ parse_arguments() {
     case "$1" in
       -d|--domain)
         DOMAINS+=("$2")
-        # 每次添加域名后重新选择最合适的主域名
-        select_primary_domain
         shift 2
         ;;
       -e|--email)
@@ -3942,8 +3940,14 @@ revert_to_http_protocol() {
 }
 
 # 选择最合适的主域名
-# 优先级: 根域名 > www域名 > 用户手动选择
+# 优先级: 只有一个域名时直接使用 > 根域名 > www域名 > 用户手动选择
 select_primary_domain() {
+  # 优先级0: 如果只有一个域名，直接使用它
+  if [ ${#DOMAINS[@]} -eq 1 ]; then
+    PRIMARY_DOMAIN="${DOMAINS[0]}"
+    return
+  fi
+  
   local root_domain=""
   local www_domain=""
   local subdomain=""
@@ -3971,12 +3975,10 @@ select_primary_domain() {
   # 优先级1: 根域名
   if [ -n "$root_domain" ]; then
     PRIMARY_DOMAIN="$root_domain"
-    info "选择根域名作为主域名: $PRIMARY_DOMAIN"
   # 优先级2: www域名（当没有根域名时）
   elif [ -n "$www_domain" ]; then
     PRIMARY_DOMAIN="$www_domain"
-    info "选择www域名作为主域名: $PRIMARY_DOMAIN"
-  # 优先级3: 让用户手动选择
+  # 优先级3: 让用户手动选择（多个子域名的情况）
   else
     prompt_primary_domain_with_timeout
   fi
@@ -6461,11 +6463,14 @@ main() {
   require_root_or_sudo
 
   # 如果未设置域名和邮箱，则提示用户输入
-  if [ -z "$PRIMARY_DOMAIN" ]; then
+  if [ ${#DOMAINS[@]} -eq 0 ]; then
     # 输入域名
     prompt_for_domains
     # # 输入邮箱
     # prompt_for_email
+  else
+    # 通过命令行参数指定了域名，横幅显示后再选择主域名
+    select_primary_domain
   fi
 
   check_write_permission
