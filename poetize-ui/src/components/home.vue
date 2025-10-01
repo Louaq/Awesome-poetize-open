@@ -500,6 +500,26 @@
             this.applyDrawerStyles();
           });
         }
+      },
+      
+      // 监听 store 中的移动端侧边栏配置变化
+      '$store.state.webInfo.mobileDrawerConfig': {
+        handler(newVal) {
+          if (newVal) {
+            try {
+              this.drawerConfig = JSON.parse(newVal);
+              // 如果侧边栏当前是打开的，立即应用新样式
+              if (this.toolbarDrawer) {
+                this.$nextTick(() => {
+                  this.applyDrawerStyles();
+                });
+              }
+            } catch (e) {
+              console.error('解析移动端侧边栏配置失败:', e);
+            }
+          }
+        },
+        deep: true
       }
     },
     created() {

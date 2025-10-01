@@ -3913,6 +3913,8 @@ X-API-KEY: {{apiConfig.apiKey}}
             this.$message.success('移动端侧边栏配置保存成功！');
             this.mobileDrawerDialogVisible = false;
             this.getWebInfo();
+            // 同步更新Vuex store，让其他组件能立即获取最新配置
+            this.$store.dispatch("getWebsitConfig");
           })
           .catch((error) => {
             this.$message.error('保存失败: ' + (error.response?.data?.message || error.message));
