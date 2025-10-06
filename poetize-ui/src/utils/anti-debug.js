@@ -1,5 +1,14 @@
 const CHECK_INTERVAL = 500;
 const SIZE_THRESHOLD = 160;
+const DEBUGGER_INTERVAL = 100; // debugger循环间隔
+
+// 使用动态函数触发 debugger，避免被构建阶段移除
+let triggerDebugger;
+try {
+  triggerDebugger = new Function('', 'debugger');
+} catch (error) {
+  triggerDebugger = () => {};
+}
 
 let intervalId = null;
 let forceDebuggerTimer = null;
@@ -10,6 +19,7 @@ function isLikelyDevToolsOpen() {
     return false;
   }
 
+  // 方法1: 窗口尺寸差异检测
   const widthGap = Math.abs(window.outerWidth - window.innerWidth);
   const heightGap = Math.abs(window.outerHeight - window.innerHeight);
 
@@ -17,7 +27,7 @@ function isLikelyDevToolsOpen() {
     return true;
   }
 
-  // 尝试控制台打印检测（仅在开发者工具打开时会触发 getter）
+  // 方法2: 控制台打印检测（最可靠的方式）
   let detected = false;
   const element = new Image();
   Object.defineProperty(element, 'id', {
@@ -26,35 +36,45 @@ function isLikelyDevToolsOpen() {
       return '';
     }
   });
-  console.log(element);
-  console.clear();
+
+  try {
+    const consoleRef = window['console'];
+    if (consoleRef) {
+      const log = consoleRef['log'];
+      const clear = consoleRef['clear'];
+      if (typeof log === 'function') {
+        log.call(consoleRef, element);
+      }
+      if (typeof clear === 'function') {
+        clear.call(consoleRef);
+      }
+    }
+  } catch (error) {
+    // 忽略所有控制台调用错误
+  }
 
   return detected;
 }
 
-function scheduleDebuggerLoop() {
-  if (forceDebuggerTimer) {
-    return;
-  }
-
+function scheduleDebuggerLoop({ forceImmediate = false } = {}) {
   const runDebugger = () => {
     try {
-      // eslint-disable-next-line no-debugger
-      debugger;
+      triggerDebugger();
     } catch (error) {
       // 忽略调用 debugger 可能抛出的异常
     }
   };
 
-  runDebugger();
-  forceDebuggerTimer = window.setInterval(() => {
-    if (!lastKnownOpen) {
-      clearInterval(forceDebuggerTimer);
-      forceDebuggerTimer = null;
-      return;
-    }
+  if (forceImmediate) {
     runDebugger();
-  }, 300);
+  }
+
+  if (forceDebuggerTimer) {
+    return;
+  }
+
+  runDebugger();
+  forceDebuggerTimer = window.setInterval(runDebugger, DEBUGGER_INTERVAL);
 }
 
 function stopDebuggerLoop() {
@@ -93,12 +113,8 @@ function handleKeydown(event) {
   }
 }
 
-function handleContextMenu(event) {
-  // 拦截右键菜单，防止通过右键"检查"打开开发者工具
-  event.preventDefault();
-  event.stopPropagation();
-  scheduleDebuggerLoop();
-  return false;
+function handleWindowResize() {
+  checkDevTools();
 }
 
 export function initAntiDebug({ enableInDev = false } = {}) {
@@ -118,14 +134,15 @@ export function initAntiDebug({ enableInDev = false } = {}) {
     };
   }
 
+  // 先检测一次
   checkDevTools();
+  // 然后持续检测
   intervalId = window.setInterval(checkDevTools, CHECK_INTERVAL);
 
-  window.addEventListener('resize', checkDevTools, true);
+  window.addEventListener('resize', handleWindowResize, true);
   window.addEventListener('focus', checkDevTools, true);
   window.addEventListener('blur', checkDevTools, true);
   window.addEventListener('keydown', handleKeydown, true);
-  window.addEventListener('contextmenu', handleContextMenu, true);
 
   return () => {
     if (intervalId) {
@@ -133,11 +150,10 @@ export function initAntiDebug({ enableInDev = false } = {}) {
       intervalId = null;
     }
     stopDebuggerLoop();
-    window.removeEventListener('resize', checkDevTools, true);
+    window.removeEventListener('resize', handleWindowResize, true);
     window.removeEventListener('focus', checkDevTools, true);
     window.removeEventListener('blur', checkDevTools, true);
     window.removeEventListener('keydown', handleKeydown, true);
-    window.removeEventListener('contextmenu', handleContextMenu, true);
   };
 }
 
