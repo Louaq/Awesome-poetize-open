@@ -2,7 +2,7 @@
 ## 作者: LeapYa
 ## 修改时间: 2025-10-01
 ## 描述: 部署 Poetize 博客系统安装脚本
-## 版本: 1.7.1
+## 版本: 1.7.2
 
 # 定义颜色
 RED='\033[0;31m'
@@ -4948,12 +4948,16 @@ verify_https_status() {
   
   # 2. 检查SSL证书文件是否存在
   info "检查SSL证书文件..."
-  if sudo docker exec poetize-nginx test -f "/etc/letsencrypt/live/$PRIMARY_DOMAIN/fullchain.pem" 2>/dev/null; then
+  
+  # certbot将证书放在第一个域名的目录下
+  local cert_domain="${DOMAINS[0]}"
+  
+  if sudo docker exec poetize-nginx test -f "/etc/letsencrypt/live/$cert_domain/fullchain.pem" 2>/dev/null; then
     cert_valid=true
-    success "✓ SSL证书文件存在: /etc/letsencrypt/live/$PRIMARY_DOMAIN/fullchain.pem"
+    success "✓ SSL证书文件存在: /etc/letsencrypt/live/$cert_domain/fullchain.pem"
     
     # 检查证书有效期
-    CERT_EXPIRY=$(sudo docker exec poetize-nginx openssl x509 -in "/etc/letsencrypt/live/$PRIMARY_DOMAIN/fullchain.pem" -noout -enddate 2>/dev/null | cut -d= -f2)
+    CERT_EXPIRY=$(sudo docker exec poetize-nginx openssl x509 -in "/etc/letsencrypt/live/$cert_domain/fullchain.pem" -noout -enddate 2>/dev/null | cut -d= -f2)
     if [ -n "$CERT_EXPIRY" ]; then
       info "证书有效期至: $CERT_EXPIRY"
     fi
