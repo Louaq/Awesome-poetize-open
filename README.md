@@ -3,16 +3,16 @@
     <img src="poetize_picture/首页1.jpg" alt="Logo" width="100%">
   </a>
 
-<h3 align="center">POETIZE 最美博客（AGPL 分支 · LeapYa 维护）</h3>
+<h1 align="center">POETIZE 最美博客（AGPL 分支 · LeapYa 维护）</h1>
   <p align="center">
     让内容创作与社交体验更美好
     <br />
     <br />
-    <a href="快速开始">快速部署</a>
+    <a href="#-快速开始">快速部署</a>
     ·
-    <a href="部署文档">部署文档</a>
+    <a href="#-部署文档">部署文档</a>
     ·
-    <a href="#开发指南">二次开发</a>
+    <a href="#-开发指南">二次开发</a>
   </p>
   <p align="center">
    <img src="https://img.shields.io/badge/license-AGPL--3.0-%3CCOLOR%3E.svg" alt="AGPL License">
@@ -22,21 +22,20 @@
   </p>
 </p>
 
-## 目录
+## 📑 目录
 
-- [项目简介](#项目致谢)
-- [项目预览](#项目预览)
-- [快速开始](#快速开始)
-- [部署文档](#部署文档)
-- [贡献与许可](#贡献与许可)
-- [开发指南](#开发指南)
-- [技术栈](#技术栈)
-- [联系方式](#联系方式)
-- [版权说明](#版权说明)
+- [项目简介](#-项目简介)
+- [快速开始](#-快速开始)
+- [部署文档](#-部署文档)
+- [贡献与许可](#-贡献与许可)
+- [开发指南](#-开发指南)
+- [技术栈](#️-技术栈)
+- [联系方式](#-联系方式)
+- [版权说明](#-版权说明)
 
-## 项目简介
+## 📖 项目简介
 
-本项目基于开源项目 [POETIZE最美博客](https://gitee.com/littledokey/poetize) 功能扩展和定制化开发，历时半年，这是一个集内容创作、社交互动与技术优化于一体的现代化博客系统，非常适合个人建站和内容创作者使用。
+本项目**Awesome-poetize-open**是基于开源项目 [POETIZE最美博客](https://gitee.com/littledokey/poetize) 功能扩展和定制化开发，历时半年，这是一个集内容创作、社交互动与技术优化于一体的现代化博客系统，非常适合个人建站和内容创作者使用。
 
 <p align="center">
   <img src="poetize_picture/首页.png" alt="首页" width="100%">
@@ -78,172 +77,109 @@
 
 更多功能...
 
-## 快速开始
+## 🚀 快速开始
 
 ```bash
 # 你只需要输入域名邮箱即可
 bash <(curl -sL install.leapya.com)
 ```
 
-无需手动配置Docker、编译代码或设置环境变量，脚本会自动处理所有细节，包括:
+脚本将自动完成所有配置，包括Docker安装、数据库初始化和HTTPS配置。
 
-* Docker环境检测与安装
-* 数据库初始化
-* 服务编排与启动
-* 自动HTTPS配置
+## 📋 部署文档
 
-## 部署文档
+### 1.准备服务器+域名解析
 
-### 架构概览
+#### 服务器选择指南
 
-系统采用容器化部署，七大核心服务：
+选择可靠的云服务商即可，根据价格和需求自行决定。
 
-1. 主站前端 (Vue 2)
-2. 聊天室前端 (Vue 3)
-3. Java 后端（Java 21）
-4. Python 后端（Python 3.9+）
-5. 数据库（MariaDB 11，兼容MySQL 5.7）
-6. Nginx 反向代理
-7. Certbot SSL 证书
+**地域选择：**
+- **香港云服务器** - 免备案，即买即用，推荐不想备案的用户
+- **国内云服务器** - 需要备案，约需3-7个工作日，适合面向国内用户的站点
 
-> **注意**: 如需使用MySQL替代MariaDB，请查看本项目的开发指南
+#### 服务器配置要求
 
-### 部署流程
+**基础配置：**
+- **操作系统**：Ubuntu 18.04+、Debian 10+ 或 CentOS 7/8+（推荐）
+- **CPU/内存**：1核+ / 2GB+（2GB内存会自动配置交换空间）
+- **硬盘空间**：30GB+（最少预留10GB）
+- **带宽选择**：建议5M以上
+- **网络配置**：将域名解析到服务器IP，并开放80和443端口
 
-#### 1. 服务器要求
-
-- 操作系统：推荐 Debian 10.3.3+ 或 Ubuntu 18.04+，详见下方测试表
-- 内存：建议 2GB 及以上（2GB内存环境将自动配置2GB交换空间）
-- 硬盘：建议 30GB 及以上，至少需要10G
-
-##### 系统兼容性测试结果
+#### 系统兼容性测试结果
 
 | 操作系统类型          | CPU  | 内存 | 存储 | 测试结果  |
 | --------------------- | ---- | ---- | ---- | --------- |
 | Ubuntu 18.04+ x64     | 1核+ | 1G+  | 30GB | ✅ 推荐   |
 | Debian 10+ x64        | 1核+ | 1G+  | 30GB | ✅ 推荐   |
 | CentOS 7/8+ x64       | 1核+ | 1G+  | 30GB | ✅ 推荐   |
-| RHEL/Rocky/AlmaLinux  | 1核+ | 1G+  | 30GB | ✅ 支持   |
-| Fedora/Oracle Linux   | 1核+ | 1G+  | 30GB | ✅ 支持   |
-| Amazon Linux          | 1核+ | 1G+  | 30GB | ✅ 支持   |
-| 阿里云/腾讯云 Linux   | 1核+ | 1G+  | 30GB | ✅ 支持   |
-| 麒麟/统信UOS/Deepin   | 1核+ | 1G+  | 30GB | ✅ 支持   |
-| openEuler/EulerOS     | 1核+ | 1G+  | 30GB | ✅ 支持   |
-| Alpine/Arch Linux     | 1核+ | 1G+  | 30GB | ✅ 支持   |
-| openSUSE              | 1核+ | 1G+  | 30GB | ✅ 支持   |
 | Windows Server/桌面版 | -    | -    | -    | ❌ 不支持 |
-| CentOS 6.x 及更早系统 | -    | -    | -    | ❌ 不支持 |
 
-#### 2. 环境准备
+> **其他支持的系统**：RHEL、Rocky Linux、AlmaLinux、Fedora、Amazon Linux、阿里云/腾讯云 Linux、麒麟、统信UOS、Deepin、openEuler、Alpine、Arch Linux、openSUSE等主流Linux发行版均已测试通过。CentOS 6.x及更早版本不支持。
 
-* 域名解析到服务器
-* 开放 80 TCP 和443 UDP/TCP 端口
 
-#### 3. 部署步骤
-
-##### **快速部署方式**
+### 2.运行一键安装脚本
 
 ```bash
 # 以下方式任选其一即可
-# 方式一：交互模式：
+# 方式一：交互模式
 bash <(curl -sL install.leapya.com)
 
-# 方式二：非交互模式(替换成自己的域名，每个域名使用-d隔开):
+# 方式二：非交互模式(替换成自己的域名，每个域名使用-d隔开)
 bash <(curl -sL install.leapya.com) -d 域名.com -d www.域名.com
 
-# 方式三：或克隆本仓库使用deploy.sh脚本部署（交互模式）：
+# 方式三：克隆本仓库部署（交互模式）
 git clone https://github.com/LeapYa/Awesome-poetize-open.git && sudo chmod +x deploy.sh && sudo ./deploy.sh
 
-# 方式四：或克隆本仓库使用deploy.sh脚本部署（非交互模式，替换成自己的域名，每个域名使用-d隔开)：
+# 方式四：克隆本仓库部署（非交互模式）
 git clone https://github.com/LeapYa/Awesome-poetize-open.git && sudo chmod +x deploy.sh && sudo ./deploy.sh -d 域名.com -d www.域名.com
 ```
 
-##### **启动顺序**
+### 3.访问方式
 
-* MySQL服务 → 数据初始化 → 后端服务 → 前端构建 → Nginx → 证书申请
-
-### 访问方式
+部署完成后，可通过以下地址访问系统功能：
 
 * 主站：`http(s)://域名/`
 * 聊天室：`http(s)://域名/im`
 * 管理后台：`http(s)://域名/admin`
-* 默认账号密码：`Sara / aaa`
 
-### OAuth代理（可选）
+**默认管理员凭证**：
+- 用户名：`Sara`
+- 密码：`aaa`
 
-我们第三方登录的时候想支持国外第三方登录平台（如谷歌、github等），需要配置海外代理服务器才可以正常第三方登录，否则会失败，具体如何配置请查看[OAuth代理配置说明文档](OAuth代理配置说明.md)
+### 4.可选配置
 
-### Ollama翻译模型配置（可选）
+#### 更换字体
 
-如果你想启用本地AI翻译功能，我们也集成了Ollama模型支持。只需要取消 `docker-compose.yml`中的相关注释即可：
+如需更换网站字体，提供两种方法：
 
-```bash
-# 编辑docker-compose.yml文件
-vim docker-compose.yml
+**方法1：分块字体模式**
+1. 将新字体文件（TTF格式）放入 `split_font/` 文件夹
+2. 重命名为 `font.ttf`
+3. 安装依赖：`pip install -r requirements.txt`
+4. 执行：`python font_subset.py`
+5. 将生成的 `font_chunks/` 下所有文件复制到：
+   - `poetize-ui/public/assets/`
+   - `poetize-ui/public/static/assets/`
 
-# 找到"# Ollama翻译模型服务"部分，取消注释即可启用
-# 模型会自动下载qwen3:0.6b轻量级翻译模型
-```
+**方法2：单一字体模式**
+1. 在后台管理 → 配置管理中，设置"使用单一字体文件"为 `true`
+2. 将新字体文件（WOFF2格式）重命名为 `font.woff2`
+3. 复制到：
+   - `poetize-ui/public/assets/`
+   - `poetize-ui/public/static/assets/`
+4. 重启前端服务
 
-启用后将提供：
+#### OAuth代理
 
-* 本地化AI翻译服务
-* 无需依赖第三方翻译API
-* 支持中英文互译
-* 模型数据持久化存储
+若需支持国外第三方登录平台（GitHub、Google等），请配置海外代理服务器，详见[OAuth代理配置说明文档](OAuth代理配置说明.md)。
 
-#### 自定义模型配置
+#### Ollama本地翻译模型
 
-如果你不想使用默认的 `qwen3:0.6b`模型，可以修改为其他支持的模型：
+如需启用本地AI翻译功能，编辑 `docker-compose.yml` 找到"Ollama翻译模型服务"部分取消注释即可。默认使用 `qwen3:0.6b` 轻量级模型。更多模型选择和配置详见 [Ollama官方模型库](https://ollama.com/library)。
 
-1. **修改docker-compose.yml**
-
-   ```yaml
-   # 找到OLLAMA_MODELS环境变量，修改为你想要的模型
-   - OLLAMA_MODELS=deepseek-r1:8b  # 例如改为deepseek-r1:8b
-   ```
-2. **修改Dockerfile配置**
-
-   ```bash
-   # 编辑docker/translation_model/Dockerfile
-   vim docker/translation_model/Dockerfile
-
-   # 将其中的qwen3:0.6b替换为你想要的模型名称，如deepseek-r1:8b、qwen3:8b等
-   ```
-
-**更多模型选择：**
-
-你可以访问 [Ollama官方模型库](https://ollama.com/library) 查看所有可用的模型，包括：
-
-* **推理模型**: `deepseek-r1` (1.5b, 7b, 8b, 14b, 32b, 70b, 671b)
-* **通用模型**: `qwen3` (0.6b, 1.7b, 4b, 8b, 14b, 30b, 32b), `llama3.2` (1b, 3b)
-* **代码模型**: `qwen2.5-coder` (0.5b, 1.5b, 3b, 7b, 14b, 32b)
-* **视觉模型**: `llama3.2-vision` (11b, 90b), `qwen2.5vl` (3b, 7b, 32b, 72b)
-
-选择模型时请考虑服务器配置，较大的模型需要更多内存和计算资源。
-
-**量化版本说明：**
-
-Ollama默认提供的是4位量化版本的模型，体积小但精度相对较低。如果需要更高的翻译准确度，可以使用其他量化版本：
-
-```yaml
-# 默认4位量化（体积小，速度快）
-- OLLAMA_MODELS=qwen3:8b
-
-# 8位量化（准确度更高，体积适中）
-- OLLAMA_MODELS=qwen3:8b-q8_0
-
-# 16位量化（最高准确度，体积最大）
-- OLLAMA_MODELS=qwen3:8b-fp16
-```
-
-**量化版本对比：**
-
-* **4位量化（默认）**: 体积最小，速度最快，适合资源受限环境
-* **8位量化（q8_0）**: 平衡准确度与资源消耗，推荐用于翻译任务
-* **16位量化（fp16）**: 最高准确度，需要充足内存和存储空间
-
-### 常用命令
+### 5.常用命令
 
 ```bash
 # 容器状态
@@ -267,13 +203,8 @@ poetize -update
 poetize -qy
 ```
 
-### 注意事项
 
-1. 立即修改默认管理员密码
-2. 确保服务器资源充足
-3. HTTPS需正确域名解析
-
-### 故障排查
+### 6.故障排查
 
 1. **服务启动问题**
 
@@ -286,94 +217,21 @@ poetize -qy
    * 80端口访问性
    * 证书目录权限
 
-### 脚本说明
+### 7.高级功能
 
-本项目有多个脚本，主要用于博客的安装、升级、迁移
+本项目提供三个管理脚本，使用 `poetize -h`、`./deploy.sh -h` 或 `./migrate.sh` 查看详细用法。
 
-#### 部署脚本（deploy.sh）
+#### 国内环境部署
 
-用于将博客部署到当前服务器，会自动帮你安装docker、配置国内镜像源、配置https等，以下是基本用法：
+`deploy.sh` 脚本已内置国内镜像源加速。若网络受限，可从Release下载离线资源包，包含Docker安装包和所有镜像文件。
 
-```bash
-# 交互式部署
-./deploy.sh
-
-# 参数部署
-./deploy.sh -d example.com -d www.example.com
-
-# 查看帮助/所有子命令
-./deploy.sh -h
-```
-
-#### 迁移脚本（migrate.sh）
-
-用于将当前服务器上的博客一键迁移到另一台服务器，以下是基本用法：
-
-```bash
-# 在源服务器（已有正在运行的博客）执行
-chmod +x ./migrate.sh && ./migrate.sh
-```
-
-#### 状态查看、升级脚本（poetize）
-
-用于将当前服务器的博客升级、查看状态等
-
-```bash
-# 查看帮助/所有子命令
-poetize -h
-
-# 升级到最新版本（拉取最新配置与镜像并平滑重启）
-poetize -update
-
-# 快速迁移引导（在源服务器执行，内部调用 migrate.sh）
-poetize -qy
-```
-
-`poetize` 命令由一键安装脚本安装（bash <(curl -sL install.leapya.com)）。若未安装，可直接在项目根目录使用 `deploy.sh`、`migrate.sh` 完成部署与迁移。
-
-#### 关于国内环境部署
-
-国内环境存在Docker安装困难或网络受限的情况，为确保顺利部署，项目已提供完整的离线部署方案。只需从Release页面下载离线资源包并按以下结构放置：
-
-##### 1. 使用deploy.sh脚本：
-
-- 项目中提供的**deploy.sh**脚本已经包含了国内环境的配置和加速源设置。
-- 该脚本会自动配置npm使用淘宝镜像源，并增加网络参数以提高下载速度。
-- 通过执行**deploy.sh**，可以自动完成环境的初始化和依赖的安装。
-
-##### 2. 离线资源包：
-
-- 从Release页面下载离线资源包。
-- 按照以下结构放置资源包：
-
-  ```
-  offline/
-  ├── docker.tar.gz           # Docker离线安装包
-  ├── docker-compose          # Docker Compose二进制文件 
-  └── images/                 # Docker镜像目录
-     ├── mysql.tar           # MySQL数据库镜像
-     ├── nginx.tar           # Nginx反向代理镜像
-     ├── java.tar            # Java后端服务镜像
-     └── python.tar          # Python后端服务镜像
-  ```
-
-##### 3. 执行部署：
-
-- 确保所有资源包和配置文件已正确放置。
-- 运行以下命令以启动部署：
-  ```
-  chmod +x ./deploy.sh && sudo ./deploy.sh
-  ```
-
-通过这些步骤，您可以在中国国内环境中顺利部署项目，避免网络限制带来的问题。
-
-## 贡献与许可
+## 🤝 贡献与许可
 
 * 原作者：Sara (POETIZE最美博客)
 * Fork版本开发：LeapYa
 * 开源协议：遵循原项目AGPL协议
 
-## 开发指南
+## 💻 开发指南
 
 ### 环境要求
 
@@ -693,14 +551,14 @@ Python服务提供以下关键功能：
 * **应用配置** - Java和Python各自配置文件
 * **敏感数据** - 密码、密钥不应提交，使用.gitignore或环境变量
 
-## 技术栈
+## 🛠️ 技术栈
 
 * **前端** - Vue2/Vue3、Element UI、Socket.io、Live2D
 * **后端** - Spring Boot、MyBatis Plus、Fastapi、OAuth2.0
 * **数据库** - MariaDB 11（兼容MySQL 5.7）
 * **部署** - Docker、Docker Compose、Nginx、Shell脚本
 
-## 联系方式
+## 📧 联系方式
 
 * **邮箱** - enable_lazy@qq.com 或 hi@leapya.com
 * **问题反馈** - [GitHub Issues](https://github.com/LeapYa/Awesome-poetize-open/issues)
