@@ -69,35 +69,17 @@ export default function () {
       });
   }
 
-  // 🆕 新增：从localStorage中移除群聊相关数据的函数
+  // 从前端列表中移除群聊（聊天列表从后端同步，不需要操作localStorage）
   function removeGroupFromLocalStorage(groupId) {
     try {
-      // 1. 从群聊列表中移除
-      const currentGroupChats = JSON.parse(localStorage.getItem('groupChats') || '[]');
+      // 从Vuex store中移除群聊
+      const currentGroupChats = store.state.groupChats || [];
       const updatedGroupChats = currentGroupChats.filter(chatGroupId => chatGroupId !== groupId);
-      localStorage.setItem('groupChats', JSON.stringify(updatedGroupChats));
-      
-      // 2. 删除群聊消息记录
-      const groupMessages = JSON.parse(localStorage.getItem('groupMessages') || '{}');
-      if (groupMessages[groupId]) {
-        delete groupMessages[groupId];
-        localStorage.setItem('groupMessages', JSON.stringify(groupMessages));
-      }
-      
-      // 3. 删除群聊未读消息数
-      const groupMessageBadge = JSON.parse(localStorage.getItem('groupMessageBadge') || '{}');
-      if (groupMessageBadge[groupId]) {
-        delete groupMessageBadge[groupId];
-        localStorage.setItem('groupMessageBadge', JSON.stringify(groupMessageBadge));
-      }
-      
-      // 4. 同步更新Vuex store
       store.commit('updateGroupChats', updatedGroupChats);
       
-      console.log(`✅ 已清理群聊 ${groupId} 的所有本地数据`);
-      
+      console.log(`✅ 已从列表移除群聊 ${groupId}`);
     } catch (error) {
-      console.error('清理群聊本地数据失败:', error);
+      console.error('移除群聊失败:', error);
     }
   }
 
@@ -150,19 +132,30 @@ export default function () {
       });
   }
 
-  // 🆕 新增：手动删除群聊列表项（不退群，只是从本地列表中移除）
+  // 手动删除群聊列表
   function removeGroupFromList(groupId) {
     dialog.warning({
       title: '确认删除',
-      content: '确定要从聊天列表中删除这个群聊吗？（不会退出群聊，只是从列表中移除）',
+      content: '确定要从聊天列表中删除这个群聊吗？（不会退出群聊，收到新消息时会重新出现）',
       positiveText: '确定',
       negativeText: '取消',
       onPositiveClick: () => {
-        removeGroupFromLocalStorage(groupId);
-        ElMessage({
-          message: "已从聊天列表中删除！",
-          type: 'success'
-        });
+        // 调用后端接口隐藏群聊
+        $http.post($constant.baseURL + "/imChatGroup/hideGroupChat", {groupId: groupId})
+          .then(() => {
+            // 从本地列表移除
+            removeGroupFromLocalStorage(groupId);
+            ElMessage({
+              message: "已从聊天列表中删除！",
+              type: 'success'
+            });
+          })
+          .catch((error) => {
+            ElMessage({
+              message: error.message || "删除失败",
+              type: 'error'
+            });
+          });
       }
     });
   }

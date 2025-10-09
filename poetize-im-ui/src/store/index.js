@@ -4,7 +4,13 @@ import {createStore} from 'vuex'
 function safeParseJSON(key, defaultValue = {}) {
   try {
     const item = localStorage.getItem(key);
-    return item ? JSON.parse(item) : defaultValue;
+    // 处理 null、undefined 或空字符串
+    if (!item || item === 'null' || item === 'undefined') {
+      return defaultValue;
+    }
+    const parsed = JSON.parse(item);
+    // 确保解析结果不是 null 或 undefined
+    return (parsed === null || parsed === undefined) ? defaultValue : parsed;
   } catch (error) {
     console.warn(`解析localStorage中的${key}失败:`, error);
     return defaultValue;
@@ -31,7 +37,7 @@ function safeSaveToStorage(key, data) {
   }
 }
 
-// 清理旧的聊天数据
+// 清理旧的聊天数据（只清理消息缓存，聊天列表从后端同步）
 function cleanOldChatData() {
   const keysToClean = ['imMessages', 'groupMessages'];
   keysToClean.forEach(key => {
@@ -50,6 +56,11 @@ function cleanOldChatData() {
       console.error(`清理${key}失败:`, error);
     }
   });
+  
+  // 清理已废弃的聊天列表和未读数缓存
+  ['imChats', 'groupChats', 'imMessageBadge', 'groupMessageBadge'].forEach(key => {
+    localStorage.removeItem(key);
+  });
 }
 
 export default createStore({
@@ -58,13 +69,13 @@ export default createStore({
     sysConfig: safeParseJSON("sysConfig", {}),
     onlineUserCount: {},  // 存储各群组的在线用户数 {groupId: count}
     
-    // 聊天相关数据持久化
-    imChats: safeParseJSON("imChats", []),           // 私聊列表
-    groupChats: safeParseJSON("groupChats", []),     // 群聊列表
-    imMessages: safeParseJSON("imMessages", {}),     // 私聊消息
-    groupMessages: safeParseJSON("groupMessages", {}), // 群聊消息
-    imMessageBadge: safeParseJSON("imMessageBadge", {}), // 私聊未读数
-    groupMessageBadge: safeParseJSON("groupMessageBadge", {}) // 群聊未读数
+    // 聊天相关数据（聊天列表从后端获取，不再持久化到localStorage）
+    imChats: [],           // 私聊列表（从后端同步）
+    groupChats: [],        // 群聊列表（从后端同步）
+    imMessages: safeParseJSON("imMessages", {}),     // 私聊消息（临时缓存）
+    groupMessages: safeParseJSON("groupMessages", {}), // 群聊消息（临时缓存）
+    imMessageBadge: {},    // 私聊未读数（从后端同步）
+    groupMessageBadge: {}  // 群聊未读数（从后端同步）
   },
   getters: {},
   mutations: {
@@ -80,14 +91,12 @@ export default createStore({
       state.onlineUserCount[groupId] = count;
     },
     
-    // 聊天列表相关mutations
+    // 聊天列表相关mutations（不再持久化到localStorage，从后端同步）
     updateImChats(state, chats) {
       state.imChats = [...chats];
-      safeSaveToStorage("imChats", state.imChats);
     },
     updateGroupChats(state, chats) {
       state.groupChats = [...chats];
-      safeSaveToStorage("groupChats", state.groupChats);
     },
     
     // 消息相关mutations
@@ -122,23 +131,21 @@ export default createStore({
       safeSaveToStorage("groupMessages", state.groupMessages);
     },
     
-    // 未读消息数相关mutations
+    // 未读消息数相关mutations（不再持久化到localStorage，从后端同步）
     updateImMessageBadge(state, {friendId, count}) {
       state.imMessageBadge = {
         ...state.imMessageBadge,
         [friendId]: count
       };
-      safeSaveToStorage("imMessageBadge", state.imMessageBadge);
     },
     updateGroupMessageBadge(state, {groupId, count}) {
       state.groupMessageBadge = {
         ...state.groupMessageBadge,
         [groupId]: count
       };
-      safeSaveToStorage("groupMessageBadge", state.groupMessageBadge);
     },
     
-    // 清空所有聊天数据
+    // 清空所有聊天数据（聊天列表和未读数从后端获取，只清理消息缓存）
     clearAllChatData(state) {
       state.imChats = [];
       state.groupChats = [];
@@ -147,18 +154,16 @@ export default createStore({
       state.imMessageBadge = {};
       state.groupMessageBadge = {};
       
-      // 清除localStorage中的数据
-      const keysToRemove = ['imChats', 'groupChats', 'imMessages', 'groupMessages', 'imMessageBadge', 'groupMessageBadge'];
+      // 只清除消息缓存的localStorage
+      const keysToRemove = ['imMessages', 'groupMessages'];
       keysToRemove.forEach(key => {
         localStorage.removeItem(key);
       });
     }
   },
   actions: {
-    // 批量更新聊天数据
-    updateChatData({commit}, {imChats, groupChats, imMessages, groupMessages, imMessageBadge, groupMessageBadge}) {
-      if (imChats !== undefined) commit('updateImChats', imChats);
-      if (groupChats !== undefined) commit('updateGroupChats', groupChats);
+    // 批量更新聊天数据（聊天列表和未读数从WebSocket同步，不需要批量更新）
+    updateChatData({commit}, {imMessages, groupMessages}) {
       if (imMessages !== undefined) {
         Object.keys(imMessages).forEach(friendId => {
           commit('updateImMessages', {friendId, messages: imMessages[friendId]});
@@ -167,16 +172,6 @@ export default createStore({
       if (groupMessages !== undefined) {
         Object.keys(groupMessages).forEach(groupId => {
           commit('updateGroupMessages', {groupId, messages: groupMessages[groupId]});
-        });
-      }
-      if (imMessageBadge !== undefined) {
-        Object.keys(imMessageBadge).forEach(friendId => {
-          commit('updateImMessageBadge', {friendId, count: imMessageBadge[friendId]});
-        });
-      }
-      if (groupMessageBadge !== undefined) {
-        Object.keys(groupMessageBadge).forEach(groupId => {
-          commit('updateGroupMessageBadge', {groupId, count: groupMessageBadge[groupId]});
         });
       }
     }

@@ -4,10 +4,12 @@ import com.alibaba.fastjson.JSON;
 import com.baomidou.mybatisplus.extension.conditions.query.LambdaQueryChainWrapper;
 import com.ld.poetry.entity.User;
 import com.ld.poetry.im.http.entity.ImChatGroupUser;
+import com.ld.poetry.im.http.entity.ImChatLastRead;
 import com.ld.poetry.im.http.entity.ImChatUserGroupMessage;
 import com.ld.poetry.im.http.entity.ImChatUserMessage;
 import com.ld.poetry.im.http.service.ImChatGroupUserService;
 import com.ld.poetry.im.http.service.ImChatUserMessageService;
+import com.ld.poetry.im.http.service.ImChatLastReadService;
 import com.ld.poetry.service.CacheService;
 import com.ld.poetry.utils.CommonQuery;
 import com.ld.poetry.utils.StringUtil;
@@ -27,7 +29,9 @@ import org.tio.websocket.server.handler.IWsMsgHandler;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Component
 @Slf4j
@@ -38,6 +42,9 @@ public class ImWsMsgHandler implements IWsMsgHandler {
 
     @Autowired
     private ImChatUserMessageService imChatUserMessageService;
+
+    @Autowired
+    private ImChatLastReadService imChatLastReadService;
 
     @Autowired
     private MessageCache messageCache;
@@ -157,9 +164,7 @@ public class ImWsMsgHandler implements IWsMsgHandler {
                     .orderByAsc(ImChatUserMessage::getCreateTime).list();
 
             if (!CollectionUtils.isEmpty(userMessages)) {
-                List<Long> ids = new ArrayList<>();
                 userMessages.forEach(userMessage -> {
-                    ids.add(userMessage.getId());
                     ImMessage imMessage = new ImMessage();
                     imMessage.setContent(userMessage.getContent());
                     imMessage.setFromId(userMessage.getFromId());
@@ -172,8 +177,10 @@ public class ImWsMsgHandler implements IWsMsgHandler {
                     WsResponse wsResponse = WsResponse.fromText(JSON.toJSONString(imMessage), ImConfigConst.CHARSET);
                     Tio.sendToUser(channelContext.tioConfig, userMessage.getToId().toString(), wsResponse);
                 });
-                imChatUserMessageService.lambdaUpdate().in(ImChatUserMessage::getId, ids)
-                        .set(ImChatUserMessage::getMessageStatus, ImConfigConst.USER_MESSAGE_STATUS_TRUE).update();
+                
+                // ❌ 不再立即标记为已读！改为用户进入聊天时才标记
+                // imChatUserMessageService.lambdaUpdate().in(ImChatUserMessage::getId, ids)
+                //         .set(ImChatUserMessage::getMessageStatus, ImConfigConst.USER_MESSAGE_STATUS_TRUE).update();
             }
         } catch (Exception e) {
             log.error("处理用户未读消息时发生错误 - userId: {}", user.getId(), e);
@@ -192,6 +199,29 @@ public class ImWsMsgHandler implements IWsMsgHandler {
             }
         } catch (Exception e) {
             log.error("绑定用户群组时发生错误 - userId: {}", user.getId(), e);
+        }
+
+        // 推送聊天列表、私聊和群聊的未读消息数
+        try {
+            List<Integer> friendChatList = imChatLastReadService.getFriendChatList(user.getId());
+            List<Integer> groupChatList = imChatLastReadService.getGroupChatList(user.getId());
+            Map<Integer, Integer> friendUnreadCounts = imChatLastReadService.getFriendUnreadCounts(user.getId());
+            Map<Integer, Integer> groupUnreadCounts = imChatLastReadService.getGroupUnreadCounts(user.getId());
+            
+            // 构造未读数和聊天列表消息
+            Map<String, Object> syncMessage = new HashMap<>();
+            syncMessage.put("messageType", 5); // 5表示同步消息（未读数+聊天列表）
+            syncMessage.put("friendChatList", friendChatList);
+            syncMessage.put("groupChatList", groupChatList);
+            syncMessage.put("friendUnreadCounts", friendUnreadCounts);
+            syncMessage.put("groupUnreadCounts", groupUnreadCounts);
+            
+            WsResponse wsResponse = WsResponse.fromText(JSON.toJSONString(syncMessage), ImConfigConst.CHARSET);
+            Tio.sendToUser(channelContext.tioConfig, user.getId().toString(), wsResponse);
+            log.debug("推送聊天数据成功 - userId: {}, 好友列表: {}, 群聊列表: {}, 好友未读: {}, 群聊未读: {}", 
+                user.getId(), friendChatList, groupChatList, friendUnreadCounts, groupUnreadCounts);
+        } catch (Exception e) {
+            log.error("推送聊天数据失败 - userId: {}", user.getId(), e);
         }
     }
 
@@ -229,6 +259,10 @@ public class ImWsMsgHandler implements IWsMsgHandler {
                 userMessage.setContent(imMessage.getContent());
                 userMessage.setCreateTime(LocalDateTime.now());
 
+                // 自动取消隐藏（发送者和接收者）
+                imChatLastReadService.unhideChat(imMessage.getFromId(), ImChatLastRead.CHAT_TYPE_FRIEND, imMessage.getToId());
+                imChatLastReadService.unhideChat(imMessage.getToId(), ImChatLastRead.CHAT_TYPE_FRIEND, imMessage.getFromId());
+
                 SetWithLock<ChannelContext> setWithLock = Tio.getByUserid(channelContext.tioConfig, imMessage.getToId().toString());
                 if (setWithLock != null && setWithLock.size() > 0) {
                     Tio.sendToUser(channelContext.tioConfig, imMessage.getToId().toString(), wsResponse);
@@ -246,6 +280,9 @@ public class ImWsMsgHandler implements IWsMsgHandler {
                 groupMessage.setGroupId(imMessage.getGroupId());
                 groupMessage.setCreateTime(LocalDateTime.now());
                 messageCache.putGroupMessage(groupMessage);
+
+                // 🆕 自动取消隐藏（发送者）
+                imChatLastReadService.unhideChat(imMessage.getFromId(), ImChatLastRead.CHAT_TYPE_GROUP, imMessage.getGroupId());
 
                 SetWithLock<ChannelContext> setWithLock = Tio.getByGroup(channelContext.tioConfig, imMessage.getGroupId().toString());
                 if (setWithLock != null && setWithLock.size() > 0) {

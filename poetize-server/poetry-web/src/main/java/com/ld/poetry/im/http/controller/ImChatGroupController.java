@@ -14,6 +14,7 @@ import com.ld.poetry.im.http.entity.ImChatUserGroupMessage;
 import com.ld.poetry.im.http.service.ImChatGroupService;
 import com.ld.poetry.im.http.service.ImChatGroupUserService;
 import com.ld.poetry.im.http.service.ImChatUserGroupMessageService;
+import com.ld.poetry.im.http.service.ImChatLastReadService;
 import com.ld.poetry.im.http.vo.GroupVO;
 import com.ld.poetry.im.websocket.ImConfigConst;
 import com.ld.poetry.im.websocket.TioUtil;
@@ -56,6 +57,9 @@ public class ImChatGroupController {
 
     @Autowired
     private ImChatUserGroupMessageService imChatUserGroupMessageService;
+
+    @Autowired
+    private ImChatLastReadService imChatLastReadService;
 
     /**
      * 创建群组
@@ -274,6 +278,108 @@ public class ImChatGroupController {
         } catch (Exception e) {
             log.error("获取群组在线用户数失败，groupId: {}", groupId, e);
             return PoetryResult.fail("服务器内部错误，请稍后重试");
+        }
+    }
+
+    /**
+     * 获取所有群的未读消息数
+     */
+    @GetMapping("/getGroupUnreadCounts")
+    @LoginCheck
+    public PoetryResult<Map<Integer, Integer>> getGroupUnreadCounts() {
+        try {
+            Integer userId = PoetryUtil.getUserId();
+            Map<Integer, Integer> unreadCounts = imChatLastReadService.getGroupUnreadCounts(userId);
+            log.debug("用户 {} 获取群聊未读数: {}", userId, unreadCounts);
+            return PoetryResult.success(unreadCounts);
+        } catch (Exception e) {
+            log.error("获取群聊未读数失败", e);
+            return PoetryResult.fail("获取未读消息数失败");
+        }
+    }
+
+    /**
+     * 标记群消息为已读
+     */
+    @PostMapping("/markGroupAsRead")
+    @LoginCheck
+    public PoetryResult markGroupAsRead(@RequestParam("groupId") Integer groupId) {
+        try {
+            Integer userId = PoetryUtil.getUserId();
+            imChatLastReadService.markGroupAsRead(userId, groupId);
+            log.debug("用户 {} 标记群 {} 消息为已读", userId, groupId);
+            return PoetryResult.success();
+        } catch (Exception e) {
+            log.error("标记群消息为已读失败 - userId: {}, groupId: {}", PoetryUtil.getUserId(), groupId, e);
+            return PoetryResult.fail("标记已读失败");
+        }
+    }
+
+    /**
+     * 获取所有好友的未读消息数
+     */
+    @GetMapping("/getFriendUnreadCounts")
+    @LoginCheck
+    public PoetryResult<Map<Integer, Integer>> getFriendUnreadCounts() {
+        try {
+            Integer userId = PoetryUtil.getUserId();
+            Map<Integer, Integer> unreadCounts = imChatLastReadService.getFriendUnreadCounts(userId);
+            log.debug("用户 {} 获取好友未读数: {}", userId, unreadCounts);
+            return PoetryResult.success(unreadCounts);
+        } catch (Exception e) {
+            log.error("获取好友未读数失败", e);
+            return PoetryResult.fail("获取未读消息数失败");
+        }
+    }
+
+    /**
+     * 标记好友消息为已读
+     */
+    @PostMapping("/markFriendAsRead")
+    @LoginCheck
+    public PoetryResult markFriendAsRead(@RequestParam("friendId") Integer friendId) {
+        try {
+            Integer userId = PoetryUtil.getUserId();
+            imChatLastReadService.markFriendAsRead(userId, friendId);
+            log.debug("用户 {} 标记好友 {} 消息为已读", userId, friendId);
+            return PoetryResult.success();
+        } catch (Exception e) {
+            log.error("标记好友消息为已读失败 - userId: {}, friendId: {}", PoetryUtil.getUserId(), friendId, e);
+            return PoetryResult.fail("标记已读失败");
+        }
+    }
+
+    /**
+     * 隐藏好友聊天（从列表中删除，但不删除好友）
+     */
+    @PostMapping("/hideFriendChat")
+    @LoginCheck
+    public PoetryResult hideFriendChat(@RequestParam("friendId") Integer friendId) {
+        try {
+            Integer userId = PoetryUtil.getUserId();
+            imChatLastReadService.hideFriendChat(userId, friendId);
+            log.debug("用户 {} 隐藏好友 {} 的聊天", userId, friendId);
+            return PoetryResult.success();
+        } catch (Exception e) {
+            log.error("隐藏好友聊天失败 - userId: {}, friendId: {}", PoetryUtil.getUserId(), friendId, e);
+            return PoetryResult.fail("隐藏聊天失败");
+        }
+    }
+
+    /**
+     * 隐藏群聊（从列表中删除，但不退群）
+     */
+    @PostMapping("/hideGroupChat")
+    @LoginCheck
+    public PoetryResult hideGroupChat(@RequestParam("groupId") Integer groupId) {
+        try {
+            Integer userId = PoetryUtil.getUserId();
+            imChatLastReadService.hideGroupChat(userId, groupId);
+            log.debug("用户 {} 隐藏群 {} 的聊天", userId, groupId);
+            return PoetryResult.success();
+        } catch (Exception e) {
+            log.error("隐藏群聊失败 - userId: {}, groupId: {}", PoetryUtil.getUserId(), groupId, e);
+            return PoetryResult.fail("隐藏聊天失败");
         }
     }
 

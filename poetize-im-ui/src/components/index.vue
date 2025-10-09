@@ -149,7 +149,7 @@
                    @touchend="handleTouchEnd($event, item)"
                    @contextmenu="handleContextMenu($event, item)">
                 <div>
-                  <n-badge :value="groupMessageBadge[item]" :max="99">
+                  <n-badge :value="(groupMessageBadge || {})[item] || 0" :show-zero="false" :max="99">
                     <n-avatar object-fit="cover"
                               lazy
                               :size="40"
@@ -171,7 +171,7 @@
                    v-show="friends[item].remark.includes(showFriendValue) || $common.isEmpty(showFriendValue)"
                    @click="isActive($event, 'im-active', null, 2, item, 2)">
                 <div>
-                  <n-badge :value="imMessageBadge[item]" :max="99">
+                  <n-badge :value="(imMessageBadge || {})[item] || 0" :show-zero="false" :max="99">
                     <n-avatar object-fit="cover"
                               lazy
                               :size="40"
@@ -743,6 +743,39 @@
             return;
           }
           
+          // 处理同步消息（聊天列表+未读数）
+          if (message.messageType === 5) {
+            console.log('[WebSocket] 收到同步数据 - 好友列表:', message.friendChatList, '群聊列表:', message.groupChatList, 
+                        '好友未读:', message.friendUnreadCounts, '群聊未读:', message.groupUnreadCounts);
+            
+            // 更新私聊列表
+            if (message.friendChatList && Array.isArray(message.friendChatList)) {
+              store.commit('updateImChats', message.friendChatList);
+            }
+            
+            // 更新群聊列表
+            if (message.groupChatList && Array.isArray(message.groupChatList)) {
+              store.commit('updateGroupChats', message.groupChatList);
+            }
+            
+            // 批量更新好友未读数
+            if (message.friendUnreadCounts) {
+              Object.keys(message.friendUnreadCounts).forEach(friendId => {
+                const count = message.friendUnreadCounts[friendId];
+                store.commit('updateImMessageBadge', {friendId: parseInt(friendId), count});
+              });
+            }
+            
+            // 批量更新群聊未读数
+            if (message.groupUnreadCounts) {
+              Object.keys(message.groupUnreadCounts).forEach(groupId => {
+                const count = message.groupUnreadCounts[groupId];
+                store.commit('updateGroupMessageBadge', {groupId: parseInt(groupId), count});
+              });
+            }
+            return;
+          }
+          
           if (message.messageType === 1) {
             if (message.fromId === store.state.currentUser.id && (friendData.friends[message.toId] !== null && friendData.friends[message.toId] !== undefined)) {
               // 添加消息到store
@@ -759,6 +792,9 @@
               
               isActive(document.getElementsByClassName('im-user-current')[0], 'im-active', null, 2, message.toId, 2);
             } else if (message.fromId !== store.state.currentUser.id && (friendData.friends[message.fromId] !== null && friendData.friends[message.fromId] !== undefined)) {
+              // 添加消息到store
+              store.commit('addImMessage', {friendId: message.fromId, message});
+              
               // 更新聊天列表顺序
               const currentChats = [...imChats.value];
               const existingIndex = currentChats.indexOf(message.fromId);
@@ -767,9 +803,6 @@
               }
               currentChats.unshift(message.fromId);
               store.commit('updateImChats', currentChats);
-              
-              // 添加消息到store
-              store.commit('addImMessage', {friendId: message.fromId, message});
 
               if (data.subType !== 2 || data.currentChatFriendId !== message.fromId) {
                 // 更新未读消息数
@@ -796,9 +829,12 @@
             // 添加群消息到store
             store.commit('addGroupMessage', {groupId: message.groupId, message});
 
+            // 检查该群是否在聊天列表中（可能被隐藏了）
+            const currentChats = [...groupChats.value];
+            const isInList = currentChats.includes(message.groupId);
+            
             if(message.fromId === store.state.currentUser.id || !groupMessages.value[message.groupId]) {
               // 更新群聊列表顺序
-              const currentChats = [...groupChats.value];
               const existingIndex = currentChats.indexOf(message.groupId);
               if (existingIndex > -1) {
                 currentChats.splice(existingIndex, 1);
@@ -807,6 +843,10 @@
               store.commit('updateGroupChats', currentChats);
               
               isActive(document.getElementsByClassName('im-group-current')[0], 'im-active', null, 2, message.groupId, 1);
+            } else if (!isInList) {
+              // 群不在列表中（被隐藏），自动取消隐藏并添加到列表顶部
+              currentChats.unshift(message.groupId);
+              store.commit('updateGroupChats', currentChats);
             }
 
             if ((data.subType !== 2 || data.currentChatGroupId !== message.groupId) && message.fromId !== store.state.currentUser.id) {
@@ -904,6 +944,11 @@
               data.currentChatGroupId = current;
               // 清零群聊未读消息数
               store.commit('updateGroupMessageBadge', {groupId: current, count: 0});
+              // 调用后端接口标记群消息为已读
+              $http.post($constant.baseURL + "/imChatGroup/markGroupAsRead", {groupId: current})
+                .catch(error => {
+                  console.warn('标记群消息已读失败:', error);
+                });
               console.log(`[${$common.mobile() ? '移动端' : 'PC端'}] 设置当前群聊ID: ${current}`);
               // 获取群组消息和在线人数
               getGroupMessages(current);
@@ -913,10 +958,15 @@
                 addGroupTopic();
               }
             } else if (imType === 2) {
-              data.currentChatGroupId = null;                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
+              data.currentChatGroupId = null;                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       
               data.currentChatFriendId = current;
               // 清零私聊未读消息数
               store.commit('updateImMessageBadge', {friendId: current, count: 0});
+              // 调用后端接口标记好友消息为已读
+              $http.post($constant.baseURL + "/imChatGroup/markFriendAsRead", {friendId: current})
+                .catch(error => {
+                  console.warn('标记好友消息已读失败:', error);
+                });
               console.log(`[${$common.mobile() ? '移动端' : 'PC端'}] 设置当前好友ID: ${current}`);
               // 获取好友消息
               getMessages(current);
