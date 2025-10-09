@@ -1,5 +1,3 @@
-import ReconnectingWebSocket from 'reconnecting-websocket';
-
 /**
  * @param {*} ws_protocol wss or ws
  * @param {*} ip
@@ -25,16 +23,8 @@ export default function (ws_protocol, ip, port, paramStr, binaryType) {
   }
 
   this.connect = () => {
-    let ws = new ReconnectingWebSocket(this.url, [], {
-      connectionTimeout: 8000,        // 增加连接超时时间，适应较差网络环境
-      maxRetries: 10,                 // 增加重试次数，提高连接成功率
-      reconnectInterval: 2000,        // 适中的重连间隔
-      maxReconnectInterval: 30000,    // 最大重连间隔30秒
-      reconnectDecay: 1.5,           // 重连延迟增长倍数
-      timeoutInterval: 3000,         // 增加超时间隔
-      maxReconnectAttempts: 10,      // 增加最大重连尝试次数
-      debug: false
-    });
+    // 使用原生WebSocket，重连逻辑由im.js中的自定义逻辑处理
+    let ws = new WebSocket(this.url);
     this.ws = ws;
     ws.binaryType = this.binaryType;
 
