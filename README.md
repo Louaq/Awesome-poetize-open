@@ -56,7 +56,7 @@
 2. ✅ 后台权限管理 —— 支持多角色分级管理，提升安全性
 3. ✅ 多邮箱服务支持 —— 可配置多邮箱，提升邮件送达率
 4. ✅ 第三方登录集成 —— 支持GitHub、Google、Twitter、Yandex、Gitee平台登录
-5. ✅ 机器人验证功能 —— 集成滑动验证码，防止恶意注册
+5. ✅ 机器人验证功能 —— 集成点选、滑动验证码，防止恶意注册
 6. ✅ SEO优化与预渲染 —— 自动生成sitemap、robots.txt及页面预渲染，极大提升搜索引擎收录与SEO效果
 7. ✅ 看板娘优化 —— Live2D看板娘可自定义、支持AI互动
 8. ✅ 导航栏优化 —— 支持自定义导航栏，布局更美观
@@ -101,9 +101,9 @@ bash <(curl -sL install.leapya.com)
 #### 服务器配置要求
 
 **基础配置：**
-- **操作系统**：Ubuntu 18.04+、Debian 10+ 或 CentOS 7/8+（推荐）
-- **CPU/内存**：1核+ / 2GB+（2GB内存会自动配置交换空间）
-- **硬盘空间**：30GB+（最少预留10GB）
+- **操作系统**：Ubuntu 18.04+、Debian 10+ 或 CentOS 7/8+
+- **CPU/内存**：1核+ / 1GB+ (1核1G在部署时可能会部署失败)
+- **硬盘空间**：15GB+
 - **带宽选择**：建议5M以上
 - **网络配置**：将域名解析到服务器IP，并开放80和443端口
 
@@ -116,7 +116,7 @@ bash <(curl -sL install.leapya.com)
 | CentOS 7/8+ x64       | 1核+ | 1G+  | 30GB | ✅ 推荐   |
 | Windows Server/桌面版 | -    | -    | -    | ❌ 不支持 |
 
-> **其他支持的系统**：RHEL、Rocky Linux、AlmaLinux、Fedora、Amazon Linux、阿里云/腾讯云 Linux、麒麟、统信UOS、Deepin、openEuler、Alpine、Arch Linux、openSUSE等主流Linux发行版均已测试通过。CentOS 6.x及更早版本不支持。
+> **其他支持的系统**：RHEL、Rocky Linux、AlmaLinux、Fedora、Amazon Linux、阿里云/腾讯云 Linux、麒麟、统信UOS、Deepin、openEuler、Alpine、Arch Linux、openSUSE等主流Linux发行版均已测试通过。
 
 
 ### 2.运行一键安装脚本
@@ -159,9 +159,10 @@ git clone https://github.com/LeapYa/Awesome-poetize-open.git && sudo chmod +x de
 2. 重命名为 `font.ttf`
 3. 安装依赖：`pip install -r requirements.txt`
 4. 执行：`python font_subset.py`
-5. 将生成的 `font_chunks/` 下所有文件复制到：
+5. 将生成的 `font_chunks/` 目录复制到：
    - `poetize-ui/public/assets/`
    - `poetize-ui/public/static/assets/`
+6. 重启前端服务
 
 **方法2：单一字体模式**
 1. 在后台管理 → 配置管理中，设置"使用单一字体文件"为 `true`
@@ -196,7 +197,7 @@ docker compose up -d
 # HTTPS手动配置
 docker exec poetize-nginx /enable-https.sh
 
-# 升级项目
+# 升级项目（全量更新，不管项目有没有更新）
 poetize -update
 
 # 迁移博客
@@ -216,6 +217,8 @@ poetize -qy
    * 域名解析验证
    * 80端口访问性
    * 证书目录权限
+
+更多详见[开发排障指南](#开发排障指南)
 
 ### 7.高级功能
 
@@ -237,7 +240,7 @@ poetize -qy
 
 * **Node.js 14+** - 前端开发
 * **JDK 21** - Java后端开发
-* **Maven/Gradle** - Java项目构建
+* **Maven 3.6+** - Java项目构建
 * **Python 3.9+** - Python后端开发
 * **Docker & Compose** - 容器化部署
 * **Git** - 版本控制
@@ -250,13 +253,16 @@ poetize -qy
 项目主要目录结构（点击展开完整结构）
 
 ```
-├── deploy.sh                # 部署脚本
-├── docker-compose.yml       # docker服务编排文件
-├── poetize-im-ui/           # 聊天室UI (Vue3)
-├── poetize-server/          # Java后端
-├── poetize-ui/              # 博客系统UI (Vue2)
-├── py/                      # Python服务
-├── split_font/              # 分割字体文件目录
+├── poetize                  # 全局管理命令（升级、迁移、日志等）
+├── deploy.sh                # 一键部署脚本
+├── migrate.sh               # 博客迁移脚本
+├── docker-compose.yml       # Docker服务编排文件
+├── docker/                  # Docker构建配置目录
+├── poetize-server/          # Java后端（Spring Boot 3.2 + Java 21）
+├── poetize-ui/              # 博客前端（Vue2）
+├── poetize-im-ui/           # 聊天室前端（Vue3）
+├── py/                      # Python后端服务（FastAPI）
+├── split_font/              # 字体分割工具
 └── README.md                # 项目文档
 ```
 
@@ -264,83 +270,82 @@ poetize -qy
 
 ```
 .
-├── deploy.sh                # 部署脚本
-├── docker-compose.yml       # 服务编排
-├── mysql/                   # MySQL配置
-├── nginx/                   # Nginx配置
-├── poetize-im-ui/           # 聊天室UI (Vue3)
-│   ├── package.json         # 聊天室依赖配置
-│   ├── package-lock.json    # 聊天室依赖版本锁定文件
-│   └── src/                 # 聊天室源代码
-│       ├── assets/          # 静态资源
-│       ├── components/      # UI组件
-│       ├── router/          # 路由配置
-│       ├── store/           # 状态管理
-│       ├── utils/           # 工具类
-│       │   ├── font-loader.js  # 字体动态加载器
-│       │   ├── common.js       # 通用工具
-│       │   └── request.js      # 请求封装
-│       └── main.js          # 主入口
-├── poetize-server/          # Java后端
-│   ├── pom.xml              # 主项目Maven配置
-│   ├── package.json         # 依赖配置
-│   ├── package-lock.json    # 依赖版本锁定文件
-│   ├── sql/                 # SQL脚本目录
-│   │   ├── poetry.sql       # 数据库初始化脚本
-│   │   └── update_nav_config.sql # 导航配置更新脚本
+├── poetize                  # 全局管理命令（安装后可全局使用）
+├── deploy.sh                # 一键部署脚本
+├── migrate.sh               # 博客迁移脚本
+├── docker-compose.yml       # Docker服务编排配置
+├── docker/                  # Docker构建文件
+│   ├── java/                # Java服务Docker配置
+│   ├── mysql/               # MariaDB配置
+│   │   ├── Dockerfile
+│   │   └── conf/my.cnf
+│   ├── nginx/               # Nginx配置
+│   │   ├── Dockerfile
+│   │   ├── nginx.conf
+│   │   └── default.conf
+│   ├── python/              # Python服务Docker配置
+│   ├── redis/               # Redis配置
+│   ├── poetize-ui/          # 前端UI Docker配置
+│   └── poetize-im-ui/       # 聊天室UI Docker配置
+├── poetize-server/          # Java后端服务（Spring Boot 3.2 + Java 21）
+│   ├── pom.xml              # Maven主配置文件
+│   ├── settings.xml         # Maven仓库配置
+│   ├── sql/                 # 数据库脚本
+│   │   ├── poetry.sql       # 生产环境初始化脚本（多引擎优化）
+│   │   ├── poetry_old.sql   # 开发环境初始化脚本（InnoDB）
+│   │   └── *.sql            # 其他数据库迁移脚本
 │   └── poetry-web/          # Web模块
 │       ├── pom.xml          # Web模块Maven配置
-│       ├── src/             # Java源代码目录
-│       ├── config/          # 配置文件目录 
-│       └── data/            # 数据文件目录
-├── poetize-ui/              # 博客系统UI (Vue2)
-│   ├── package.json         # 博客UI依赖配置
-│   ├── package-lock.json    # 博客UI依赖版本锁定文件
-│   └── src/                 # 博客UI源代码
-│       ├── assets/          # 静态资源
-│       │   ├── css/         # 样式文件
-│       │   │   └── index.css # 主样式
-│       ├── components/      # UI组件
+│       └── src/             # Java源代码
+│           ├── main/
+│           │   ├── java/    # Java源文件
+│           │   └── resources/ # 配置文件
+│           └── test/        # 测试代码
+├── poetize-ui/              # 博客前端（Vue2）
+│   ├── package.json         # npm依赖配置
+│   ├── vue.config.js        # Vue CLI配置
+│   ├── public/              # 静态资源
+│   └── src/                 # 源代码
+│       ├── components/      # Vue组件
 │       ├── router/          # 路由配置
-│       ├── store/           # 状态管理
+│       ├── store/           # Vuex状态管理
 │       ├── utils/           # 工具类
-│       │   ├── font-loader.js  # 字体动态加载器
-│       │   ├── common.js       # 通用工具
-│       │   └── request.js      # 请求封装
-│       └── main.js          # 主入口
-├── py/                      # Python服务
-│   ├── main.py              # Python主应用入口
-│   ├── config.py            # 配置文件处理
-│   ├── auth_decorator.py    # 认证装饰器
+│       └── views/           # 页面视图
+├── poetize-im-ui/           # 聊天室前端（Vue3）
+│   ├── package.json         # npm依赖配置
+│   ├── vue.config.js        # Vue CLI配置
+│   ├── public/              # 静态资源
+│   └── src/                 # 源代码
+│       ├── components/      # Vue组件
+│       ├── router/          # 路由配置
+│       ├── store/           # Vuex状态管理
+│       └── utils/           # 工具类
+├── py/                      # Python后端服务（FastAPI）
+│   ├── main.py              # FastAPI主应用入口
+│   ├── server.py            # 服务器启动脚本
+│   ├── requirements.txt     # Python依赖列表
+│   ├── config.py            # 配置管理
+│   ├── ai_chat_api.py       # AI聊天接口
 │   ├── captcha_api.py       # 验证码服务
 │   ├── email_api.py         # 邮件服务
-│   ├── py_three_login.py    # 第三方登录
-│   ├── seo_api.py           # SEO优化服务
-│   ├── visit_stats_api.py   # 访问统计
-│   ├── web_admin_api.py     # 管理员API
-│   ├── data/                # 数据配置目录
-│   ├── requirements.txt     # Python依赖列表
-│   ├── static/              # 静态资源
-│   ├── translation_model/   # 机器翻译模型目录
-│   │   ├── translation_api.py     # 翻译API
-│   │   ├── translation_service.py # 翻译服务
-│   │   ├── models/          # 预训练模型目录
-│   │   ├── data/            # 翻译数据
-│   │   └── utils.py         # 工具函数
-│   └── third_login_config.json # 第三方登录配置
-├── split_font/              # 分割字体文件目录
-│   ├── font_chunks/         # 分块字体文件
-│   │   ├── font.base.woff2  # 基础字符字体
-│   │   ├── font.level1.woff2 # 一级常用汉字字体
-│   │   ├── font.level2.woff2 # 二级常用汉字字体
-│   │   └── font.other.woff2 # 其他字符字体
-│   └── unicode_ranges.json  # Unicode范围配置文件
+│   ├── translation_api.py   # 翻译服务
+│   ├── oauth/               # OAuth第三方登录
+│   │   ├── factory.py       # OAuth工厂类
+│   │   ├── providers/       # 各平台OAuth实现
+│   │   └── ...
+│   └── data/                # 配置数据文件
+├── split_font/              # 字体分割工具
+│   ├── font_subset.py       # 字体分割脚本
+│   ├── font.ttf             # 源字体文件
+│   ├── level-1.txt          # 一级常用字表
+│   ├── level-2.txt          # 二级常用字表
+│   └── font_chunks/         # 生成的分块字体文件
 └── README.md                # 项目文档
 ```
 
 </details>
 
-### 前端开发
+### 博客前端开发
 
 1. **更换测试环境的访问API(生产环境中需要更改回去)**
 
@@ -427,11 +432,117 @@ Python服务提供以下关键功能：
 
 ### 数据库
 
-* 系统默认使用MariaDB 11（完全兼容MySQL 5.7）
-* 参考docker-compose.yml中配置
-* 表结构变更建议使用迁移工具
+系统默认使用 **MariaDB 11**（完全兼容 MySQL 5.7），采用多种存储引擎优化不同场景下的性能表现。
 
-### 数据库选择说明
+#### 数据库初始化
+
+本项目在 `poetize-server/sql/` 目录提供两个初始化脚本，**表结构和数据完全相同**，仅存储引擎配置不同：
+
+- **poetry.sql** - 使用 InnoDB + Aria + RocksDB 多引擎优化，性能更优，需要 MariaDB 11+ 环境和安装存储引擎插件
+- **poetry_old.sql** - 仅使用 InnoDB 引擎，兼容 MySQL 5.7+ 和所有 MariaDB 版本
+
+**快速选择：**
+- 使用本项目 Docker 或 部署脚本 部署 → `poetry.sql`（默认，已配置好所有插件）
+- Windows 本地开发 + Docker Desktop → `poetry.sql`（推荐，环境一致）
+- 使用本地 MySQL/MariaDB → `poetry_old.sql`（无需插件，兼容性最好）
+
+**初始化命令：**
+
+```bash
+# Docker 环境（推荐）
+# 先获取数据库密码
+ROOT_PWD=$(grep "数据库ROOT密码:" .config/db_credentials.txt | cut -d':' -f2 | tr -d ' ')
+docker exec -i poetize-mariadb mariadb -uroot -p${ROOT_PWD} poetize < poetize-server/sql/poetry.sql
+
+# 本地数据库环境（使用自己设置的密码）
+mysql -uroot -p poetize < poetize-server/sql/poetry_old.sql
+```
+
+#### MariaDB 存储引擎插件安装
+
+如果你使用的是自己搭建的 MariaDB 环境（非本项目 Docker），需要手动安装存储引擎插件才能使用 `poetry.sql`。
+
+**1. RocksDB 存储引擎安装**
+
+RocksDB 是一个高性能的键值存储引擎，适合读写密集型应用（如聊天记录表）。
+
+```bash
+# Ubuntu/Debian 系统
+sudo apt-get update
+sudo apt-get install mariadb-plugin-rocksdb
+
+# CentOS/RHEL 系统
+sudo yum install MariaDB-rocksdb-engine
+
+# 或使用 dnf（较新的系统）
+sudo dnf install MariaDB-rocksdb-engine
+```
+
+安装后，在 MariaDB 配置文件中启用：
+
+```ini
+# /etc/mysql/conf.d/rocksdb.cnf 或 /etc/my.cnf.d/rocksdb.cnf
+[mysqld]
+plugin_load_add=rocksdb=ha_rocksdb.so
+```
+
+重启 MariaDB 服务：
+
+```bash
+sudo systemctl restart mariadb
+```
+
+验证安装：
+
+```sql
+-- 登录 MariaDB 后执行
+SHOW ENGINES;
+-- 应该能看到 ROCKSDB 引擎状态为 YES 或 DEFAULT
+```
+
+**2. Aria 存储引擎**
+
+Aria 是 MariaDB 的默认存储引擎之一（MyISAM 的改进版），**无需额外安装**，MariaDB 10.0+ 自带。
+
+**3. Docker 环境配置参考**
+
+本项目的 `docker/mysql/Dockerfile` 已经配置好所有存储引擎：
+
+```dockerfile
+FROM mariadb:11.8.2
+
+# 安装 RocksDB 插件
+RUN apt-get update && apt-get install -y mariadb-plugin-rocksdb && \
+    rm -rf /var/lib/apt/lists/*
+
+# 自动加载 RocksDB 引擎
+RUN echo "[mysqld]\nplugin_load_add=rocksdb=ha_rocksdb.so" > /etc/mysql/conf.d/rocksdb.cnf
+```
+
+**4. 存储引擎说明**
+
+| 存储引擎 | 用途 | 特点 | 是否需要安装 |
+|---------|------|------|------------|
+| **InnoDB** | 通用表（用户、文章等） | 事务支持、外键、行锁 | ❌ MariaDB/MySQL 自带 |
+| **Aria** | 静态数据表（分类、标签、配置等） | 高速读取、崩溃恢复 | ❌ MariaDB 10.0+ 自带 |
+| **RocksDB** | 高并发写入表（聊天记录、历史等） | LSM树结构、压缩存储 | ✅ 需手动安装插件 |
+
+**5. Windows/Linux 开发环境连接数据库**
+
+无论使用什么操作系统，开发环境推荐以下方式：
+
+```bash
+# 方案A：完整 Docker 环境（推荐，环境与生产一致）
+docker compose up -d mysql redis
+# 使用 poetry.sql - 包含所有存储引擎优化
+
+# 方案B：仅使用本地数据库（快速开发）
+# 本地安装 MariaDB/MySQL，使用 poetry_old.sql
+# 优点：数据库管理工具（如 Navicat）连接更方便
+# 缺点：缺少性能优化的存储引擎
+```
+
+#### 数据库选择说明
 
 本项目默认采用MariaDB 11作为数据库，而非MySQL 5.7。这是基于以下考虑：
 
@@ -541,6 +652,14 @@ Python服务提供以下关键功能：
    # 其他配置...
    ```
 
+7. **将poetry_old.sql覆盖poetry.sql（poetize-server/sql/）**
+
+   ```bash
+   rm -f poetry.sql
+   # 使用旧脚本（数据表一样，但mysql只能使用InnoDB存储引擎）
+   cp poetry_old.sql poetry.sql
+   ```
+
 这些修改完成后，系统将使用MySQL而非MariaDB作为数据库引擎。注意，MariaDB对MySQL的某些语法有扩展，如果您的SQL使用了这些扩展特性，切换时可能需要调整。
 
 ### 配置说明
@@ -550,6 +669,304 @@ Python服务提供以下关键功能：
 * **mysql/conf/my.cnf** - 数据库引擎设置
 * **应用配置** - Java和Python各自配置文件
 * **敏感数据** - 密码、密钥不应提交，使用.gitignore或环境变量
+
+### 部署方式
+
+本地开发完成后，修改代码并重建Docker镜像，使用 `deploy.sh` 脚本进行自动化部署。
+
+### 开发排障指南
+
+#### 前端常见问题
+
+**1. npm install 依赖安装失败**
+
+```bash
+# 问题：依赖冲突或版本不兼容
+# 解决：使用 --legacy-peer-deps 参数
+npm install --legacy-peer-deps
+
+# 或清除缓存重试
+npm cache clean --force
+rm -rf node_modules package-lock.json
+npm install --legacy-peer-deps
+```
+
+**2. 前端 docker 部署启动后 API 请求失败（跨域/404）**
+
+```bash
+# 检查 constant.js 中的 API 地址配置
+# poetize-ui/src/utils/constant.js
+
+# 确保后端服务已启动
+docker ps | grep poetize-java
+docker ps | grep poetize-python
+
+# 检查服务内存占用（检查后端服务或者数据库是否因资源不足导致异常）
+docker stats
+```
+
+**3. WebSocket 连接失败（聊天室无法连接）**
+
+```bash
+# 检查 WebSocket 地址配置
+# 确保 imBaseURL 配置正确
+# 本地开发: ws://localhost:8081
+# 生产环境: wss://你的域名
+
+# 检查 Nginx WebSocket 代理配置
+docker exec poetize-nginx cat /etc/nginx/conf.d/default.conf | grep -A 5 "websocket"
+```
+
+#### Java后端常见问题
+
+**1. Maven 依赖下载缓慢或失败**
+
+```bash
+# 检查 settings.xml 镜像源配置
+# 已配置华为云镜像，如仍失败可尝试阿里云镜像
+
+# 清除 Maven 本地仓库重新下载
+rm -rf ~/.m2/repository
+mvn clean install
+```
+
+**2. Spring Boot 启动失败**
+
+```bash
+# 检查 JDK 版本（必须是 JDK 21）
+java -version
+
+# 检查数据库连接
+# 查看 application.yml 中数据库配置是否正确
+# 确保数据库服务已启动
+docker ps | grep mysql
+
+# 查看详细错误日志
+tail -f poetry-web/target/logs/spring.log
+```
+
+**3. 数据库连接密码错误**
+
+部署脚本会自动生成随机数据库密码，密码保存在 `.config/db_credentials.txt` 文件中。
+
+```bash
+# 查看数据库密码
+cat .config/db_credentials.txt
+
+# 使用正确的密码连接数据库
+# 假设 ROOT 密码为 abc123xyz（实际以文件中为准）
+docker exec -it poetize-mariadb mariadb -uroot -p
+# 提示输入密码时，粘贴从文件中获取的 ROOT 密码
+
+# 或使用 poetize 用户连接
+docker exec -it poetize-mariadb mariadb -upoetize -p poetize
+# 输入文件中的 poetize 用户密码
+```
+
+**4. 数据库初始化失败或表不存在**
+
+```bash
+# 先获取数据库密码
+ROOT_PWD=$(grep "数据库ROOT密码:" .config/db_credentials.txt | cut -d':' -f2 | tr -d ' ')
+
+# 检查是否已执行初始化脚本
+docker exec -i poetize-mariadb mariadb -uroot -p${ROOT_PWD} -e "USE poetize; SHOW TABLES;"
+
+# 重新初始化数据库
+docker exec -i poetize-mariadb mariadb -uroot -p${ROOT_PWD} poetize < poetize-server/sql/poetry.sql
+
+# 如果 RocksDB 引擎报错，使用兼容性脚本
+docker exec -i poetize-mariadb mariadb -uroot -p${ROOT_PWD} poetize < poetize-server/sql/poetry_old.sql
+```
+
+#### Python服务常见问题
+
+**1. Python 依赖安装失败**
+
+```bash
+# 升级 pip
+pip install --upgrade pip
+
+# 使用国内镜像源
+pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+
+# 如遇特定包失败，单独安装
+pip install 包名 --no-deps
+```
+
+**2. FastAPI 服务启动端口冲突**
+
+```bash
+# 检查端口占用
+lsof -i :5000  # Linux/macOS
+netstat -ano | findstr :5000  # Windows
+
+# 修改启动端口
+uvicorn main:app --port 5001 --reload
+```
+
+**3. 第三方登录 OAuth 回调失败**
+
+```bash
+# 检查配置文件
+cat py/data/oauth_config.json
+
+# 确保回调地址配置正确
+# 本地开发: http://localhost:5000/callback/{provider}
+# 生产环境: https://你的域名/callback/{provider}
+
+# 检查 OAuth 应用配置的回调地址是否一致
+```
+
+#### Docker 环境问题
+
+**1. Docker 容器无法启动**
+
+```bash
+# 查看容器状态
+docker ps -a
+
+# 查看容器日志
+docker logs poetize-java
+docker logs poetize-python
+docker logs poetize-mariadb
+
+# 重启特定容器
+docker restart poetize-java
+```
+
+**2. 容器启动后立即退出**
+
+```bash
+# 查看退出原因
+docker logs --tail 50 容器名
+
+# 检查资源限制（内存不足）
+docker stats
+
+# 检查配置文件语法
+docker compose config
+```
+
+**3. 数据库容器健康检查失败**
+
+```bash
+# 获取数据库密码
+ROOT_PWD=$(grep "数据库ROOT密码:" .config/db_credentials.txt | cut -d':' -f2 | tr -d ' ')
+
+# 手动检查数据库连接
+docker exec -it poetize-mariadb mariadb -uroot -p${ROOT_PWD}
+
+# 检查存储引擎插件
+docker exec -it poetize-mariadb mariadb -uroot -p${ROOT_PWD} -e "SHOW ENGINES;"
+
+# 查看数据库错误日志
+docker logs poetize-mariadb
+```
+
+#### 网络与访问问题
+
+**1. 无法访问后台管理页面**
+
+```bash
+# 检查 Nginx 配置
+docker exec poetize-nginx nginx -t
+
+# 重启 Nginx
+docker restart poetize-nginx
+
+# 检查路由配置
+# 后台地址: http://域名/admin
+```
+
+**2. 静态资源 404**
+
+```bash
+# 检查前端构建产物
+ls poetize-ui/dist/
+ls poetize-im-ui/dist/
+
+# 检查 Nginx 静态文件映射
+docker exec poetize-nginx cat /etc/nginx/conf.d/default.conf | grep "location"
+```
+
+**3. HTTPS 证书问题**
+
+```bash
+# 重新申请证书
+docker exec poetize-nginx /enable-https.sh
+
+# 检查证书有效期
+docker exec poetize-nginx certbot certificates
+
+# 查看证书续期日志
+docker logs poetize-nginx | grep certbot
+```
+
+#### 性能与调试
+
+**1. 接口响应慢**
+
+```bash
+# 检查 Redis 缓存状态
+docker exec -it poetize-redis redis-cli
+> INFO stats
+> DBSIZE
+
+# 查看 Java 应用 JVM 状态
+docker exec poetize-java jstack 1
+
+# 检查数据库慢查询
+ROOT_PWD=$(grep "数据库ROOT密码:" .config/db_credentials.txt | cut -d':' -f2 | tr -d ' ')
+docker exec -it poetize-mariadb mariadb -uroot -p${ROOT_PWD} -e "SHOW FULL PROCESSLIST;"
+```
+
+**2. 查看实时日志**
+
+```bash
+# 查看所有服务日志
+docker compose logs -f
+
+# 查看特定服务日志
+docker logs -f poetize-java
+docker logs -f poetize-python
+
+# 查看最近 100 行日志
+docker logs --tail 100 poetize-java
+```
+
+**3. 内存占用过高**
+
+```bash
+# 查看容器资源使用
+docker stats
+
+# 调整 Java 堆内存（修改 docker-compose.yml）
+JAVA_OPTS: "-Xms512m -Xmx1g"
+
+# 重启服务生效
+docker compose restart poetize-java
+```
+
+#### 常用调试命令
+
+```bash
+# 进入容器内部调试
+docker exec -it poetize-java sh
+docker exec -it poetize-python bash
+docker exec -it poetize-mariadb bash
+
+# 检查网络连通性
+docker exec poetize-java ping mysql
+docker exec poetize-python curl http://poetize-java:8081/actuator/health
+
+# 导出容器配置
+docker inspect poetize-java > java-config.json
+
+# 备份数据库
+ROOT_PWD=$(grep "数据库ROOT密码:" .config/db_credentials.txt | cut -d':' -f2 | tr -d ' ')
+docker exec poetize-mariadb mysqldump -uroot -p${ROOT_PWD} poetize > backup.sql
+```
 
 ## 🛠️ 技术栈
 
@@ -564,10 +981,6 @@ Python服务提供以下关键功能：
 * **问题反馈** - [GitHub Issues](https://github.com/LeapYa/Awesome-poetize-open/issues)
 
 所有项目贡献者信息请参阅[贡献者](#-贡献与许可)部分。
-
-### 部署方式
-
-本地开发完成后，修改代码并重建Docker镜像，使用 `deploy.sh`脚本进行自动化部署。
 
 ## 📜 版权说明
 
