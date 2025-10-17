@@ -95,17 +95,21 @@ bash <(curl -sL install.leapya.com)
 选择可靠的云服务商即可，根据价格和需求自行决定。
 
 **地域选择：**
+
 - **香港云服务器** - 免备案，即买即用，推荐不想备案的用户
 - **国内云服务器** - 需要备案，约需3-7个工作日，适合面向国内用户的站点
 
 #### 服务器配置要求
 
 **基础配置：**
+
 - **操作系统**：Ubuntu 18.04+、Debian 10+ 或 CentOS 7/8+
-- **CPU/内存**：1核+ / 1GB+ (1核1G在部署时可能会部署失败)
+- **CPU/内存**：2核+ / 2GB+
 - **硬盘空间**：15GB+
 - **带宽选择**：建议5M以上
 - **网络配置**：将域名解析到服务器IP，并开放80和443端口
+
+> 部署时请确保服务器内存充足，内存较低时部署脚本会自动进行内存优化并开启交换空间，经过测试，1核1G内存可以成功部署，但性能较差，也可能会部署失败，推荐2核2GB内存，4核4GB内存更佳
 
 #### 系统兼容性测试结果
 
@@ -117,7 +121,6 @@ bash <(curl -sL install.leapya.com)
 | Windows Server/桌面版 | -    | -    | -    | ❌ 不支持 |
 
 > **其他支持的系统**：RHEL、Rocky Linux、AlmaLinux、Fedora、Amazon Linux、阿里云/腾讯云 Linux、麒麟、统信UOS、Deepin、openEuler、Alpine、Arch Linux、openSUSE等主流Linux发行版均已测试通过。
-
 
 ### 2.运行一键安装脚本
 
@@ -136,6 +139,8 @@ git clone https://github.com/LeapYa/Awesome-poetize-open.git && sudo chmod +x de
 git clone https://github.com/LeapYa/Awesome-poetize-open.git && sudo chmod +x deploy.sh && sudo ./deploy.sh -d 域名.com -d www.域名.com
 ```
 
+> 部署脚本已经做好了错误处理和重试机制，如果仍然部署失败，请查看[常见问题](#6常见问题)
+
 ### 3.访问方式
 
 部署完成后，可通过以下地址访问系统功能：
@@ -145,6 +150,7 @@ git clone https://github.com/LeapYa/Awesome-poetize-open.git && sudo chmod +x de
 * 管理后台：`http(s)://域名/admin`
 
 **默认管理员凭证**：
+
 - 用户名：`Sara`
 - 密码：`aaa`
 
@@ -155,16 +161,18 @@ git clone https://github.com/LeapYa/Awesome-poetize-open.git && sudo chmod +x de
 如需更换网站字体，提供两种方法：
 
 **方法1：分块字体模式**
+
 1. 将新字体文件（TTF格式）放入 `split_font/` 文件夹
 2. 重命名为 `font.ttf`
 3. 安装依赖：`pip install -r requirements.txt`
 4. 执行：`python font_subset.py`
-5. 将生成的 `font_chunks/` 目录复制到：
+5. 将生成的 `font_chunks` 目录复制到：
    - `poetize-ui/public/assets/`
    - `poetize-ui/public/static/assets/`
 6. 重启前端服务
 
 **方法2：单一字体模式**
+
 1. 在后台管理 → 配置管理中，设置"使用单一字体文件"为 `true`
 2. 将新字体文件（WOFF2格式）重命名为 `font.woff2`
 3. 复制到：
@@ -174,7 +182,7 @@ git clone https://github.com/LeapYa/Awesome-poetize-open.git && sudo chmod +x de
 
 #### OAuth代理
 
-若需支持国外第三方登录平台（GitHub、Google等），请配置海外代理服务器，详见[OAuth代理配置说明文档](OAuth代理配置说明.md)。
+若需支持国外第三方登录平台（GitHub、Google等），请配置海外代理服务器，详见[OAuth代理配置说明文档](docs/OAuth代理配置说明.md)。
 
 #### Ollama本地翻译模型
 
@@ -204,19 +212,15 @@ poetize -update
 poetize -qy
 ```
 
+### 6.常见问题
 
-### 6.故障排查
+#### 项目部署失败
 
-1. **服务启动问题**
+项目在部署时可能因任何原因（网络波动、资源不足等）导致部署失败，在1核1G服务器较常见，如果部署失败，可执行以下命令清理并重新部署：
 
-   * Docker服务状态
-   * 端口占用检查
-   * 配置文件验证
-2. **HTTPS配置失败**
-
-   * 域名解析验证
-   * 80端口访问性
-   * 证书目录权限
+```bash
+docker system prune -af && rm -rf Awesome-poetize-open && bash <(curl -sL install.leapya.com)
+```
 
 更多详见[开发排障指南](#开发排障指南)
 
@@ -226,7 +230,7 @@ poetize -qy
 
 #### 国内环境部署
 
-`deploy.sh` 脚本已内置国内镜像源加速。若网络受限，可从Release下载离线资源包，包含Docker安装包和所有镜像文件。
+`deploy.sh` 脚本已内置国内镜像源加速。~~若网络受限，可从Release下载离线资源包，包含Docker安装包和所有镜像文件。~~
 
 ## 🤝 贡献与许可
 
@@ -257,6 +261,7 @@ poetize -qy
 ├── deploy.sh                # 一键部署脚本
 ├── migrate.sh               # 博客迁移脚本
 ├── docker-compose.yml       # Docker服务编排文件
+├── docs/                    # 项目文档
 ├── docker/                  # Docker构建配置目录
 ├── poetize-server/          # Java后端（Spring Boot 3.2 + Java 21）
 ├── poetize-ui/              # 博客前端（Vue2）
@@ -274,6 +279,8 @@ poetize -qy
 ├── deploy.sh                # 一键部署脚本
 ├── migrate.sh               # 博客迁移脚本
 ├── docker-compose.yml       # Docker服务编排配置
+├── docs/                    # 项目文档
+│   └── OAuth代理配置说明.md # OAuth代理配置文档
 ├── docker/                  # Docker构建文件
 │   ├── java/                # Java服务Docker配置
 │   ├── mysql/               # MariaDB配置
@@ -285,6 +292,11 @@ poetize -qy
 │   │   └── default.conf
 │   ├── python/              # Python服务Docker配置
 │   ├── redis/               # Redis配置
+│   ├── prerender/           # SEO预渲染服务配置
+│   │   ├── Dockerfile
+│   │   └── worker.js        # 预渲染worker脚本
+│   ├── translation_model/   # AI翻译模型服务配置（基于Ollama）
+│   │   └── Dockerfile
 │   ├── poetize-ui/          # 前端UI Docker配置
 │   └── poetize-im-ui/       # 聊天室UI Docker配置
 ├── poetize-server/          # Java后端服务（Spring Boot 3.2 + Java 21）
@@ -327,7 +339,6 @@ poetize -qy
 │   ├── config.py            # 配置管理
 │   ├── ai_chat_api.py       # AI聊天接口
 │   ├── captcha_api.py       # 验证码服务
-│   ├── email_api.py         # 邮件服务
 │   ├── translation_api.py   # 翻译服务
 │   ├── oauth/               # OAuth第三方登录
 │   │   ├── factory.py       # OAuth工厂类
@@ -376,6 +387,60 @@ poetize -qy
    npm run serve
    ```
 
+### 聊天室前端开发
+
+1. **安装依赖**
+
+   ```bash
+   cd poetize-im-ui
+   npm install --legacy-peer-deps
+   ```
+2. **配置修改**
+
+   编辑 `poetize-im-ui/src/utils/constant.js`，切换到测试环境配置：
+
+   ```javascript
+   // 测试环境
+   baseURL: "http://localhost:8081",
+   webBaseURL: "http://localhost",
+   imURL: "http://localhost:81/im",
+   imBaseURL: "localhost",
+   wsProtocol: "ws",
+   wsPort: "9324",
+
+   // 生产环境（注释掉）
+   // baseURL: location.protocol + "//" + location.hostname...
+   ```
+3. **开发服务**
+
+   ```bash
+   npm run serve
+   ```
+
+   访问地址：`http://localhost:81/im`
+4. **日志配置（可选）**
+
+   如需减少控制台日志，可编辑 `babel.config.js`，取消注释以下内容：
+
+   ```javascript
+   env: {
+     production: {
+       plugins: [
+         ['transform-remove-console', { exclude: ['error', 'warn'] }]
+       ]
+     }
+   }
+   ```
+
+   或修改 `.eslintrc.js` 中的规则：
+
+   ```javascript
+   rules: {
+     'no-console': 'warn',  // 或 'error'
+     'no-debugger': 'warn'
+   }
+   ```
+
 ### Java后端开发
 
 1. **导入项目** - 使用IntelliJ IDEA或Eclipse导入poetize-server目录
@@ -386,23 +451,24 @@ poetize -qy
 3. **配置修改**
 
    - `poetry-web/src/main/resources/application.yml`
-4. **启动应用** - 运行 `com.PoetizeApplication` 主类
-5. **构建打包**
+4. **开发运行**
+
+   使用Maven命令运行：
 
    ```bash
-   # 在poetize-server根目录执行
-   mvn clean package
+   cd poetize-server
+   mvn spring-boot:run
    ```
-6. **打包结果** - 生成的JAR文件位于 `poetry-web/target/` 目录
+
+   或在IDE中直接运行主类 `com.ld.poetry.PoetryApplication`
 
 ### Python后端开发
 
-Python服务提供以下关键功能：
+Python服务提供以下关键功能（在开发环境，也可不启动此服务）：
 
 - 第三方登录集成（GitHub、Google等）
 - 机器翻译服务
 - SEO优化（站点地图生成）
-- 邮件服务和验证码发送
 - 内容管理API
 
 1. **虚拟环境**
@@ -416,18 +482,12 @@ Python服务提供以下关键功能：
 
    ```bash
    pip install -r requirements.txt
+   # 如果安装依赖失败了，请删除虚拟环境后，使用清华镜像源安装依赖
    ```
-3. **配置修改** - 修改 `third_login_config.json`配置第三方登录
-4. **启动服务** - 运行主入口脚本
+3. **启动服务** - 运行主入口脚本
 
    ```bash
    uvicorn main:app --port 5000 --reload
-   ```
-5. **翻译服务** - 位于translation_model目录，可单独运行
-
-   ```bash
-   cd translation_model
-   python run_server.py
    ```
 
 ### 数据库
@@ -442,6 +502,7 @@ Python服务提供以下关键功能：
 - **poetry_old.sql** - 仅使用 InnoDB 引擎，兼容 MySQL 5.7+ 和所有 MariaDB 版本
 
 **快速选择：**
+
 - 使用本项目 Docker 或 部署脚本 部署 → `poetry.sql`（默认，已配置好所有插件）
 - Windows 本地开发 + Docker Desktop → `poetry.sql`（推荐，环境一致）
 - 使用本地 MySQL/MariaDB → `poetry_old.sql`（无需插件，兼容性最好）
@@ -521,11 +582,11 @@ RUN echo "[mysqld]\nplugin_load_add=rocksdb=ha_rocksdb.so" > /etc/mysql/conf.d/r
 
 **4. 存储引擎说明**
 
-| 存储引擎 | 用途 | 特点 | 是否需要安装 |
-|---------|------|------|------------|
-| **InnoDB** | 通用表（用户、文章等） | 事务支持、外键、行锁 | ❌ MariaDB/MySQL 自带 |
-| **Aria** | 静态数据表（分类、标签、配置等） | 高速读取、崩溃恢复 | ❌ MariaDB 10.0+ 自带 |
-| **RocksDB** | 高并发写入表（聊天记录、历史等） | LSM树结构、压缩存储 | ✅ 需手动安装插件 |
+| 存储引擎          | 用途                             | 特点                 | 是否需要安装          |
+| ----------------- | -------------------------------- | -------------------- | --------------------- |
+| **InnoDB**  | 通用表（用户、文章等）           | 事务支持、外键、行锁 | ❌ MariaDB/MySQL 自带 |
+| **Aria**    | 静态数据表（分类、标签、配置等） | 高速读取、崩溃恢复   | ❌ MariaDB 10.0+ 自带 |
+| **RocksDB** | 高并发写入表（聊天记录、历史等） | LSM树结构、压缩存储  | ✅ 需手动安装插件     |
 
 **5. Windows/Linux 开发环境连接数据库**
 
@@ -651,7 +712,6 @@ docker compose up -d mysql redis
    default-authentication-plugin=mysql_native_password  # MySQL 8.0需要此配置以支持旧密码认证
    # 其他配置...
    ```
-
 7. **将poetry_old.sql覆盖poetry.sql（poetize-server/sql/）**
 
    ```bash
