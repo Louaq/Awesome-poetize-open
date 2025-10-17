@@ -1,8 +1,8 @@
 #!/bin/bash
 ## 作者: LeapYa
-## 修改时间: 2025-10-01
+## 修改时间: 2025-10-17
 ## 描述: 部署 Poetize 博客系统安装脚本
-## 版本: 1.7.2
+## 版本: 1.7.3
 
 # 定义颜色
 RED='\033[0;31m'
@@ -4170,26 +4170,7 @@ apply_memory_optimizations() {
   # 根据不同内存模式设置不同的参数，very-low:2G内存以下、low:2-4G内存、medium:4-8G内存、high:8-16G内存、very-high:16G内存以上
   case "$MEMORY_MODE" in
     "very-low")
-      MYSQL_BUFFER_POOL_SIZE="128M"
-      MYSQL_LOG_BUFFER_SIZE="8M"
-      MYSQL_QUERY_CACHE_SIZE="16M"
-      MYSQL_TMP_TABLE_SIZE="32M"
-      MYSQL_KEY_BUFFER_SIZE="16M"
-      MYSQL_MAX_CONNECTIONS="60"
-      MYSQL_TABLE_OPEN_CACHE="128"
-      
-      JAVA_XMX="512m"
-      JAVA_XMS="256m"
-      JAVA_METASPACE="160m"
-      JAVA_CLASS_SPACE="144m"
-      JAVA_XSS="512k"
-      
-      JAVA_LIMIT="1024M"
-      PYTHON_LIMIT="768M"
-      NGINX_LIMIT="128M"
-      MYSQL_LIMIT="256M"
-      ;;
-    "low")
+      # 总限制约1.9GB (768+512+128+512=1920MB)
       MYSQL_BUFFER_POOL_SIZE="256M"
       MYSQL_LOG_BUFFER_SIZE="16M"
       MYSQL_QUERY_CACHE_SIZE="32M"
@@ -4198,26 +4179,48 @@ apply_memory_optimizations() {
       MYSQL_MAX_CONNECTIONS="60"
       MYSQL_TABLE_OPEN_CACHE="256"
       
-      JAVA_XMX="896m"
-      JAVA_XMS="640m"
-      JAVA_METASPACE="256m"
+      JAVA_XMX="512m"
+      JAVA_XMS="256m"
+      JAVA_METASPACE="160m"
+      JAVA_CLASS_SPACE="144m"
+      JAVA_XSS="512k"
+      
+      JAVA_LIMIT="768M"
+      PYTHON_LIMIT="512M"
+      NGINX_LIMIT="128M"
+      MYSQL_LIMIT="512M"
+      ;;
+    "low")
+      # 总限制约2.6GB (960+512+192+896=2560MB)
+      MYSQL_BUFFER_POOL_SIZE="448M"
+      MYSQL_LOG_BUFFER_SIZE="32M"
+      MYSQL_QUERY_CACHE_SIZE="64M"
+      MYSQL_TMP_TABLE_SIZE="128M"
+      MYSQL_KEY_BUFFER_SIZE="64M"
+      MYSQL_MAX_CONNECTIONS="80"
+      MYSQL_TABLE_OPEN_CACHE="512"
+      
+      JAVA_XMX="768m"
+      JAVA_XMS="512m"
+      JAVA_METASPACE="192m"
       JAVA_CLASS_SPACE="128m"
       JAVA_XSS="512k"
       
-      JAVA_LIMIT="1384M"
-      PYTHON_LIMIT="1024M"
-      NGINX_LIMIT="256M"
-      MYSQL_LIMIT="384M"
+      JAVA_LIMIT="960M"
+      PYTHON_LIMIT="512M"
+      NGINX_LIMIT="192M"
+      MYSQL_LIMIT="896M"
       ;;
       
     "medium") 
-      MYSQL_BUFFER_POOL_SIZE="256M"
-      MYSQL_LOG_BUFFER_SIZE="16M"
-      MYSQL_QUERY_CACHE_SIZE="32M"
-      MYSQL_TMP_TABLE_SIZE="64M"
-      MYSQL_KEY_BUFFER_SIZE="64M"
-      MYSQL_MAX_CONNECTIONS="100"
-      MYSQL_TABLE_OPEN_CACHE="256"
+      # 总限制约3.8GB (1280+768+256+1536=3840MB)
+      MYSQL_BUFFER_POOL_SIZE="768M"
+      MYSQL_LOG_BUFFER_SIZE="64M"
+      MYSQL_QUERY_CACHE_SIZE="128M"
+      MYSQL_TMP_TABLE_SIZE="256M"
+      MYSQL_KEY_BUFFER_SIZE="128M"
+      MYSQL_MAX_CONNECTIONS="150"
+      MYSQL_TABLE_OPEN_CACHE="1024"
       
       JAVA_XMX="1024m"
       JAVA_XMS="768m"
@@ -4225,20 +4228,21 @@ apply_memory_optimizations() {
       JAVA_CLASS_SPACE="128m"
       JAVA_XSS="1m"
       
-      JAVA_LIMIT="1536M"
-      PYTHON_LIMIT="2048M"
+      JAVA_LIMIT="1280M"
+      PYTHON_LIMIT="768M"
       NGINX_LIMIT="256M"
-      MYSQL_LIMIT="1024M"
+      MYSQL_LIMIT="1536M"
       ;;
       
     "high")
-      MYSQL_BUFFER_POOL_SIZE="512M"
-      MYSQL_LOG_BUFFER_SIZE="32M"
-      MYSQL_QUERY_CACHE_SIZE="64M"
-      MYSQL_TMP_TABLE_SIZE="128M"
-      MYSQL_KEY_BUFFER_SIZE="128M"
+      # 总限制约5.1GB (2048+896+384+1792=5120MB)
+      MYSQL_BUFFER_POOL_SIZE="896M"
+      MYSQL_LOG_BUFFER_SIZE="64M"
+      MYSQL_QUERY_CACHE_SIZE="128M"
+      MYSQL_TMP_TABLE_SIZE="192M"
+      MYSQL_KEY_BUFFER_SIZE="160M"
       MYSQL_MAX_CONNECTIONS="200"
-      MYSQL_TABLE_OPEN_CACHE="400"
+      MYSQL_TABLE_OPEN_CACHE="600"
       
       JAVA_XMX="1536m"
       JAVA_XMS="1024m"
@@ -4247,19 +4251,20 @@ apply_memory_optimizations() {
       JAVA_XSS="1m"
       
       JAVA_LIMIT="2048M"
-      PYTHON_LIMIT="2048M"
-      NGINX_LIMIT="512M"
-      MYSQL_LIMIT="2048M"
+      PYTHON_LIMIT="896M"
+      NGINX_LIMIT="384M"
+      MYSQL_LIMIT="1792M"
       ;;
       
     "very-high")
-      MYSQL_BUFFER_POOL_SIZE="1024M"
-      MYSQL_LOG_BUFFER_SIZE="64M"
-      MYSQL_QUERY_CACHE_SIZE="128M"
-      MYSQL_TMP_TABLE_SIZE="256M"
-      MYSQL_KEY_BUFFER_SIZE="256M"
+      # 总限制约7.2GB (3072+1024+512+2560=7168MB)
+      MYSQL_BUFFER_POOL_SIZE="1536M"
+      MYSQL_LOG_BUFFER_SIZE="128M"
+      MYSQL_QUERY_CACHE_SIZE="256M"
+      MYSQL_TMP_TABLE_SIZE="384M"
+      MYSQL_KEY_BUFFER_SIZE="320M"
       MYSQL_MAX_CONNECTIONS="400"
-      MYSQL_TABLE_OPEN_CACHE="800"
+      MYSQL_TABLE_OPEN_CACHE="1000"
       
       JAVA_XMX="2048m"
       JAVA_XMS="1536m"
@@ -4268,9 +4273,9 @@ apply_memory_optimizations() {
       JAVA_XSS="1m"
       
       JAVA_LIMIT="3072M"
-      PYTHON_LIMIT="3072M"
+      PYTHON_LIMIT="1024M"
       NGINX_LIMIT="512M"
-      MYSQL_LIMIT="3072M"
+      MYSQL_LIMIT="2560M"
       ;;
       
     *)

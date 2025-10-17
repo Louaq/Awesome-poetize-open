@@ -52,7 +52,6 @@ spring:
       max-request-size: 100MB
 
   mail:
-    # 邮箱配置已移至系统配置表，由Python服务管理
     # 以下配置已注释，将从系统配置表动态获取
     # host:
     # username: 
