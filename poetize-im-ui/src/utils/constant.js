@@ -8,10 +8,11 @@ export default {
   // wsPort: "9324",
 
   // 生产环境
-  baseURL: location.protocol + "//" + location.hostname + (location.port ? ':' + location.port : '') + "/api",
-  webBaseURL: location.protocol + "//" + location.hostname + (location.port ? ':' + location.port : ''),
-  imURL: location.protocol + "//" + location.hostname + (location.port ? ':' + location.port : '') + "/im",
-  imBaseURL: location.hostname + (location.port ? ':' + location.port : ''),
+  // 使用location.host代替location.hostname，因为location.host会自动包含端口号（如果存在）
+  baseURL: location.protocol + "//" + location.host + "/api",
+  webBaseURL: location.protocol + "//" + location.host,
+  imURL: location.protocol + "//" + location.host + "/im",
+  imBaseURL: location.host,
   wsProtocol: location.protocol === "http:" ? "ws" : "wss",
   wsPort: "",
 

@@ -1522,6 +1522,34 @@
 
           
 
+          // 处理被踢出消息（优先级最高）
+
+          if (message.messageType === 999) {
+
+            console.warn('[WebSocket] 收到被踢出消息:', message.content);
+
+            im.isKickedByDuplicate = true; // 设置被踢出标志
+
+            ElMessage({
+
+              message: message.content || "您的账号在其他地方登录，当前连接已断开",
+
+              type: 'warning',
+
+              duration: 0, // 不自动关闭
+
+              showClose: true,
+
+              customClass: 'duplicate-connection-warning'
+
+            });
+
+            return;
+
+          }
+
+          
+
           // 处理心跳响应消息
 
           if (message.messageType === 0 && message.content === 'heartbeat') {
@@ -3409,10 +3437,10 @@
   }
 
   
-  /* 移动端侧边栏第一个按钮额外顶部间距 */
+  /* 移动端侧边栏第一个按钮顶部间距（friend-aside已有padding-top处理安全区域，这里只需基础间距） */
   @media screen and (max-width: 850px) {
     .friend-aside > div:first-child > div:nth-child(2) {
-      margin-top: max(25px, calc(15px + env(safe-area-inset-top)));
+      margin-top: 25px;
     }
   }
 
@@ -4112,12 +4140,16 @@
       height: 100dvh;
       border-radius: unset;
 
-      /* 移动端添加顶部安全区域 */
-      padding-top: env(safe-area-inset-top);
+      /* 移动端不在外层容器添加padding，避免露出背景 */
+      /* 安全区域由内部子元素（friend-aside、body-left、body-right）自己处理 */
+      padding: 0;
       box-sizing: border-box;
     }
 
-
+    /* 移动端侧边栏占满整个高度 */
+    .friend-aside {
+      height: 100%;
+    }
 
     .friend-bode {
 

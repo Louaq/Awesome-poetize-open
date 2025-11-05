@@ -155,12 +155,48 @@ public class ImWsMsgHandler implements IWsMsgHandler {
                 
                 if (tempUser != null) {
                     user = tempUser;
-                    // 关闭该用户的其他连接，确保单点登录
-                    Tio.closeUser(channelContext.tioConfig, user.getId().toString(), null);
-                    // 绑定用户到当前连接
-                    Tio.bindUser(channelContext, user.getId().toString());
+                    String userIdStr = user.getId().toString();
+                    
+                    // 1. 先获取该用户的旧连接
+                    SetWithLock<ChannelContext> oldConnections = Tio.getByUserid(channelContext.tioConfig, userIdStr);
+                    
+                    // 2. 绑定用户到当前新连接
+                    Tio.bindUser(channelContext, userIdStr);
                     log.info("WebSocket连接绑定成功：用户ID：{}, 用户名：{}, token类型：{}", 
                         user.getId(), user.getUsername(), validationResult.getUserType());
+                    
+                    // 3. 关闭旧连接（排除当前连接）
+                    if (oldConnections != null && oldConnections.size() > 0) {
+                        int closedCount = 0;
+                        for (ChannelContext oldCtx : oldConnections.getObj()) {
+                            // 排除当前连接
+                            if (oldCtx != channelContext) {
+                                try {
+                                    // 先发送"被踢出"消息给旧连接，让客户端知道不要重连
+                                    ImMessage kickMessage = new ImMessage();
+                                    kickMessage.setMessageType(999); // 999表示被踢出
+                                    kickMessage.setContent("您的账号在其他地方登录，当前连接已断开");
+                                    String kickJson = JSON.toJSONString(kickMessage, 
+                                        SerializerFeature.WriteMapNullValue,
+                                        SerializerFeature.DisableCircularReferenceDetect);
+                                    WsResponse kickResponse = WsResponse.fromText(kickJson, ImConfigConst.CHARSET);
+                                    Tio.send(oldCtx, kickResponse);
+                                    
+                                    // 等待消息发送完成后再关闭连接
+                                    Thread.sleep(100);
+                                } catch (Exception e) {
+                                    log.warn("发送踢出消息失败: {}", e.getMessage());
+                                }
+                                
+                                // 关闭旧连接
+                                Tio.remove(oldCtx, "新连接已建立，旧连接被踢出");
+                                closedCount++;
+                            }
+                        }
+                        if (closedCount > 0) {
+                            log.info("已踢出用户 {} 的 {} 个旧连接", userIdStr, closedCount);
+                        }
+                    }
                 } else {
                     log.warn("WebSocket连接绑定失败：用户信息不存在 - userId: {}", userId);
                     return;

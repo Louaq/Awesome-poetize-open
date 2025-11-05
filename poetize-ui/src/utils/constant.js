@@ -6,12 +6,13 @@ export default {
   // webURL: "http://localhost",
 
   // 生产环境
-  webURL: location.protocol + "//" + location.hostname + (location.port ? ':' + location.port : ''),
-  baseURL: location.protocol + "//" + location.hostname + (location.port ? ':' + location.port : '') + "/api",
-  pythonBaseURL: location.protocol + "//" + location.hostname + (location.port ? ':' + location.port : '') + "/python",
-  imBaseURL: location.protocol + "//" + location.hostname + (location.port ? ':' + location.port : '') + "/im",
+  // 使用location.host代替location.hostname，因为location.host会自动包含端口号（如果存在）
+  webURL: location.protocol + "//" + location.host,
+  baseURL: location.protocol + "//" + location.host + "/api",
+  pythonBaseURL: location.protocol + "//" + location.host + "/python",
+  imBaseURL: location.protocol + "//" + location.host + "/im",
 
-  host: location.hostname + (location.port ? ':' + location.port : ''),
+  host: location.host,
 
   // 本地看板娘资源路径
   live2d_path: "/static/live2d-widget/dist/",
@@ -29,7 +30,7 @@ export default {
   cryptojs_key: process.env.VUE_APP_POETIZE_AES_KEY || "sarasarasarasara",
 
   friendWebName: "POETIZE",
-  friendUrl: location.protocol + "//" + location.hostname + (location.port ? ':' + location.port : ''),
+  friendUrl: location.protocol + "//" + location.host,
   friendIntroduction: "这是一个 Vue2 Vue3 与 SpringBoot 结合的产物～",
   friendCover: "https://s1.ax1x.com/2022/11/10/z9VlHs.png",
 
