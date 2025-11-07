@@ -1,8 +1,8 @@
 #!/bin/bash
 ## 作者: LeapYa
-## 修改时间: 2025-10-23
+## 修改时间: 2025-11-07
 ## 描述: Poetize 博客系统全局管理命令
-## 版本: 1.6.0
+## 版本: 1.7.0
 
 # 定义颜色
 RED='\033[0;31m'
@@ -120,6 +120,8 @@ show_help() {
     printf "\n"
     printf "${BLUE}系统管理:${NC}\n"
     printf "  -qianyi, -migrate, -qy    执行博客迁移到远程服务器\n"
+    printf "  -backup [路径]            备份当前数据到指定路径\n"
+    printf "  -restore [路径]            从指定路径恢复备份数据（未指定路径时恢复最新备份）\n"
     printf "  -uninstall                卸载当前项目的Poetize实例\n"
     printf "  -uninstall-all            完全卸载所有Poetize系统\n"
     printf "\n"
@@ -137,12 +139,16 @@ show_help() {
     printf "  poetize -status           查看服务状态\n"
     printf "  poetize -restart          重启所有服务\n"
     printf "  poetize -logs nginx       查看nginx日志\n"
+    printf "  poetize -backup           备份数据到默认路径\n"
+    printf "  poetize -backup /path/to/backup  备份数据到指定路径\n"
+    printf "  poetize -restore          恢复最新备份数据\n"
+    printf "  poetize -restore /path/to/backup  从指定路径恢复数据\n"
     printf "\n"
 }
 
 # 显示版本信息
 show_version() {
-    printf "${GREEN}POETIZE 管理工具 v1.3.1${NC}\n"
+    printf "${GREEN}POETIZE 管理工具 v1.7.0${NC}\n"
     printf "作者: LeapYa\n"
     printf "项目: Awesome-poetize-open\n"
 }
@@ -860,11 +866,61 @@ create_full_backup() {
     info "备份目录: $BACKUP_DIR"
     info "备份位置: 系统临时目录（不会被卸载删除）"
     
+    # 执行实际备份操作
+    perform_backup_operations "$BACKUP_DIR"
+    
+    success "完整数据备份创建完成: $BACKUP_DIR"
+    return 0
+}
+
+# 用户手动备份数据
+backup_data() {
+    local backup_path="$1"
+    
+    # 查找项目目录
+    find_project_dir
+    
+    # 如果未指定备份路径，使用默认路径
+    if [ -z "$backup_path" ]; then
+        local backup_timestamp=$(date +%Y%m%d_%H%M%S)
+        local project_name=$(basename "$(pwd)")
+        backup_path="/tmp/poetize_backup_${project_name}_${backup_timestamp}"
+        info "未指定备份路径，使用默认路径: $backup_path"
+    fi
+    
+    # 创建备份目录
+    mkdir -p "$backup_path"
+    
+    info "开始备份数据到: $backup_path"
+    
+    # 执行实际备份操作
+    if perform_backup_operations "$backup_path"; then
+        success "数据备份完成: $backup_path"
+        info "备份内容包含:"
+        info "  - 数据库数据"
+        info "  - 数据库凭据"
+        info "  - Python配置文件"
+        info "  - 用户上传文件"
+        info "  - Redis缓存数据"
+        info "  - 域名和端口配置"
+        printf "\n"
+        info "恢复数据时请使用以下命令:"
+        printf "  ${CYAN}poetize -restore $backup_path${NC}\n"
+    else
+        error "数据备份失败"
+        return 1
+    fi
+}
+
+# 执行实际备份操作的通用函数
+perform_backup_operations() {
+    local backup_dir="$1"
+    
     # 1. 备份数据库凭据
     info "备份数据库凭据..."
     if [ -f ".config/db_credentials.txt" ]; then
-        mkdir -p "$BACKUP_DIR/.config"
-        cp ".config/db_credentials.txt" "$BACKUP_DIR/.config/"
+        mkdir -p "$backup_dir/.config"
+        cp ".config/db_credentials.txt" "$backup_dir/.config/"
         success "数据库凭据备份完成"
     else
         warning "数据库凭据文件不存在，跳过备份"
@@ -883,7 +939,7 @@ create_full_backup() {
     local mariadb_container=$(sudo docker ps --format "{{.Names}}" | grep "mariadb" | head -1)
     if [ -n "$mariadb_container" ] && [ -n "$db_root_password" ]; then
         info "使用MariaDB容器: $mariadb_container"
-        if sudo docker exec "$mariadb_container" mariadb-dump -u root -p"$db_root_password" --single-transaction --routines --triggers --databases poetize > "$BACKUP_DIR/poetry.sql"; then
+        if sudo docker exec "$mariadb_container" mariadb-dump -u root -p"$db_root_password" --single-transaction --routines --triggers --databases poetize > "$backup_dir/poetry.sql"; then
             success "数据库备份完成"
         else
             error "数据库备份失败"
@@ -896,8 +952,8 @@ create_full_backup() {
     # 4. 备份Python配置文件
     info "备份Python配置文件..."
     if [ -d "py/data" ]; then
-        mkdir -p "$BACKUP_DIR/py"
-        cp -r "py/data" "$BACKUP_DIR/py/"
+        mkdir -p "$backup_dir/py"
+        cp -r "py/data" "$backup_dir/py/"
         success "Python配置文件备份完成"
     else
         warning "Python配置目录不存在，跳过备份"
@@ -915,7 +971,7 @@ create_full_backup() {
         # 检查volume中是否有数据
         if sudo docker run --rm -v "$actual_uploads_volume":/data alpine sh -c "[ -d /data/. ] && [ \"\$(ls -A /data/. 2>/dev/null)\" ]"; then
             info "导出用户上传文件..."
-            if sudo docker run --rm -v "$actual_uploads_volume":/data -v "$BACKUP_DIR":/backup alpine tar -czf "/backup/uploads_backup.tar.gz" -C /data .; then
+            if sudo docker run --rm -v "$actual_uploads_volume":/data -v "$backup_dir":/backup alpine tar -czf "/backup/uploads_backup.tar.gz" -C /data .; then
                 success "用户上传文件备份完成"
             else
                 warning "用户上传文件备份失败"
@@ -936,7 +992,7 @@ create_full_backup() {
         # 检查volume中是否有数据
         if sudo docker run --rm -v "$actual_redis_volume":/data alpine sh -c "[ -d /data/. ] && [ \"\$(ls -A /data/. 2>/dev/null)\" ]"; then
             info "导出Redis数据..."
-            if sudo docker run --rm -v "$actual_redis_volume":/data -v "$BACKUP_DIR":/backup alpine tar -czf "/backup/redis_backup.tar.gz" -C /data .; then
+            if sudo docker run --rm -v "$actual_redis_volume":/data -v "$backup_dir":/backup alpine tar -czf "/backup/redis_backup.tar.gz" -C /data .; then
                 success "Redis数据备份完成"
             else
                 warning "Redis数据备份失败"
@@ -952,7 +1008,7 @@ create_full_backup() {
     info "备份域名配置信息..."
     local extracted_domains=$(extract_domains_from_nginx_config 2>/dev/null || echo "")
     if [ -n "$extracted_domains" ]; then
-        echo "$extracted_domains" > "$BACKUP_DIR/domains.txt"
+        echo "$extracted_domains" > "$backup_dir/domains.txt"
         success "域名配置备份完成: $extracted_domains"
     else
         info "未找到域名配置，跳过域名备份"
@@ -965,7 +1021,7 @@ create_full_backup() {
         # 提取HTTP端口配置（支持多种格式）
         http_port=$(grep -E '^\s*-\s*["'\'']*[0-9]+:80' docker-compose.yml 2>/dev/null | head -1 | grep -oE '[0-9]+' | head -1)
         if [ -n "$http_port" ]; then
-            echo "$http_port" > "$BACKUP_DIR/http_port.txt"
+            echo "$http_port" > "$backup_dir/http_port.txt"
             success "HTTP端口配置备份完成: $http_port"
         else
             info "使用默认80端口"
@@ -974,10 +1030,10 @@ create_full_backup() {
     
     # 9. 创建备份清单
     info "创建备份清单..."
-    cat > "$BACKUP_DIR/backup_manifest.txt" << EOF
+    cat > "$backup_dir/backup_manifest.txt" << EOF
 POETIZE系统备份清单
 备份时间: $(date '+%Y-%m-%d %H:%M:%S')
-备份目录: $BACKUP_DIR
+备份目录: $backup_dir
 项目目录: $(pwd)
 
 备份内容:
@@ -989,10 +1045,9 @@ POETIZE系统备份清单
 - 域名配置: domains.txt
 - 端口配置: http_port.txt
 
-注意: 此备份用于系统更新，包含恢复系统所需的所有关键数据
+恢复命令: poetize -restore $backup_dir
 EOF
     
-    success "完整数据备份创建完成: $BACKUP_DIR"
     return 0
 }
 
@@ -1329,30 +1384,142 @@ restore_full_backup() {
     local latest_backup="$BACKUP_DIR"
     info "使用备份目录: $latest_backup"
     
-    # 检查备份清单
-    if [ -f "$latest_backup/backup_manifest.txt" ]; then
-        info "备份清单:"
-        cat "$latest_backup/backup_manifest.txt"
-        printf "\n"
+    # 执行实际恢复操作
+    perform_restore_operations "$latest_backup"
+    
+    return 0
+}
+
+# 用户手动恢复数据
+restore_data() {
+    local backup_path="$1"
+    
+    # 如果未指定备份路径，查找最新的备份目录
+    if [ -z "$backup_path" ]; then
+        info "未指定备份路径，正在查找最新的备份目录..."
+        
+        # 查找/tmp目录中的poetize备份目录
+        local latest_backup=$(find /tmp -maxdepth 1 -type d -name "poetize_backup_*" -printf "%T@ %p\n" 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
+        
+        if [ -z "$latest_backup" ]; then
+            error "未找到任何备份目录"
+            printf "\n"
+            printf "${YELLOW}使用方法:${NC}\n"
+            printf "  poetize -restore [备份路径]\n"
+            printf "\n"
+            printf "${YELLOW}示例:${NC}\n"
+            printf "  poetize -restore                    # 恢复最新备份\n"
+            printf "  poetize -restore /tmp/poetize_backup_20231201_120000\n"
+            printf "\n"
+            return 1
+        fi
+        
+        backup_path="$latest_backup"
+        info "找到最新备份目录: $backup_path"
     fi
     
-    # 等待服务启动
-    info "等待服务启动..."
-    sleep 10
+    # 检查备份路径是否存在
+    if [ ! -d "$backup_path" ]; then
+        error "备份路径不存在: $backup_path"
+        return 1
+    fi
     
-    # 1. 恢复Python配置文件
+    # 查找项目目录
+    find_project_dir
+    
+    # 显示备份信息
+    if [ -f "$backup_path/backup_manifest.txt" ]; then
+        info "备份信息:"
+        cat "$backup_path/backup_manifest.txt"
+        printf "\n"
+    else
+        warning "未找到备份清单文件，继续恢复操作"
+    fi
+    
+    # 确认恢复操作
+    printf "${RED}警告: 恢复操作将覆盖当前数据！${NC}\n"
+    printf "\n"
+    read -rp "确认从 $backup_path 恢复数据？(y/N): " confirm_restore
+    case "$confirm_restore" in
+        [Yy]|[Yy][Ee][Ss])
+            info "用户确认，开始恢复数据..."
+            ;;
+        *)
+            info "用户取消，退出恢复"
+            return 0
+            ;;
+    esac
+    
+    # 执行实际恢复操作
+    if perform_restore_operations "$backup_path"; then
+        success "数据恢复完成"
+        info "建议重启服务以确保所有更改生效:"
+        printf "  ${CYAN}poetize -restart${NC}\n"
+    else
+        error "数据恢复失败"
+        return 1
+    fi
+}
+
+# 执行实际恢复操作的通用函数
+perform_restore_operations() {
+    local backup_dir="$1"
+    
+    info "开始从 $backup_dir 恢复数据..."
+    
+    # 1. 恢复数据库凭据
+    info "恢复数据库凭据..."
+    if [ -f "$backup_dir/.config/db_credentials.txt" ]; then
+        mkdir -p ".config"
+        cp "$backup_dir/.config/db_credentials.txt" ".config/"
+        success "数据库凭据恢复完成"
+    else
+        warning "备份中未找到数据库凭据文件"
+    fi
+    
+    # 2. 恢复数据库
+    info "恢复数据库数据..."
+    if [ -f "$backup_dir/poetry.sql" ]; then
+        # 获取数据库密码
+        local db_root_password=""
+        if [ -f ".config/db_credentials.txt" ]; then
+            db_root_password=$(grep "数据库ROOT密码:" .config/db_credentials.txt | cut -d':' -f2 | tr -d ' ')
+        fi
+        
+        if [ -n "$db_root_password" ]; then
+            # 查找MariaDB容器
+            local mariadb_container=$(sudo docker ps --format "{{.Names}}" | grep "mariadb" | head -1)
+            if [ -n "$mariadb_container" ]; then
+                info "使用MariaDB容器: $mariadb_container"
+                if sudo docker exec -i "$mariadb_container" mariadb -u root -p"$db_root_password" poetize < "$backup_dir/poetry.sql"; then
+                    success "数据库恢复完成"
+                else
+                    error "数据库恢复失败"
+                    return 1
+                fi
+            else
+                warning "未找到MariaDB容器，跳过数据库恢复"
+            fi
+        else
+            warning "未找到数据库密码，跳过数据库恢复"
+        fi
+    else
+        warning "备份中未找到数据库文件"
+    fi
+    
+    # 3. 恢复Python配置文件
     info "恢复Python配置文件..."
-    if [ -d "$latest_backup/py/data" ]; then
+    if [ -d "$backup_dir/py/data" ]; then
         mkdir -p "py"
-        cp -r "$latest_backup/py/data" "py/"
+        cp -r "$backup_dir/py/data" "py/"
         success "Python配置文件恢复完成"
     else
         warning "备份中未找到Python配置文件"
     fi
     
-    # 2. 恢复用户上传文件
+    # 4. 恢复用户上传文件
     info "恢复用户上传文件..."
-    if [ -f "$latest_backup/uploads_backup.tar.gz" ]; then
+    if [ -f "$backup_dir/uploads_backup.tar.gz" ]; then
         local project_name=$(basename "$(pwd)" | tr '[:upper:]' '[:lower:]')
         local uploads_volume="${project_name}_poetize_uploads"
         
@@ -1365,7 +1532,7 @@ restore_full_backup() {
         fi
         
         info "恢复到volume: $actual_uploads_volume"
-        if sudo docker run --rm -v "$actual_uploads_volume":/data -v "$latest_backup":/backup alpine sh -c "cd /data && tar -xzf /backup/uploads_backup.tar.gz"; then
+        if sudo docker run --rm -v "$actual_uploads_volume":/data -v "$backup_dir":/backup alpine sh -c "cd /data && tar -xzf /backup/uploads_backup.tar.gz"; then
             success "用户上传文件恢复完成"
         else
             warning "用户上传文件恢复失败"
@@ -1374,9 +1541,9 @@ restore_full_backup() {
         info "备份中未找到用户上传文件"
     fi
     
-    # 3. 恢复Redis数据
+    # 5. 恢复Redis数据
     info "恢复Redis数据..."
-    if [ -f "$latest_backup/redis_backup.tar.gz" ]; then
+    if [ -f "$backup_dir/redis_backup.tar.gz" ]; then
         local project_name=$(basename "$(pwd)" | tr '[:upper:]' '[:lower:]')
         local redis_volume="${project_name}_redis_data"
         
@@ -1389,7 +1556,7 @@ restore_full_backup() {
         fi
         
         info "恢复到volume: $actual_redis_volume"
-        if sudo docker run --rm -v "$actual_redis_volume":/data -v "$latest_backup":/backup alpine sh -c "cd /data && tar -xzf /backup/redis_backup.tar.gz"; then
+        if sudo docker run --rm -v "$actual_redis_volume":/data -v "$backup_dir":/backup alpine sh -c "cd /data && tar -xzf /backup/redis_backup.tar.gz"; then
             success "Redis数据恢复完成"
         else
             warning "Redis数据恢复失败"
@@ -1398,7 +1565,7 @@ restore_full_backup() {
         info "备份中未找到Redis数据"
     fi
     
-    # 4. 执行新增的SQL脚本
+    # 6. 执行新增的SQL脚本
     info "执行新增的SQL脚本以确保数据库结构最新..."
     execute_additional_sql_scripts
     if [ $? -eq 0 ]; then
@@ -1407,24 +1574,15 @@ restore_full_backup() {
         warning "新增SQL脚本执行过程中出现问题，但系统仍可正常使用"
     fi
     
-    # 5. 重启相关服务以应用恢复的配置（不重启前端构建容器以避免文件名变化）
+    # 7. 重启相关服务以应用恢复的配置
     info "重启相关服务以应用恢复的配置..."
     
-    # 只重启需要应用配置的服务，不重启前端构建容器
+    # 只重启需要应用配置的服务
     local services_to_restart="nginx java-backend python-backend mysql redis"
     if $DOCKER_COMPOSE_CMD restart $services_to_restart; then
         success "相关服务重启完成"
     else
         warning "部分服务重启失败，可能需要手动重启"
-    fi
-    
-    # 6. 清理备份目录
-    info "清理临时备份目录..."
-    if [ -n "$latest_backup" ] && [ -d "$latest_backup" ]; then
-        rm -rf "$latest_backup"
-        success "临时备份目录已清理: $latest_backup"
-    else
-        info "备份目录已不存在或路径为空"
     fi
     
     success "用户数据和配置恢复完成"
@@ -1505,6 +1663,38 @@ run_update() {
     printf "\n"
     success "POETIZE系统已成功更新到最新版本"
     printf "\n"
+    
+    # 询问是否删除备份目录
+    if [ -n "$BACKUP_DIR" ] && [ -d "$BACKUP_DIR" ]; then
+        info "备份目录位置: $BACKUP_DIR"
+        printf "\n"
+        printf "${YELLOW}是否要删除备份目录？${NC}\n"
+        printf "  ${CYAN}y${NC} - 删除备份目录 (释放磁盘空间)\n"
+        printf "  ${CYAN}n${NC} - 保留备份目录 (默认选项，30秒后自动选择)\n"
+        printf "\n"
+        
+        # 设置30秒超时，默认为n
+        local delete_backup="n"
+        read -t 30 -rp "请选择 (y/n，默认n，30秒后自动选择n): " delete_backup
+        delete_backup=${delete_backup:-n}
+        
+        case "$delete_backup" in
+            [Yy]|[Yy][Ee][Ss])
+                info "正在删除备份目录..."
+                if rm -rf "$BACKUP_DIR"; then
+                    success "备份目录已删除"
+                else
+                    warning "备份目录删除失败，请手动删除: $BACKUP_DIR"
+                fi
+                ;;
+            *)
+                info "保留备份目录: $BACKUP_DIR"
+                info "您可以稍后手动删除此目录以释放磁盘空间"
+                ;;
+        esac
+        printf "\n"
+    fi
+    
     info "建议执行以下命令检查系统状态："
     printf "  ${CYAN}poetize -status${NC}    # 查看服务状态\n"
     printf "  ${CYAN}poetize -health${NC}    # 检查服务健康状态\n"
@@ -1562,6 +1752,12 @@ main() {
             ;;
         "-version"|"-v")
             show_version
+            ;;
+        "-backup")
+            backup_data "$2"
+            ;;
+        "-restore")
+            restore_data "$2"
             ;;
         "-help"|"-h"|"")
             show_help
