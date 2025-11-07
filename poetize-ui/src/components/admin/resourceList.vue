@@ -215,7 +215,8 @@ const uploadPicture = () => import( "../common/uploadPicture");
           {label: "兰空图床", value: "lsky"},
           {label: "简单图床", value: "easyimage"}
         ],
-        storeType: this.mainStore.sysConfig ? (this.mainStore.sysConfig['store.type'] || 'local') : 'local',
+        // 修复：延迟初始化storeType，避免在mainStore未初始化时访问sysConfig
+        storeType: 'local',
         previewMediaUrl: "",
         previewMediaType: "",
         previewFileName: "",
@@ -242,6 +243,10 @@ const uploadPicture = () => import( "../common/uploadPicture");
     watch: {},
 
     created() {
+      // 在created钩子中初始化storeType，确保mainStore已经可用
+      if (this.mainStore && this.mainStore.sysConfig && this.mainStore.sysConfig['store.type']) {
+        this.storeType = this.mainStore.sysConfig['store.type'];
+      }
       this.getResources();
     },
 

@@ -1,23 +1,30 @@
 package com.ld.poetry.controller;
 
+import cn.hutool.crypto.SecureUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.ld.poetry.aop.LoginCheck;
 import com.ld.poetry.aop.SaveCheck;
+import com.ld.poetry.constants.CommonConst;
 import com.ld.poetry.entity.User;
 import com.ld.poetry.handle.PoetryRuntimeException;
 import com.ld.poetry.service.CacheService;
 import com.ld.poetry.service.MailService;
 import com.ld.poetry.service.UserService;
 import com.ld.poetry.config.PoetryResult;
+import com.ld.poetry.utils.JsonUtils;
 import com.ld.poetry.utils.PoetryUtil;
 import com.ld.poetry.vo.BaseRequestVO;
+import com.ld.poetry.vo.EncryptedRequestVO;
+import com.ld.poetry.vo.EncryptedResponseVO;
 import com.ld.poetry.vo.UserVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Map;
 
 /**
  * <p>
@@ -54,10 +61,59 @@ public class UserController {
      * 用户名、邮箱、手机号/密码登录
      */
     @PostMapping("/login")
-    public PoetryResult<UserVO> login(@RequestParam("account") String account,
-                                      @RequestParam("password") String password,
-                                      @RequestParam(value = "isAdmin", defaultValue = "false") Boolean isAdmin) {
-        return userService.login(account, password, isAdmin);
+    public PoetryResult<EncryptedResponseVO> login(@RequestParam(value = "account", required = false) String account,
+                                      @RequestParam(value = "password", required = false) String password,
+                                      @RequestParam(value = "isAdmin", defaultValue = "false") Boolean isAdmin,
+                                      @RequestBody(required = false) EncryptedRequestVO encryptedRequest) {
+        // 如果有加密请求体，则解密并提取参数
+        if (encryptedRequest != null && encryptedRequest.getData() != null) {
+            try {
+                // 解密请求体
+                String decryptedData = new String(SecureUtil.aes(CommonConst.CRYPOTJS_KEY.getBytes(StandardCharsets.UTF_8))
+                    .decrypt(encryptedRequest.getData()));
+                
+                // 解析JSON
+                Map<String, Object> params = JsonUtils.parseObject(decryptedData, Map.class);
+                
+                // 从解密后的数据中提取参数
+                account = (String) params.get("account");
+                password = (String) params.get("password");
+                isAdmin = params.get("isAdmin") != null ? (Boolean) params.get("isAdmin") : false;
+            } catch (Exception e) {
+                log.error("解密登录请求失败", e);
+                return PoetryResult.fail("请求解密失败");
+            }
+        }
+        
+        // 验证必要参数
+        if (account == null || password == null) {
+            return PoetryResult.fail("账号和密码不能为空");
+        }
+        
+        // 调用登录服务
+        PoetryResult<UserVO> loginResult = userService.login(account, password, isAdmin);
+        
+        // 如果登录成功，对响应数据进行加密
+        if (loginResult.getCode() == 200 && loginResult.getData() != null) {
+            try {
+                // 将UserVO转换为JSON字符串
+                String responseData = JsonUtils.toJsonString(loginResult.getData());
+                
+                // 加密响应数据，使用与前端相同的ECB模式
+                String encryptedData = SecureUtil.aes(CommonConst.CRYPOTJS_KEY.getBytes(StandardCharsets.UTF_8))
+                    .encryptBase64(responseData);
+                
+                // 返回加密后的响应
+                return PoetryResult.success(new EncryptedResponseVO(encryptedData));
+            } catch (Exception e) {
+                log.error("加密登录响应失败", e);
+                // 加密失败时返回原始数据
+                return PoetryResult.success(new EncryptedResponseVO(JsonUtils.toJsonString(loginResult.getData())));
+            }
+        }
+        
+        // 登录失败时，直接返回错误信息
+        return PoetryResult.fail(loginResult.getMessage());
     }
 
 

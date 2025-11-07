@@ -399,28 +399,50 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     public PoetryResult<UserVO> regist(UserVO user) {
+        // XSS过滤和输入验证
+        String filteredUsername = XssFilterUtil.clean(user.getUsername());
+        if (!StringUtils.hasText(filteredUsername)) {
+            return PoetryResult.fail("用户名不能为空或包含不安全内容！");
+        }
+        
+        String filteredPhoneNumber = null;
+        if (StringUtils.hasText(user.getPhoneNumber())) {
+            filteredPhoneNumber = XssFilterUtil.clean(user.getPhoneNumber());
+            if (!StringUtils.hasText(filteredPhoneNumber)) {
+                return PoetryResult.fail("手机号不能为空或包含不安全内容！");
+            }
+        }
+        
+        String filteredEmail = null;
+        if (StringUtils.hasText(user.getEmail())) {
+            filteredEmail = XssFilterUtil.clean(user.getEmail());
+            if (!StringUtils.hasText(filteredEmail)) {
+                return PoetryResult.fail("邮箱不能为空或包含不安全内容！");
+            }
+        }
+        
         String regex = "\\d{11}";
-        if (user.getUsername().matches(regex)) {
+        if (filteredUsername.matches(regex)) {
             return PoetryResult.fail("用户名不能为11位数字！");
         }
 
-        if (user.getUsername().contains("@")) {
+        if (filteredUsername.contains("@")) {
             return PoetryResult.fail("用户名不能包含@！");
         }
 
-        if (StringUtils.hasText(user.getPhoneNumber()) && StringUtils.hasText(user.getEmail())) {
+        if (StringUtils.hasText(filteredPhoneNumber) && StringUtils.hasText(filteredEmail)) {
             return PoetryResult.fail("手机号与邮箱只能选择其中一个！");
         }
 
-        if (StringUtils.hasText(user.getPhoneNumber())) {
-            String cacheKey = CacheConstants.buildForgetPasswordKey(user.getPhoneNumber(), "1");
+        if (StringUtils.hasText(filteredPhoneNumber)) {
+            String cacheKey = CacheConstants.buildForgetPasswordKey(filteredPhoneNumber, "1");
             Object cachedCode = cacheService.get(cacheKey);
             if (cachedCode == null || !cachedCode.toString().equals(user.getCode())) {
                 return PoetryResult.fail("验证码错误！");
             }
             cacheService.deleteKey(cacheKey);
-        } else if (StringUtils.hasText(user.getEmail())) {
-            String cacheKey = CacheConstants.buildForgetPasswordKey(user.getEmail(), "2");
+        } else if (StringUtils.hasText(filteredEmail)) {
+            String cacheKey = CacheConstants.buildForgetPasswordKey(filteredEmail, "2");
             Object cachedCode = cacheService.get(cacheKey);
             if (cachedCode == null || !cachedCode.toString().equals(user.getCode())) {
                 return PoetryResult.fail("验证码错误！");
@@ -444,26 +466,26 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             return PoetryResult.fail("密码不能为空！");
         }
 
-        Long count = lambdaQuery().eq(User::getUsername, user.getUsername()).count();
+        Long count = lambdaQuery().eq(User::getUsername, filteredUsername).count();
         if (count != 0) {
             return PoetryResult.fail("用户名重复！");
         }
-        if (StringUtils.hasText(user.getPhoneNumber())) {
-            Long phoneNumberCount = lambdaQuery().eq(User::getPhoneNumber, user.getPhoneNumber()).count();
+        if (StringUtils.hasText(filteredPhoneNumber)) {
+            Long phoneNumberCount = lambdaQuery().eq(User::getPhoneNumber, filteredPhoneNumber).count();
             if (phoneNumberCount != 0) {
                 return PoetryResult.fail("手机号重复！");
             }
-        } else if (StringUtils.hasText(user.getEmail())) {
-            Long emailCount = lambdaQuery().eq(User::getEmail, user.getEmail()).count();
+        } else if (StringUtils.hasText(filteredEmail)) {
+            Long emailCount = lambdaQuery().eq(User::getEmail, filteredEmail).count();
             if (emailCount != 0) {
                 return PoetryResult.fail("邮箱重复！");
             }
         }
 
         User u = new User();
-        u.setUsername(user.getUsername());
-        u.setPhoneNumber(user.getPhoneNumber());
-        u.setEmail(user.getEmail());
+        u.setUsername(filteredUsername);
+        u.setPhoneNumber(filteredPhoneNumber);
+        u.setEmail(filteredEmail);
         // 新用户直接使用BCrypt加密密码
         u.setPassword(passwordService.encodeBCrypt(decryptedPassword));
         u.setAvatar(PoetryUtil.getRandomAvatar(null));
@@ -534,12 +556,34 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 return PoetryResult.fail("用户名重复！");
             }
         }
+        
         User u = new User();
         u.setId(PoetryUtil.getUserId());
-        u.setUsername(user.getUsername());
+        
+        // XSS过滤处理
+        if (StringUtils.hasText(user.getUsername())) {
+            String filteredUsername = XssFilterUtil.clean(user.getUsername());
+            if (!StringUtils.hasText(filteredUsername)) {
+                return PoetryResult.fail("用户名内容不合法！");
+            }
+            u.setUsername(filteredUsername);
+        } else {
+            u.setUsername(user.getUsername());
+        }
+        
+        if (StringUtils.hasText(user.getIntroduction())) {
+            String filteredIntro = XssFilterUtil.clean(user.getIntroduction());
+            if (!StringUtils.hasText(filteredIntro)) {
+                return PoetryResult.fail("个人简介内容不合法！");
+            }
+            u.setIntroduction(filteredIntro);
+        } else {
+            u.setIntroduction(user.getIntroduction());
+        }
+        
         u.setAvatar(user.getAvatar());
         u.setGender(user.getGender());
-        u.setIntroduction(user.getIntroduction());
+        
         updateById(u);
         User one = lambdaQuery().eq(User::getId, u.getId()).one();
         String token = PoetryUtil.getToken();
@@ -605,11 +649,20 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     public PoetryResult getCodeForBind(String place, Integer flag) {
+        // XSS过滤处理
+        String filteredPlace = null;
+        if (StringUtils.hasText(place)) {
+            filteredPlace = XssFilterUtil.clean(place);
+            if (!StringUtils.hasText(filteredPlace)) {
+                return PoetryResult.fail("输入内容不合法！");
+            }
+        }
+        
         int i = new Random().nextInt(900000) + 100000;
         if (flag == 1) {
         } else if (flag == 2) {
             List<String> mail = new ArrayList<>();
-            mail.add(place);
+            mail.add(filteredPlace);
             String text = getCodeMail(i); // 这里使用已经修改过的getCodeMail方法，会从数据库获取模板
             WebInfo webInfo = cacheService.getCachedWebInfo();
 
@@ -630,7 +683,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             }
         }
 
-        String userCodeKey = CacheConstants.buildUserCodeKey(PoetryUtil.getUserId(), place, String.valueOf(flag));
+        String userCodeKey = CacheConstants.buildUserCodeKey(PoetryUtil.getUserId(), filteredPlace, String.valueOf(flag));
         cacheService.set(userCodeKey, i, 300);
         return PoetryResult.success();
     }
@@ -667,32 +720,42 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if ((flag == 1 || flag == 2) && !StringUtils.hasText(code)) {
             return PoetryResult.fail("请输入验证码！");
         }
+        
+        // XSS过滤处理
+        String filteredPlace = null;
+        if (StringUtils.hasText(place)) {
+            filteredPlace = XssFilterUtil.clean(place);
+            if (!StringUtils.hasText(filteredPlace)) {
+                return PoetryResult.fail("输入内容不合法！");
+            }
+        }
+        
         User updateUser = new User();
         updateUser.setId(user.getId());
         if (flag == 1) {
-            Long count = lambdaQuery().eq(User::getPhoneNumber, place).count();
+            Long count = lambdaQuery().eq(User::getPhoneNumber, filteredPlace).count();
             if (count != 0) {
                 return PoetryResult.fail("手机号重复！");
             }
-            String cacheKey = CacheConstants.buildUserCodeKey(PoetryUtil.getUserId(), place, String.valueOf(flag));
+            String cacheKey = CacheConstants.buildUserCodeKey(PoetryUtil.getUserId(), filteredPlace, String.valueOf(flag));
             Object cachedCode = cacheService.get(cacheKey);
             if (cachedCode != null && cachedCode.toString().equals(code)) {
                 cacheService.deleteKey(cacheKey);
-                updateUser.setPhoneNumber(place);
+                updateUser.setPhoneNumber(filteredPlace);
             } else {
                 return PoetryResult.fail("验证码错误！");
             }
 
         } else if (flag == 2) {
-            Long count = lambdaQuery().eq(User::getEmail, place).count();
+            Long count = lambdaQuery().eq(User::getEmail, filteredPlace).count();
             if (count != 0) {
                 return PoetryResult.fail("邮箱重复！");
             }
-            String cacheKey = CacheConstants.buildUserCodeKey(PoetryUtil.getUserId(), place, String.valueOf(flag));
+            String cacheKey = CacheConstants.buildUserCodeKey(PoetryUtil.getUserId(), filteredPlace, String.valueOf(flag));
             Object cachedCode = cacheService.get(cacheKey);
             if (cachedCode != null && cachedCode.toString().equals(code)) {
                 cacheService.deleteKey(cacheKey);
-                updateUser.setEmail(place);
+                updateUser.setEmail(filteredPlace);
             } else {
                 return PoetryResult.fail("验证码错误！");
             }
@@ -745,12 +808,21 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     public PoetryResult getCodeForForgetPassword(String place, Integer flag) {
+        // XSS过滤处理
+        String filteredPlace = null;
+        if (StringUtils.hasText(place)) {
+            filteredPlace = XssFilterUtil.clean(place);
+            if (!StringUtils.hasText(filteredPlace)) {
+                return PoetryResult.fail("输入内容不合法！");
+            }
+        }
+        
         int i = new Random().nextInt(900000) + 100000;
         if (flag == 1) {
         } else if (flag == 2) {
 
             List<String> mail = new ArrayList<>();
-            mail.add(place);
+            mail.add(filteredPlace);
             String text = getCodeMail(i);
             WebInfo webInfo = cacheService.getCachedWebInfo();
 
@@ -771,13 +843,22 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             }
         }
 
-        String forgetPasswordKey = CacheConstants.buildForgetPasswordKey(place, String.valueOf(flag));
+        String forgetPasswordKey = CacheConstants.buildForgetPasswordKey(filteredPlace, String.valueOf(flag));
         cacheService.set(forgetPasswordKey, i, 300);
         return PoetryResult.success();
     }
 
     @Override
     public PoetryResult updateForForgetPassword(String place, Integer flag, String code, String password) {
+        // XSS过滤处理
+        String filteredPlace = null;
+        if (StringUtils.hasText(place)) {
+            filteredPlace = XssFilterUtil.clean(place);
+            if (!StringUtils.hasText(filteredPlace)) {
+                return PoetryResult.fail("输入内容不合法！");
+            }
+        }
+        
         // 解密前端传来的AES加密密码
         String decryptedPassword;
         try {
@@ -791,7 +872,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             return PoetryResult.fail("密码不能为空！");
         }
 
-        String forgetPasswordKey = CacheConstants.buildForgetPasswordKey(place, String.valueOf(flag));
+        String forgetPasswordKey = CacheConstants.buildForgetPasswordKey(filteredPlace, String.valueOf(flag));
         Object cachedCode = cacheService.get(forgetPasswordKey);
         if (cachedCode == null || !cachedCode.toString().equals(code)) {
             return PoetryResult.fail("验证码错误！");
@@ -803,7 +884,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         String encodedPassword = passwordService.encodeBCrypt(decryptedPassword);
 
         if (flag == 1) {
-            User user = lambdaQuery().eq(User::getPhoneNumber, place).one();
+            User user = lambdaQuery().eq(User::getPhoneNumber, filteredPlace).one();
             if (user == null) {
                 return PoetryResult.fail("该手机号未绑定账号！");
             }
@@ -812,12 +893,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 return PoetryResult.fail("账号被冻结！");
             }
 
-            lambdaUpdate().eq(User::getPhoneNumber, place).set(User::getPassword, encodedPassword).update();
+            lambdaUpdate().eq(User::getPhoneNumber, filteredPlace).set(User::getPassword, encodedPassword).update();
             cacheService.evictUser(user.getId());
             cacheService.evictAllUserTokens(user.getId()); // 清理所有token，强制重新登录
             log.info("通过手机号重置密码成功 - 用户ID: {}", user.getId());
         } else if (flag == 2) {
-            User user = lambdaQuery().eq(User::getEmail, place).one();
+            User user = lambdaQuery().eq(User::getEmail, filteredPlace).one();
             if (user == null) {
                 return PoetryResult.fail("该邮箱未绑定账号！");
             }
@@ -826,7 +907,7 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 return PoetryResult.fail("账号被冻结！");
             }
 
-            lambdaUpdate().eq(User::getEmail, place).set(User::getPassword, encodedPassword).update();
+            lambdaUpdate().eq(User::getEmail, filteredPlace).set(User::getPassword, encodedPassword).update();
             cacheService.evictUser(user.getId());
             cacheService.evictAllUserTokens(user.getId()); // 清理所有token，强制重新登录
             log.info("通过邮箱重置密码成功 - 用户ID: {}", user.getId());
@@ -1022,16 +1103,41 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             return PoetryResult.fail("第三方登录信息不完整");
         }
 
+        // XSS过滤和输入验证
+        String filteredProvider = XssFilterUtil.clean(provider);
+        String filteredUid = XssFilterUtil.clean(uid);
+        String filteredUsername = null;
+        if (StringUtils.hasText(username)) {
+            filteredUsername = XssFilterUtil.clean(username);
+            if (!StringUtils.hasText(filteredUsername)) {
+                return PoetryResult.fail("用户名不能为空或包含不安全内容！");
+            }
+        }
+        String filteredEmail = null;
+        if (StringUtils.hasText(email)) {
+            filteredEmail = XssFilterUtil.clean(email);
+            if (!StringUtils.hasText(filteredEmail)) {
+                return PoetryResult.fail("邮箱不能为空或包含不安全内容！");
+            }
+        }
+        String filteredAvatar = null;
+        if (StringUtils.hasText(avatar)) {
+            filteredAvatar = XssFilterUtil.clean(avatar);
+            if (!StringUtils.hasText(filteredAvatar)) {
+                return PoetryResult.fail("头像不能为空或包含不安全内容！");
+            }
+        }
+
         User existUser = lambdaQuery()
-                .eq(User::getPlatformType, provider)
-                .eq(User::getUid, uid)
+                .eq(User::getPlatformType, filteredProvider)
+                .eq(User::getUid, filteredUid)
                 .one();
 
         if (existUser == null) {
             // 新用户注册逻辑
-            String finalUsername = username;
+            String finalUsername = filteredUsername;
             if (!StringUtils.hasText(finalUsername)) {
-                finalUsername = provider + "_user_" + System.currentTimeMillis();
+                finalUsername = filteredProvider + "_user_" + System.currentTimeMillis();
             }
 
             int count = 0;
@@ -1042,10 +1148,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
             User newUser = new User();
             newUser.setUsername(uniqueUsername);
-            newUser.setPlatformType(provider);
-            newUser.setUid(uid);
-            newUser.setEmail(email);
-            newUser.setAvatar(avatar);
+            newUser.setPlatformType(filteredProvider);
+            newUser.setUid(filteredUid);
+            newUser.setEmail(filteredEmail);
+            newUser.setAvatar(filteredAvatar);
             newUser.setUserStatus(true);
             newUser.setUserType(PoetryEnum.USER_TYPE_USER.getCode());
             newUser.setGender(PoetryEnum.USER_GENDER_NONE.getCode());
@@ -1064,18 +1170,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         } else {
             // 🔧 已存在用户的邮箱更新逻辑
             boolean userHasEmailInDB = StringUtils.hasText(existUser.getEmail());
-            boolean thirdPartyProvidedEmail = StringUtils.hasText(email);
+            boolean thirdPartyProvidedEmail = StringUtils.hasText(filteredEmail);
 
             // 如果数据库中没有邮箱，但第三方平台提供了邮箱，则更新数据库
             if (!userHasEmailInDB && thirdPartyProvidedEmail) {
 
                 User updateUser = new User();
                 updateUser.setId(existUser.getId());
-                updateUser.setEmail(email);
+                updateUser.setEmail(filteredEmail);
                 updateById(updateUser);
 
                 // 更新内存中的用户对象
-                existUser.setEmail(email);
+                existUser.setEmail(filteredEmail);
             }
 
             // 🔧 头像处理策略：保持用户自定义头像不变

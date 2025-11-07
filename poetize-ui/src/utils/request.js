@@ -2,6 +2,7 @@ import axios from "axios";
 import constant from "./constant";
 //处理url参数
 import qs from "qs";
+import cryptoUtil from "./crypto";
 
 import router from "../router";
 import { handleTokenExpire } from "./tokenExpireHandler";
@@ -118,19 +119,54 @@ axios.interceptors.request.use(function (config) {
 
   // 如果是验证码相关的请求，不需要token
   if (config.url && config.url.includes('/captcha/')) {
+    // 对于验证码配置请求，添加加密处理
+    if (config.url.includes('/captcha/getConfig') && config.method === 'get') {
+      // 为GET请求添加加密标识
+      if (!config.params) {
+        config.params = {};
+      }
+      config.params.encrypted = 'true';
+    }
+    // 对于验证码验证请求，添加加密处理
+    else if ((config.url.includes('/captcha/verify-checkbox') || 
+              config.url.includes('/captcha/verify-slide')) && 
+             config.method === 'post' && config.data) {
+      // 检查数据是否已经加密
+      if (config.data.encrypted) {
+        // 数据已经加密，直接使用
+        // console.log('数据已加密，跳过重复加密');
+      } else {
+        // 加密请求数据
+        try {
+          const encryptedData = cryptoUtil.encrypt(config.data);
+          if (encryptedData) {
+            config.data = {
+              encrypted: encryptedData
+            };
+          }
+        } catch (error) {
+          console.error('加密验证码验证请求失败:', error);
+          // 加密失败时继续使用原始数据
+        }
+      }
+    }
     return config;
   }
 
-  // 处理token
+  // 统一处理token逻辑
+  // 确定是否为管理员请求，优先使用config中的isAdmin标志
   const isAdmin = config.isAdmin || false;
+  
+  // 根据请求类型获取相应的token
   const token = isAdmin ? localStorage.getItem("adminToken") : localStorage.getItem("userToken");
   
+  // 如果token存在，统一添加到请求头
   if (token) {
-    // 确保Authorization头存在
+    // 确保headers对象存在
     if (!config.headers) {
       config.headers = {};
     }
-    // 添加Bearer前缀
+    // 统一添加Bearer前缀
     config.headers.Authorization = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
   }
 
@@ -151,6 +187,62 @@ axios.interceptors.response.use(function (response) {
     }
     return Promise.reject(new Error(response.data.message || '请求失败'));
   }
+  
+  // 处理验证码配置响应的解密
+  if (response.config.url && response.config.url.includes('/captcha/getConfig') && 
+      response.config.method === 'get' && response.data && response.data.data) {
+    try {
+      // 检查响应是否加密
+      if (response.data.data.encrypted) {
+        // 使用decryptBase64方法解密验证码配置响应数据
+        const decryptedData = cryptoUtil.decryptBase64(response.data.data.encrypted);
+        if (decryptedData) {
+          response.data.data = decryptedData;
+        }
+      }
+    } catch (error) {
+      console.error('解密验证码配置失败:', error);
+      // 解密失败时返回原始数据
+    }
+  }
+  
+  // 处理验证码验证响应的解密
+  if (response.config.url && 
+      (response.config.url.includes('/captcha/verify-checkbox') || 
+       response.config.url.includes('/captcha/verify-slide')) && 
+      response.config.method === 'post' && response.data && response.data.data) {
+    try {
+      // 检查响应是否加密
+      if (response.data.data.encrypted) {
+        // 使用decryptBase64方法解密验证码验证响应数据
+        const decryptedData = cryptoUtil.decryptBase64(response.data.data.encrypted);
+        if (decryptedData) {
+          response.data.data = decryptedData;
+        }
+      }
+    } catch (error) {
+      console.error('解密验证码验证响应失败:', error);
+      // 解密失败时返回原始数据
+    }
+  }
+  
+  // 处理登录接口响应的解密
+  if (response.config.url && 
+      response.config.url.includes('/user/login') && 
+      response.config.method === 'post' && response.data && response.data.data && 
+      response.data.data.data) {
+    try {
+      // 使用decryptBase64方法解密登录响应数据
+      const decryptedData = cryptoUtil.decryptBase64(response.data.data.data);
+      if (decryptedData) {
+        response.data.data = decryptedData;
+      }
+    } catch (error) {
+      console.error('解密登录响应失败:', error);
+      // 解密失败时返回原始数据
+    }
+  }
+  
   return response;
 }, function (error) {
   // 处理网络错误
@@ -183,11 +275,7 @@ export default {
       headers: {}
     };
     
-    const token = isAdmin ? localStorage.getItem("adminToken") : localStorage.getItem("userToken");
-    
-    if (token) {
-      config.headers.Authorization = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-    }
+    // 注意：token处理已移至请求拦截器中统一处理，此处不再重复处理
 
     // 如果不是json格式，将参数转换为URLSearchParams
     const data = json ? params : new URLSearchParams(params);
@@ -217,13 +305,7 @@ export default {
       headers: {}
     };
 
-    const token = isAdmin
-      ? localStorage.getItem("adminToken")
-      : localStorage.getItem("userToken");
-
-    if (token) {
-      config.headers.Authorization = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
-    }
+    // 注意：token处理已移至请求拦截器中统一处理，此处不再重复处理
 
     return new Promise((resolve, reject) => {
       axios
@@ -234,16 +316,14 @@ export default {
   },
 
   upload(url, param, isAdmin = false, option) {
-    const token = isAdmin ? localStorage.getItem("adminToken") : localStorage.getItem("userToken");
     let config = {
+      isAdmin: isAdmin,
       headers: {"Content-Type": "multipart/form-data"},
       timeout: 60000
     };
     
-    // 正确处理Authorization头，添加Bearer前缀
-    if (token) {
-      config.headers.Authorization = token.startsWith('Bearer ') ? token : `Bearer ${token}`;
-    }
+    // 注意：token处理已移至请求拦截器中统一处理，此处不再重复处理
+    
     if (typeof option !== "undefined") {
       config.onUploadProgress = progressEvent => {
         if (progressEvent.total > 0) {

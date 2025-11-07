@@ -93,7 +93,14 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         Comment comment = new Comment();
         comment.setSource(commentVO.getSource());
         comment.setType(commentVO.getType());
-        comment.setCommentContent(commentVO.getCommentContent());
+        
+        // XSS过滤和输入验证
+        String filteredCommentContent = XssFilterUtil.clean(commentVO.getCommentContent());
+        if (!StringUtils.hasText(filteredCommentContent)) {
+            return PoetryResult.fail("评论内容不能为空或包含不安全内容！");
+        }
+        comment.setCommentContent(filteredCommentContent);
+        
         comment.setParentCommentId(commentVO.getParentCommentId());
 
         Integer floorCommentId = calculateFloorCommentId(commentVO.getParentCommentId(), commentVO.getFloorCommentId());
@@ -102,7 +109,9 @@ public class CommentServiceImpl extends ServiceImpl<CommentMapper, Comment> impl
         comment.setParentUserId(commentVO.getParentUserId());
         comment.setUserId(PoetryUtil.getUserId());
         if (StringUtils.hasText(commentVO.getCommentInfo())) {
-            comment.setCommentInfo(commentVO.getCommentInfo());
+            // XSS过滤处理
+            String filteredCommentInfo = XssFilterUtil.clean(commentVO.getCommentInfo());
+            comment.setCommentInfo(filteredCommentInfo);
         }
 
         // 获取IP地址和地理位置

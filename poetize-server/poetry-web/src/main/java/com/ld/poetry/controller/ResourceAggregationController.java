@@ -11,6 +11,7 @@ import com.ld.poetry.dao.ResourcePathMapper;
 import com.ld.poetry.entity.ResourcePath;
 import com.ld.poetry.utils.PoetryUtil;
 import com.ld.poetry.utils.PrerenderClient;
+import com.ld.poetry.utils.XssFilterUtil;
 import com.ld.poetry.vo.BaseRequestVO;
 import com.ld.poetry.vo.ResourcePathVO;
 import org.springframework.beans.BeanUtils;
@@ -51,14 +52,26 @@ public class ResourceAggregationController {
     @LoginCheck(0)
     @PostMapping("/saveResourcePath")
     public PoetryResult saveResourcePath(@RequestBody ResourcePathVO resourcePathVO) {
+        // XSS过滤处理
+        String filteredTitle = StringUtils.hasText(resourcePathVO.getTitle()) ? XssFilterUtil.clean(resourcePathVO.getTitle()) : null;
+        String filteredIntroduction = StringUtils.hasText(resourcePathVO.getIntroduction()) ? XssFilterUtil.clean(resourcePathVO.getIntroduction()) : null;
+        String filteredUrl = StringUtils.hasText(resourcePathVO.getUrl()) ? XssFilterUtil.clean(resourcePathVO.getUrl()) : null;
+        String filteredCover = StringUtils.hasText(resourcePathVO.getCover()) ? XssFilterUtil.clean(resourcePathVO.getCover()) : null;
+        String filteredClassify = StringUtils.hasText(resourcePathVO.getClassify()) ? XssFilterUtil.clean(resourcePathVO.getClassify()) : null;
+        String filteredRemark = StringUtils.hasText(resourcePathVO.getRemark()) ? XssFilterUtil.clean(resourcePathVO.getRemark()) : null;
+        String filteredExtraBackground = StringUtils.hasText(resourcePathVO.getExtraBackground()) ? XssFilterUtil.clean(resourcePathVO.getExtraBackground()) : null;
+        String filteredBtnWidth = StringUtils.hasText(resourcePathVO.getBtnWidth()) ? XssFilterUtil.clean(resourcePathVO.getBtnWidth()) : null;
+        String filteredBtnHeight = StringUtils.hasText(resourcePathVO.getBtnHeight()) ? XssFilterUtil.clean(resourcePathVO.getBtnHeight()) : null;
+        String filteredBtnRadius = StringUtils.hasText(resourcePathVO.getBtnRadius()) ? XssFilterUtil.clean(resourcePathVO.getBtnRadius()) : null;
+        
         // 侧边栏背景类型的特殊验证
         if (CommonConst.RESOURCE_PATH_TYPE_ASIDE_BACKGROUND.equals(resourcePathVO.getType())) {
-            if (!StringUtils.hasText(resourcePathVO.getCover())) {
-                return PoetryResult.fail("侧边栏背景图片/CSS代码不能为空！");
+            if (!StringUtils.hasText(filteredCover)) {
+                return PoetryResult.fail("侧边栏背景图片/CSS代码不能为空或包含不安全内容！");
             }
         } else {
-            if (!StringUtils.hasText(resourcePathVO.getTitle()) || !StringUtils.hasText(resourcePathVO.getType())) {
-                return PoetryResult.fail("标题和资源类型不能为空！");
+            if (!StringUtils.hasText(filteredTitle) || !StringUtils.hasText(resourcePathVO.getType())) {
+                return PoetryResult.fail("标题和资源类型不能为空或包含不安全内容！");
             }
         }
         
@@ -83,9 +96,9 @@ public class ResourceAggregationController {
         // 侧边栏背景：自动设置标题，并将额外背景层存储到remark
         if (CommonConst.RESOURCE_PATH_TYPE_ASIDE_BACKGROUND.equals(resourcePathVO.getType())) {
             resourcePathVO.setTitle("侧边栏背景");
-            if (StringUtils.hasText(resourcePathVO.getExtraBackground())) {
+            if (StringUtils.hasText(filteredExtraBackground)) {
                 // 转义双引号和反斜杠
-                String escapedExtra = resourcePathVO.getExtraBackground()
+                String escapedExtra = filteredExtraBackground
                     .replace("\\", "\\\\")
                     .replace("\"", "\\\"");
                 resourcePathVO.setRemark("{\"extraBackground\":\"" + escapedExtra + "\"}");
@@ -98,14 +111,14 @@ public class ResourceAggregationController {
         if (CommonConst.RESOURCE_PATH_TYPE_QUICK_ENTRY.equals(resourcePathVO.getType()) || 
             CommonConst.RESOURCE_PATH_TYPE_CONTACT.equals(resourcePathVO.getType())) {
             StringBuilder jsonBuilder = new StringBuilder("{");
-            if (StringUtils.hasText(resourcePathVO.getBtnWidth())) {
-                jsonBuilder.append("\"btnWidth\":\"").append(resourcePathVO.getBtnWidth()).append("\",");
+            if (StringUtils.hasText(filteredBtnWidth)) {
+                jsonBuilder.append("\"btnWidth\":\"").append(filteredBtnWidth).append("\",");
             }
-            if (StringUtils.hasText(resourcePathVO.getBtnHeight())) {
-                jsonBuilder.append("\"btnHeight\":\"").append(resourcePathVO.getBtnHeight()).append("\",");
+            if (StringUtils.hasText(filteredBtnHeight)) {
+                jsonBuilder.append("\"btnHeight\":\"").append(filteredBtnHeight).append("\",");
             }
-            if (StringUtils.hasText(resourcePathVO.getBtnRadius())) {
-                jsonBuilder.append("\"btnRadius\":\"").append(resourcePathVO.getBtnRadius()).append("\",");
+            if (StringUtils.hasText(filteredBtnRadius)) {
+                jsonBuilder.append("\"btnRadius\":\"").append(filteredBtnRadius).append("\",");
             }
             if (jsonBuilder.length() > 1) {
                 jsonBuilder.deleteCharAt(jsonBuilder.length() - 1); // 删除最后一个逗号
@@ -116,6 +129,12 @@ public class ResourceAggregationController {
         
         ResourcePath resourcePath = new ResourcePath();
         BeanUtils.copyProperties(resourcePathVO, resourcePath);
+        // 使用过滤后的值覆盖
+        resourcePath.setTitle(filteredTitle);
+        resourcePath.setIntroduction(filteredIntroduction);
+        resourcePath.setUrl(filteredUrl);
+        resourcePath.setCover(filteredCover);
+        resourcePath.setClassify(filteredClassify);
         resourcePathMapper.insert(resourcePath);
         
         // 如果是收藏夹类型、本站信息类型或友链类型的资源，重新渲染相关页面
@@ -171,14 +190,26 @@ public class ResourceAggregationController {
             return PoetryResult.fail("Id不能为空！");
         }
         
+        // XSS过滤处理
+        String filteredTitle = StringUtils.hasText(resourcePathVO.getTitle()) ? XssFilterUtil.clean(resourcePathVO.getTitle()) : null;
+        String filteredIntroduction = StringUtils.hasText(resourcePathVO.getIntroduction()) ? XssFilterUtil.clean(resourcePathVO.getIntroduction()) : null;
+        String filteredUrl = StringUtils.hasText(resourcePathVO.getUrl()) ? XssFilterUtil.clean(resourcePathVO.getUrl()) : null;
+        String filteredCover = StringUtils.hasText(resourcePathVO.getCover()) ? XssFilterUtil.clean(resourcePathVO.getCover()) : null;
+        String filteredClassify = StringUtils.hasText(resourcePathVO.getClassify()) ? XssFilterUtil.clean(resourcePathVO.getClassify()) : null;
+        String filteredRemark = StringUtils.hasText(resourcePathVO.getRemark()) ? XssFilterUtil.clean(resourcePathVO.getRemark()) : null;
+        String filteredExtraBackground = StringUtils.hasText(resourcePathVO.getExtraBackground()) ? XssFilterUtil.clean(resourcePathVO.getExtraBackground()) : null;
+        String filteredBtnWidth = StringUtils.hasText(resourcePathVO.getBtnWidth()) ? XssFilterUtil.clean(resourcePathVO.getBtnWidth()) : null;
+        String filteredBtnHeight = StringUtils.hasText(resourcePathVO.getBtnHeight()) ? XssFilterUtil.clean(resourcePathVO.getBtnHeight()) : null;
+        String filteredBtnRadius = StringUtils.hasText(resourcePathVO.getBtnRadius()) ? XssFilterUtil.clean(resourcePathVO.getBtnRadius()) : null;
+        
         // 侧边栏背景类型的特殊验证
         if (CommonConst.RESOURCE_PATH_TYPE_ASIDE_BACKGROUND.equals(resourcePathVO.getType())) {
-            if (!StringUtils.hasText(resourcePathVO.getCover())) {
-                return PoetryResult.fail("侧边栏背景图片/CSS代码不能为空！");
+            if (!StringUtils.hasText(filteredCover)) {
+                return PoetryResult.fail("侧边栏背景图片/CSS代码不能为空或包含不安全内容！");
             }
         } else {
-            if (!StringUtils.hasText(resourcePathVO.getTitle()) || !StringUtils.hasText(resourcePathVO.getType())) {
-                return PoetryResult.fail("标题和资源类型不能为空！");
+            if (!StringUtils.hasText(filteredTitle) || !StringUtils.hasText(resourcePathVO.getType())) {
+                return PoetryResult.fail("标题和资源类型不能为空或包含不安全内容！");
             }
         }
         if (CommonConst.RESOURCE_PATH_TYPE_LOVE_PHOTO.equals(resourcePathVO.getType())) {
@@ -191,9 +222,9 @@ public class ResourceAggregationController {
         // 侧边栏背景：自动设置标题，并将额外背景层存储到remark
         if (CommonConst.RESOURCE_PATH_TYPE_ASIDE_BACKGROUND.equals(resourcePathVO.getType())) {
             resourcePathVO.setTitle("侧边栏背景");
-            if (StringUtils.hasText(resourcePathVO.getExtraBackground())) {
+            if (StringUtils.hasText(filteredExtraBackground)) {
                 // 转义双引号和反斜杠
-                String escapedExtra = resourcePathVO.getExtraBackground()
+                String escapedExtra = filteredExtraBackground
                     .replace("\\", "\\\\")
                     .replace("\"", "\\\"");
                 resourcePathVO.setRemark("{\"extraBackground\":\"" + escapedExtra + "\"}");
@@ -206,14 +237,14 @@ public class ResourceAggregationController {
         if (CommonConst.RESOURCE_PATH_TYPE_QUICK_ENTRY.equals(resourcePathVO.getType()) || 
             CommonConst.RESOURCE_PATH_TYPE_CONTACT.equals(resourcePathVO.getType())) {
             StringBuilder jsonBuilder = new StringBuilder("{");
-            if (StringUtils.hasText(resourcePathVO.getBtnWidth())) {
-                jsonBuilder.append("\"btnWidth\":\"").append(resourcePathVO.getBtnWidth()).append("\",");
+            if (StringUtils.hasText(filteredBtnWidth)) {
+                jsonBuilder.append("\"btnWidth\":\"").append(filteredBtnWidth).append("\",");
             }
-            if (StringUtils.hasText(resourcePathVO.getBtnHeight())) {
-                jsonBuilder.append("\"btnHeight\":\"").append(resourcePathVO.getBtnHeight()).append("\",");
+            if (StringUtils.hasText(filteredBtnHeight)) {
+                jsonBuilder.append("\"btnHeight\":\"").append(filteredBtnHeight).append("\",");
             }
-            if (StringUtils.hasText(resourcePathVO.getBtnRadius())) {
-                jsonBuilder.append("\"btnRadius\":\"").append(resourcePathVO.getBtnRadius()).append("\",");
+            if (StringUtils.hasText(filteredBtnRadius)) {
+                jsonBuilder.append("\"btnRadius\":\"").append(filteredBtnRadius).append("\",");
             }
             if (jsonBuilder.length() > 1) {
                 jsonBuilder.deleteCharAt(jsonBuilder.length() - 1); // 删除最后一个逗号
@@ -224,6 +255,12 @@ public class ResourceAggregationController {
         
         ResourcePath resourcePath = new ResourcePath();
         BeanUtils.copyProperties(resourcePathVO, resourcePath);
+        // 使用过滤后的值覆盖
+        resourcePath.setTitle(filteredTitle);
+        resourcePath.setIntroduction(filteredIntroduction);
+        resourcePath.setUrl(filteredUrl);
+        resourcePath.setCover(filteredCover);
+        resourcePath.setClassify(filteredClassify);
         resourcePathMapper.updateById(resourcePath);
         
         // 如果是收藏夹类型、本站信息类型或友链类型的资源，重新渲染相关页面

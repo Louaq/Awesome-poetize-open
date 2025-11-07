@@ -536,6 +536,11 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
     public PoetryResult updateArticle(ArticleVO articleVO, boolean skipAiTranslation, Map<String, String> pendingTranslation) {
         log.info("开始更新文章，ID: {}", articleVO.getId());
         
+        // 验证数据合法性
+        if (StringUtils.hasText(articleVO.getArticleTitle()) && articleVO.getArticleTitle().trim().isEmpty()) {
+            return PoetryResult.fail("文章标题为空");
+        }
+        
         // 参数验证
         if (articleVO.getViewStatus() != null && !articleVO.getViewStatus() && !StringUtils.hasText(articleVO.getPassword())) {
             return PoetryResult.fail("请设置文章密码！");
@@ -1759,6 +1764,12 @@ public class ArticleServiceImpl extends ServiceImpl<ArticleMapper, Article> impl
      */
     @Transactional(rollbackFor = Exception.class)
     private Integer saveArticleInTransaction(ArticleVO articleVO) {
+        // 验证数据合法性
+        if (StringUtils.isEmpty(articleVO.getArticleTitle()) || articleVO.getArticleTitle().trim().isEmpty()) {
+            log.error("保存文章失败：文章标题为空");
+            return null;
+        }
+        
         Article article = new Article();
         
         if (StringUtils.hasText(articleVO.getArticleCover())) {

@@ -78,13 +78,6 @@ const mainStore = useMainStore(pinia)
 // 灰度模式 - 使用 Pinia store
 initGrayMode(mainStore)
 
-// 字体加载
-if (mainStore.sysConfig) {
-  loadFonts(mainStore.sysConfig).catch(err => {
-    console.error('加载字体失败:', err)
-  })
-}
-
 // 监听 sysConfig 变化
 mainStore.$subscribe((mutation, state) => {
   if (state.sysConfig) {
@@ -143,4 +136,11 @@ app.$nextTick(() => {
   
   // 注册 PWA Service Worker
   registerServiceWorker(Vue.prototype.$notify.info)
+  
+  // 字体加载 - 在应用挂载后执行，确保 store 已完全初始化
+  if (mainStore.sysConfig) {
+    loadFonts(mainStore.sysConfig).catch(err => {
+      console.error('加载字体失败:', err)
+    })
+  }
 })

@@ -72,6 +72,9 @@
 </template>
 
 <script>
+import axios from '@/utils/request';
+import cryptoUtil from '@/utils/crypto';
+
 export default {
   name: 'SlideCaptcha',
   props: {
@@ -269,9 +272,14 @@ export default {
         browserFingerprint: this.browserFingerprint
       };
       
+      // 加密请求数据
+      const encryptedData = cryptoUtil.encrypt(JSON.stringify(verifyData));
+      const encryptedRequest = {
+        encrypted: encryptedData
+      };
       
       // 调用后端验证接口
-      this.$http.post(this.$constant.baseURL + "/captcha/verify-slide", verifyData)
+      axios.post(this.$constant.baseURL + "/captcha/verify-slide", encryptedRequest)
         .then(res => {
           
           // 处理返回的数据（支持两种格式）
@@ -761,4 +769,4 @@ export default {
     line-height: 40px;
   }
 }
-</style> 
+</style>

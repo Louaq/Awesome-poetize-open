@@ -8,6 +8,7 @@ import com.ld.poetry.constants.CommonConst;
 import com.ld.poetry.dao.TreeHoleMapper;
 import com.ld.poetry.entity.TreeHole;
 import com.ld.poetry.utils.PoetryUtil;
+import com.ld.poetry.utils.XssFilterUtil;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
@@ -39,6 +40,14 @@ public class TreeHoleController {
         if (!StringUtils.hasText(treeHole.getMessage())) {
             return PoetryResult.fail("留言不能为空！");
         }
+        
+        // XSS过滤处理
+        String cleanMessage = XssFilterUtil.clean(treeHole.getMessage());
+        if (!StringUtils.hasText(cleanMessage)) {
+            return PoetryResult.fail("留言内容不合法！");
+        }
+        treeHole.setMessage(cleanMessage);
+        
         treeHoleMapper.insert(treeHole);
         if (!StringUtils.hasText(treeHole.getAvatar())) {
             treeHole.setAvatar(PoetryUtil.getRandomAvatar(null));

@@ -68,7 +68,10 @@ const proButton = () => import( "../common/proButton");
           isAdmin: true
         };
 
-        this.$http.post(this.$constant.baseURL + "/user/login", user, true, false)
+        // 对整个请求体进行加密
+        let encryptedUser = this.$common.encrypt(JSON.stringify(user));
+
+        this.$http.post(this.$constant.baseURL + "/user/login", {data: encryptedUser}, true, true)
           .then((res) => {
             if (!this.$common.isEmpty(res.data)) {
               // 清除旧的缓存数据

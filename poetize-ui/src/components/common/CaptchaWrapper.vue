@@ -208,7 +208,8 @@ export default {
      * 加载验证码配置
      */
     loadCaptchaConfig() {
-      this.$http.get(this.$constant.baseURL + "/captcha/getConfig", {}, false)
+      // 添加加密标识，让后端知道需要加密响应
+      this.$http.get(this.$constant.baseURL + "/captcha/getConfig", { encrypted: true }, false)
         .then(res => {
           if (res.data) {
             this.captchaConfig = res.data;
@@ -349,4 +350,4 @@ export default {
     padding: 5px;
   }
 }
-</style> 
+</style>

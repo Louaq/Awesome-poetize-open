@@ -12,6 +12,7 @@ import com.ld.poetry.service.CommentService;
 import com.ld.poetry.service.LocationService;
 import com.ld.poetry.utils.CommonQuery;
 import com.ld.poetry.utils.StringUtil;
+import com.ld.poetry.utils.XssFilterUtil;
 import com.ld.poetry.vo.BaseRequestVO;
 import com.ld.poetry.vo.CommentVO;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -61,8 +62,8 @@ public class CommentController {
     @LoginCheck
     @SaveCheck
     public PoetryResult saveComment(@Validated @RequestBody CommentVO commentVO) {
-        // 验证评论内容
-        String content = StringUtil.removeHtml(commentVO.getCommentContent());
+        // XSS过滤处理
+        String content = XssFilterUtil.clean(commentVO.getCommentContent());
         if (!StringUtils.hasText(content)) {
             return PoetryResult.fail("评论内容不合法！");
         }

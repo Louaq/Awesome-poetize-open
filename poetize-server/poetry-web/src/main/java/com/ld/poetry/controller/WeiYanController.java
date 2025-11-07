@@ -13,6 +13,7 @@ import com.ld.poetry.constants.CommonConst;
 import com.ld.poetry.enums.PoetryEnum;
 import com.ld.poetry.utils.PoetryUtil;
 import com.ld.poetry.utils.StringUtil;
+import com.ld.poetry.utils.XssFilterUtil;
 import com.ld.poetry.vo.BaseRequestVO;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
@@ -50,7 +51,8 @@ public class WeiYanController {
             return PoetryResult.fail("微言不能为空！");
         }
 
-        String content = StringUtil.removeHtml(weiYanVO.getContent());
+        // XSS过滤处理
+        String content = XssFilterUtil.clean(weiYanVO.getContent());
         if (!StringUtils.hasText(content)) {
             return PoetryResult.fail("微言内容不合法！");
         }
@@ -75,6 +77,13 @@ public class WeiYanController {
         if (!StringUtils.hasText(weiYanVO.getContent()) || weiYanVO.getSource() == null) {
             return PoetryResult.fail("信息不全！");
         }
+
+        // XSS过滤处理
+        String content = XssFilterUtil.clean(weiYanVO.getContent());
+        if (!StringUtils.hasText(content)) {
+            return PoetryResult.fail("内容不合法！");
+        }
+        weiYanVO.setContent(content);
 
         if (weiYanVO.getCreateTime() == null) {
             weiYanVO.setCreateTime(LocalDateTime.now());

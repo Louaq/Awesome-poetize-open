@@ -39,13 +39,16 @@ import myHeader from "./common/myHeader.vue";
     },
 
     created() {
-      let sysConfig = this.mainStore.sysConfig;
-      if (!this.$common.isEmpty(sysConfig) && !this.$common.isEmpty(sysConfig['webStaticResourcePrefix'])) {
-        let root = document.querySelector(":root");
-        let webStaticResourcePrefix = sysConfig['webStaticResourcePrefix'];
-        root.style.setProperty("--backgroundPicture", "url(" + webStaticResourcePrefix + "assets/backgroundPicture.jpg)");
+      // 延迟获取系统配置，确保mainStore已经初始化
+      this.$nextTick(() => {
+        let sysConfig = this.mainStore.sysConfig;
+        if (!this.$common.isEmpty(sysConfig) && !this.$common.isEmpty(sysConfig['webStaticResourcePrefix'])) {
+          let root = document.querySelector(":root");
+          let webStaticResourcePrefix = sysConfig['webStaticResourcePrefix'];
+          root.style.setProperty("--backgroundPicture", "url(" + webStaticResourcePrefix + "assets/backgroundPicture.jpg)");
+        }
         this.getWebsitConfig();
-      }
+      });
     },
 
     mounted() {

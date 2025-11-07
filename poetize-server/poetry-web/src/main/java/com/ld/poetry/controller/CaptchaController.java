@@ -3,6 +3,7 @@ package com.ld.poetry.controller;
 import com.ld.poetry.aop.LoginCheck;
 import com.ld.poetry.config.PoetryResult;
 import com.ld.poetry.service.CaptchaService;
+import com.ld.poetry.utils.CryptoUtil;
 import com.ld.poetry.utils.IpUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -55,6 +56,28 @@ public class CaptchaController {
             @RequestBody Map<String, Object> data,
             HttpServletRequest request) {
         try {
+            // 标记请求是否加密
+            boolean isEncrypted = false;
+            
+            // 检查请求是否加密
+            if (data.containsKey("encrypted")) {
+                isEncrypted = true;
+                try {
+                    // 解密请求数据
+                    String encryptedData = (String) data.get("encrypted");
+                    Map<String, Object> decryptedData = CryptoUtil.decryptRequest(encryptedData);
+                    if (decryptedData != null) {
+                        data = decryptedData;
+                    }
+                } catch (Exception e) {
+                    log.error("解密验证码验证请求失败", e);
+                    Map<String, Object> errorResult = new HashMap<>();
+                    errorResult.put("success", false);
+                    errorResult.put("message", "解密失败");
+                    return PoetryResult.success(errorResult);
+                }
+            }
+            
             // 获取验证数据
             List<Map<String, Object>> mouseTrack = (List<Map<String, Object>>) data.get("mouseTrack");
             Double straightRatio = getDoubleValue(data, "straightRatio", 1.0);
@@ -78,6 +101,11 @@ public class CaptchaController {
                 mouseTrack, straightRatio, isReplyComment, retryCount, 
                 frontendSensitivity, frontendMinPoints, clickDelay, browserFingerprint, clientIp
             );
+            
+            // 检查请求是否加密，如果是，则加密响应
+            if (isEncrypted) {
+                result = CryptoUtil.encryptResponse(result);
+            }
             
             return PoetryResult.success(result);
         } catch (Exception e) {
@@ -120,6 +148,28 @@ public class CaptchaController {
             @RequestBody Map<String, Object> data,
             HttpServletRequest request) {
         try {
+            // 标记请求是否加密
+            boolean isEncrypted = false;
+            
+            // 检查请求是否加密
+            if (data.containsKey("encrypted")) {
+                isEncrypted = true;
+                try {
+                    // 解密请求数据
+                    String encryptedData = (String) data.get("encrypted");
+                    Map<String, Object> decryptedData = CryptoUtil.decryptRequest(encryptedData);
+                    if (decryptedData != null) {
+                        data = decryptedData;
+                    }
+                } catch (Exception e) {
+                    log.error("解密滑动验证码验证请求失败", e);
+                    Map<String, Object> errorResult = new HashMap<>();
+                    errorResult.put("success", false);
+                    errorResult.put("message", "解密失败");
+                    return PoetryResult.success(errorResult);
+                }
+            }
+            
             // 获取验证数据
             List<Map<String, Object>> slideTrack = (List<Map<String, Object>>) data.get("slideTrack");
             Long totalTime = getLongValue(data, "totalTime", null);
@@ -141,6 +191,11 @@ public class CaptchaController {
                 slideTrack, totalTime, maxDistance, finalPosition, browserFingerprint, clientIp
             );
             
+            // 检查请求是否加密，如果是，则加密响应
+            if (isEncrypted) {
+                result = CryptoUtil.encryptResponse(result);
+            }
+            
             return PoetryResult.success(result);
         } catch (Exception e) {
             log.error("滑动验证失败", e);
@@ -156,9 +211,16 @@ public class CaptchaController {
      * GET /captcha/getConfig
      */
     @GetMapping("/getConfig")
-    public PoetryResult<Map<String, Object>> getPublicConfig() {
+    public PoetryResult<Map<String, Object>> getPublicConfig(@RequestParam(value = "encrypted", required = false, defaultValue = "false") boolean encrypted) {
         try {
             Map<String, Object> config = captchaService.getPublicCaptchaConfig();
+            
+            // 如果请求要求加密，则对配置进行加密
+            if (encrypted) {
+                Map<String, Object> encryptedResponse = CryptoUtil.encryptResponse(config);
+                return PoetryResult.success(encryptedResponse);
+            }
+            
             return PoetryResult.success(config);
         } catch (Exception e) {
             log.error("获取公共验证码配置失败", e);

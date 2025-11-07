@@ -14,7 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.*;
-
+import com.ld.poetry.utils.XssFilterUtil;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -61,8 +61,12 @@ public class SortLabelController {
     @PostMapping("/saveSort")
     @LoginCheck(0)
     public PoetryResult saveSort(@RequestBody Sort sort) {
-        if (!StringUtils.hasText(sort.getSortName()) || !StringUtils.hasText(sort.getSortDescription())) {
-            return PoetryResult.fail("分类名称和分类描述不能为空！");
+        // XSS过滤处理
+        String filteredSortName = StringUtils.hasText(sort.getSortName()) ? XssFilterUtil.clean(sort.getSortName()) : null;
+        String filteredSortDescription = StringUtils.hasText(sort.getSortDescription()) ? XssFilterUtil.clean(sort.getSortDescription()) : null;
+        
+        if (!StringUtils.hasText(filteredSortName) || !StringUtils.hasText(filteredSortDescription)) {
+            return PoetryResult.fail("分类名称和分类描述不能为空或包含不安全内容！");
         }
 
         if (sort.getPriority() == null) {
@@ -75,11 +79,15 @@ public class SortLabelController {
         }
 
         // 检查分类名称是否已存在（唯一性校验）
-        Sort existingSort = sortMapper.selectOne(new QueryWrapper<Sort>().eq("sort_name", sort.getSortName()));
+        Sort existingSort = sortMapper.selectOne(new QueryWrapper<Sort>().eq("sort_name", filteredSortName));
         if (existingSort != null) {
             return PoetryResult.fail("分类名称已存在，请使用其他名称！");
         }
 
+        // 使用过滤后的数据
+        sort.setSortName(filteredSortName);
+        sort.setSortDescription(filteredSortDescription);
+        
         sortMapper.insert(sort);
         log.info("分类新增成功，分类名称: {}", sort.getSortName());
 
@@ -139,8 +147,12 @@ public class SortLabelController {
     @PostMapping("/updateSort")
     @LoginCheck(0)
     public PoetryResult updateSort(@RequestBody Sort sort) {
-        if (!StringUtils.hasText(sort.getSortName()) || !StringUtils.hasText(sort.getSortDescription())) {
-            return PoetryResult.fail("分类名称和分类描述不能为空！");
+        // XSS过滤处理
+        String filteredSortName = StringUtils.hasText(sort.getSortName()) ? XssFilterUtil.clean(sort.getSortName()) : null;
+        String filteredSortDescription = StringUtils.hasText(sort.getSortDescription()) ? XssFilterUtil.clean(sort.getSortDescription()) : null;
+        
+        if (!StringUtils.hasText(filteredSortName) || !StringUtils.hasText(filteredSortDescription)) {
+            return PoetryResult.fail("分类名称和分类描述不能为空或包含不安全内容！");
         }
 
         if (sort.getPriority() == null) {
@@ -149,12 +161,16 @@ public class SortLabelController {
 
         // 检查分类名称是否已存在（唯一性校验），排除当前分类
         Sort existingSort = sortMapper.selectOne(new QueryWrapper<Sort>()
-                .eq("sort_name", sort.getSortName())
+                .eq("sort_name", filteredSortName)
                 .ne("id", sort.getId()));
         if (existingSort != null) {
             return PoetryResult.fail("分类名称已存在，请使用其他名称！");
         }
 
+        // 使用过滤后的数据
+        sort.setSortName(filteredSortName);
+        sort.setSortDescription(filteredSortDescription);
+        
         sortMapper.updateById(sort);
         log.info("分类更新成功，分类ID: {}", sort.getId());
 
@@ -196,18 +212,26 @@ public class SortLabelController {
     @PostMapping("/saveLabel")
     @LoginCheck(0)
     public PoetryResult saveLabel(@RequestBody Label label) {
-        if (!StringUtils.hasText(label.getLabelName()) || !StringUtils.hasText(label.getLabelDescription()) || label.getSortId() == null) {
-            return PoetryResult.fail("标签名称和标签描述和分类Id不能为空！");
+        // XSS过滤处理
+        String filteredLabelName = StringUtils.hasText(label.getLabelName()) ? XssFilterUtil.clean(label.getLabelName()) : null;
+        String filteredLabelDescription = StringUtils.hasText(label.getLabelDescription()) ? XssFilterUtil.clean(label.getLabelDescription()) : null;
+        
+        if (!StringUtils.hasText(filteredLabelName) || !StringUtils.hasText(filteredLabelDescription) || label.getSortId() == null) {
+            return PoetryResult.fail("标签名称和标签描述和分类Id不能为空或包含不安全内容！");
         }
 
         // 检查在同一分类下标签名称是否已存在（唯一性校验）
         Label existingLabel = labelMapper.selectOne(new QueryWrapper<Label>()
-                .eq("label_name", label.getLabelName())
+                .eq("label_name", filteredLabelName)
                 .eq("sort_id", label.getSortId()));
         if (existingLabel != null) {
             return PoetryResult.fail("该分类下已存在相同的标签名称，请使用其他名称！");
         }
 
+        // 使用过滤后的数据
+        label.setLabelName(filteredLabelName);
+        label.setLabelDescription(filteredLabelDescription);
+        
         labelMapper.insert(label);
         log.info("标签新增成功，标签名称: {}", label.getLabelName());
 
@@ -269,19 +293,27 @@ public class SortLabelController {
     @PostMapping("/updateLabel")
     @LoginCheck(0)
     public PoetryResult updateLabel(@RequestBody Label label) {
-        if (!StringUtils.hasText(label.getLabelName()) || !StringUtils.hasText(label.getLabelDescription()) || label.getSortId() == null) {
-            return PoetryResult.fail("标签名称和标签描述和分类Id不能为空！");
+        // XSS过滤处理
+        String filteredLabelName = StringUtils.hasText(label.getLabelName()) ? XssFilterUtil.clean(label.getLabelName()) : null;
+        String filteredLabelDescription = StringUtils.hasText(label.getLabelDescription()) ? XssFilterUtil.clean(label.getLabelDescription()) : null;
+        
+        if (!StringUtils.hasText(filteredLabelName) || !StringUtils.hasText(filteredLabelDescription) || label.getSortId() == null) {
+            return PoetryResult.fail("标签名称和标签描述和分类Id不能为空或包含不安全内容！");
         }
 
         // 检查在同一分类下标签名称是否已存在（唯一性校验），排除当前标签
         Label existingLabel = labelMapper.selectOne(new QueryWrapper<Label>()
-                .eq("label_name", label.getLabelName())
+                .eq("label_name", filteredLabelName)
                 .eq("sort_id", label.getSortId())
                 .ne("id", label.getId()));
         if (existingLabel != null) {
             return PoetryResult.fail("该分类下已存在相同的标签名称，请使用其他名称！");
         }
 
+        // 使用过滤后的数据
+        label.setLabelName(filteredLabelName);
+        label.setLabelDescription(filteredLabelDescription);
+        
         labelMapper.updateById(label);
         log.info("标签更新成功，标签ID: {}", label.getId());
 

@@ -53,6 +53,9 @@
 </template>
 
 <script>
+import axios from '@/utils/request';
+import cryptoUtil from '@/utils/crypto';
+
 export default {
   name: 'CheckboxCaptcha',
   props: {
@@ -183,8 +186,9 @@ export default {
         minTrackPoints: this.getMinTrackPoints()  // 动态最少轨迹点数
       };
       
+      // 直接发送原始数据，让request.js拦截器统一处理加密
       // 调用验证接口
-      this.$http.post(this.$constant.baseURL + "/captcha/verify-checkbox", verifyData)
+      axios.post(this.$constant.baseURL + "/captcha/verify-checkbox", verifyData)
         .then(res => {
           this.verifying = false;
           
@@ -723,4 +727,4 @@ export default {
     margin-top: 10px;
   }
 }
-</style> 
+</style>

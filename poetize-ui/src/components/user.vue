@@ -532,7 +532,10 @@ const proButton = () => import( "./common/proButton");
           user.verificationToken = verificationToken;
         }
         
-        this.$http.post(this.$constant.baseURL + "/user/login", user, true, false)
+        // 对整个请求体进行加密
+        let encryptedUser = this.$common.encrypt(JSON.stringify(user));
+        
+        this.$http.post(this.$constant.baseURL + "/user/login", {data: encryptedUser}, true, true)
           .then((res) => {
             if (!this.$common.isEmpty(res.data)) {
               // 同时存储用户token和管理员token
