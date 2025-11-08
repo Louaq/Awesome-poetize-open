@@ -3,13 +3,11 @@ package com.ld.poetry.utils;
 import com.ld.poetry.config.AsyncUserContext;
 import com.ld.poetry.entity.User;
 import com.ld.poetry.utils.cache.UserCacheManager;
-import com.ld.poetry.utils.RetryUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
-import com.ld.poetry.utils.PoetryUtil;
 import com.ld.poetry.constants.CommonConst;
 
 /**

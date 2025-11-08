@@ -12,16 +12,23 @@ import com.ld.poetry.utils.RedisUtil;
 import com.ld.poetry.utils.SpringContextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ScanOptions;
+import org.springframework.data.redis.core.Cursor;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * 缓存服务类
@@ -36,6 +43,9 @@ public class CacheService {
 
     @Autowired
     private RedisUtil redisUtil;
+    
+    @Autowired
+    private RedisTemplate<String, Object> redisTemplate;
     
     @Autowired
     private HistoryInfoMapper historyInfoMapper;
@@ -983,12 +993,41 @@ public class CacheService {
      */
     public void deleteKeysByPattern(String pattern) {
         try {
-            // 注意：这里使用简单的实现，生产环境中可能需要更高效的方式
-            // 由于Redis的keys命令在大数据量时性能较差，建议使用scan命令
-            log.warn("deleteKeysByPattern方法使用了keys命令，在大数据量时可能影响性能: {}", pattern);
-
-            // 这里暂时记录日志，实际删除逻辑可以根据需要实现
-            log.info("请求删除匹配模式的缓存键: {}", pattern);
+            // 使用scan命令代替keys命令，避免在大数据量时阻塞Redis
+            log.info("开始删除匹配模式的缓存键: {}", pattern);
+            
+            Set<String> keysToDelete = new HashSet<>();
+            
+            // 使用RedisTemplate的scan方法获取匹配的键
+            redisTemplate.execute((RedisCallback<Void>) connection -> {
+                try {
+                    Cursor<byte[]> cursor = connection.scan(
+                        ScanOptions.scanOptions()
+                            .match(pattern)
+                            .count(1000) // 每次扫描1000个键
+                            .build());
+                    
+                    try {
+                        while (cursor.hasNext()) {
+                            keysToDelete.add(new String(cursor.next(), StandardCharsets.UTF_8));
+                        }
+                    } finally {
+                        cursor.close();
+                    }
+                } catch (Exception e) {
+                    log.error("扫描Redis键时发生异常", e);
+                }
+                return null;
+            });
+            
+            // 批量删除匹配的键
+            if (!keysToDelete.isEmpty()) {
+                redisTemplate.delete(keysToDelete);
+                log.info("成功删除{}个匹配模式的缓存键: {}", keysToDelete.size(), pattern);
+            } else {
+                log.info("没有找到匹配模式的缓存键: {}", pattern);
+            }
+            
         } catch (Exception e) {
             log.error("根据模式删除缓存键失败: pattern={}", pattern, e);
         }

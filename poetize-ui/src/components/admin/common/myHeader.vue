@@ -79,6 +79,14 @@ export default {
       logout() {
         this.$http.get(this.$constant.baseURL + "/user/logout", {}, true)
           .then((res) => {
+            // 只有在退出接口成功返回后才清除token和用户信息
+            this.mainStore.loadCurrentUser( {});
+            this.mainStore.loadCurrentAdmin( {});
+            localStorage.removeItem("userToken");
+            localStorage.removeItem("adminToken");
+            
+            // 后台退出登录，跳转到首页
+            this.$router.push({path: '/'});
           })
           .catch((error) => {
             this.$message({
@@ -86,13 +94,6 @@ export default {
               type: "error"
             });
           });
-        this.mainStore.loadCurrentUser( {});
-        this.mainStore.loadCurrentAdmin( {});
-        localStorage.removeItem("userToken");
-        localStorage.removeItem("adminToken");
-        
-        // 后台退出登录，跳转到首页
-        this.$router.push({path: '/'});
       }
     }
   }

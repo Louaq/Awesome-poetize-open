@@ -206,8 +206,8 @@ public class MailUtil {
             } else {
             }
             
-            // 使用MailService发送邮件，这样会根据配置的邮箱信息发送
-            boolean success = mailService.sendMail(to, subject, text, true, null);
+            // 使用MailService发送邮件，按顺序尝试所有可用的邮箱配置
+            boolean success = mailService.sendMailWithSequentialRetry(to, subject, text, true);
             
             if (success) {
                 AsyncTaskUtil.logUserOperation("邮件发送成功", String.format("收件人: %s", JSON.toJSONString(to)));

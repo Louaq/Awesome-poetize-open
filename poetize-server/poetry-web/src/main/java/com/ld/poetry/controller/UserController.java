@@ -132,7 +132,24 @@ public class UserController {
     @GetMapping("/logout")
     @LoginCheck
     public PoetryResult exit() {
-        return userService.exit();
+        try {
+            // 尝试获取当前用户信息
+            // User currentUser = PoetryUtil.getCurrentUser();
+            // String token = PoetryUtil.getTokenWithoutBearer();
+            
+            // 记录退出请求的详细信息
+            // log.info("用户退出请求 - 用户: {}, token存在: {}, IP: {}", 
+            //     currentUser != null ? currentUser.getUsername() : "未知", 
+            //     token != null && !token.isEmpty(), 
+            //     PoetryUtil.getIpAddr(PoetryUtil.getRequest()));
+            
+            // 调用服务层处理退出逻辑
+            return userService.exit();
+        } catch (Exception e) {
+            // 即使在异常情况下也返回成功，因为退出操作应该总是成功
+            log.warn("退出登录过程中发生异常，但返回成功: {}", e.getMessage());
+            return PoetryResult.success("退出成功");
+        }
     }
 
 

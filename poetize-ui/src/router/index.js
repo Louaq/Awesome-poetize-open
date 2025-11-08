@@ -298,6 +298,8 @@ router.beforeEach((to, from, next) => {
             };
 
             // 先存储token，但标记为需要完善信息
+            // 注意：虽然同时存储为userToken和adminToken，但实际权限由后端严格执行
+            // 权限控制基于token前缀、用户类型字段和@LoginCheck注解验证
             localStorage.setItem("userToken", result.data.accessToken);
             localStorage.setItem("adminToken", result.data.accessToken);
             localStorage.setItem("tempUserData", JSON.stringify(tempUserData));
@@ -317,6 +319,8 @@ router.beforeEach((to, from, next) => {
           localStorage.removeItem("currentAdmin");
           localStorage.removeItem("currentUser");
 
+          // 注意：虽然同时存储为userToken和adminToken，但实际权限由后端严格执行
+          // 权限控制基于token前缀、用户类型字段和@LoginCheck注解验证
           localStorage.setItem("userToken", result.data.accessToken);
           localStorage.setItem("adminToken", result.data.accessToken);
           const mainStore = useMainStore();

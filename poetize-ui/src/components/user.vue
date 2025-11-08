@@ -511,6 +511,12 @@ const proButton = () => import( "./common/proButton");
       },
       /**
        * 登录
+       * 注意：虽然前端将同一个token同时存储为userToken和adminToken
+       * 但实际的权限控制是在后端严格执行的，不会导致权限绕过问题：
+       * 1. 后端通过token前缀和HMAC签名验证token类型
+       * 2. 验证用户在数据库中的userType字段
+       * 3. 使用@LoginCheck注解进行权限级别验证
+       * 4. 即使前端错误设置了adminToken，后端也会拒绝非管理员访问管理员接口
        */
       login(verificationToken = '') {
         if (this.$common.isEmpty(this.account) || this.$common.isEmpty(this.password)) {

@@ -265,13 +265,6 @@ public class MailServiceImpl implements MailService {
         }
         
         try {
-            // 使用随机邮箱配置
-            MailConfigDTO config = getRandomMailConfig();
-            if (config == null) {
-                log.error("没有可用的邮箱配置");
-                return false;
-            }
-            
             // 构建验证码邮件内容
             // 从数据库获取验证码邮件主题
             String subject = sysConfigService.getConfigValueByKey("user.code.subject");
@@ -292,9 +285,9 @@ public class MailServiceImpl implements MailService {
             log.info("使用验证码模板: {}", template); // 添加日志记录使用的模板
             String content = String.format(template, code);
             
-            // 发送邮件
+            // 发送邮件 - 使用顺序重试机制
             List<String> toList = Collections.singletonList(email);
-            return sendMail(toList, subject, content, true, config);
+            return sendMailWithSequentialRetry(toList, subject, content, true);
         } catch (Exception e) {
             log.error("验证码邮件发送失败", e);
             return false;
@@ -329,6 +322,8 @@ public class MailServiceImpl implements MailService {
             
             // 设置发件人
             helper.setFrom(new InternetAddress(config.getUsername(), config.getSenderName(), "UTF-8"));
+            
+            // 设置收件人
             helper.setTo(to.toArray(new String[0]));
             helper.setSubject(subject);
             
@@ -344,6 +339,73 @@ public class MailServiceImpl implements MailService {
             log.error("邮件发送失败", e);
             return false;
         }
+    }
+    
+    /**
+     * 按顺序尝试所有可用的邮箱配置发送邮件
+     * 该方法会依次尝试每个启用的邮箱配置，直到成功发送邮件或尝试完所有配置
+     * 
+     * @param to 收件人列表
+     * @param subject 邮件主题
+     * @param content 邮件内容
+     * @param html 是否HTML格式
+     * @return 是否发送成功
+     */
+    @Override
+    public boolean sendMailWithSequentialRetry(List<String> to, String subject, String content, boolean html) {
+        if (to == null || to.isEmpty() || subject == null || content == null) {
+            log.error("邮件参数错误，收件人为空或主题为空或内容为空");
+            return false;
+        }
+        
+        // 获取所有邮箱配置
+        List<MailConfigDTO> allConfigs = getMailConfigs();
+        if (allConfigs.isEmpty()) {
+            log.error("没有可用的邮箱配置");
+            return false;
+        }
+        
+        // 过滤出启用的配置
+        List<MailConfigDTO> enabledConfigs = allConfigs.stream()
+                .filter(config -> Boolean.TRUE.equals(config.getEnabled()))
+                .collect(Collectors.toList());
+        
+        if (enabledConfigs.isEmpty()) {
+            log.error("没有启用的邮箱配置");
+            return false;
+        }
+        
+        log.info("开始按顺序尝试发送邮件，共{}个可用配置", enabledConfigs.size());
+        
+        // 按顺序尝试每个配置
+        for (int i = 0; i < enabledConfigs.size(); i++) {
+            MailConfigDTO config = enabledConfigs.get(i);
+            int configIndex = i + 1;
+            
+            log.info("尝试使用第{}个邮箱配置发送邮件: {} ({})", 
+                    configIndex, config.getSenderName(), config.getUsername());
+            
+            try {
+                // 尝试使用当前配置发送邮件
+                boolean success = sendMail(to, subject, content, html, config);
+                
+                if (success) {
+                    log.info("邮件发送成功，使用第{}个配置: {} ({})", 
+                            configIndex, config.getSenderName(), config.getUsername());
+                    return true;
+                } else {
+                    log.warn("第{}个配置发送失败，继续尝试下一个配置: {} ({})", 
+                            configIndex, config.getSenderName(), config.getUsername());
+                }
+            } catch (Exception e) {
+                log.error("第{}个配置发送异常，继续尝试下一个配置: {} ({})", 
+                        configIndex, config.getSenderName(), config.getUsername(), e);
+            }
+        }
+        
+        // 所有配置都尝试失败
+        log.error("所有{}个邮箱配置都尝试失败，邮件发送失败", enabledConfigs.size());
+        return false;
     }
     
     /**

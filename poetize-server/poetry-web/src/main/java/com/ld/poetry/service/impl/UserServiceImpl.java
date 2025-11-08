@@ -206,8 +206,22 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             return PoetryResult.fail("账号已被锁定，请稍后再试");
         }
 
-        // 验证用户名和密码
-        User one = lambdaQuery().eq(User::getUsername, account).one();
+        // 验证用户名/邮箱/手机号和密码
+        User one = null;
+        
+        // 尝试通过用户名查找
+        one = lambdaQuery().eq(User::getUsername, account).one();
+        
+        // 如果用户名未找到，且输入格式符合邮箱规则，尝试通过邮箱查找
+        if (one == null && account.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
+            one = lambdaQuery().eq(User::getEmail, account).one();
+        }
+        
+        // 如果用户名和邮箱都未找到，且输入格式符合手机号规则，尝试通过手机号查找
+        if (one == null && account.matches("^1[3-9]\\d{9}$")) {
+            one = lambdaQuery().eq(User::getPhoneNumber, account).one();
+        }
+        
         if (one == null) {
             return PoetryResult.fail("用户名或密码错误！");
         }
@@ -353,7 +367,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         try {
             String token = PoetryUtil.getToken();
             Integer userId = PoetryUtil.getUserId();
+            String clientIp = PoetryUtil.getIpAddr(PoetryUtil.getRequest());
+            
+            // log.info("处理退出登录请求 - token存在: {}, userId: {}, IP: {}", 
+            //     token != null && !token.isEmpty(), userId, clientIp);
 
+            // 即使token或userId为空，也尝试进行部分清理操作
             if (userId != null && token != null) {
                 // 判断是管理员还是普通用户token
                 boolean isAdminToken = token.contains(CommonConst.ADMIN_ACCESS_TOKEN);
@@ -385,15 +404,57 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 userCacheManager.removeUserByToken(token);
                 userCacheManager.removeUserById(userId);
 
-                log.info("退出登录成功 - 用户ID: {}", userId);
+                // log.info("退出登录成功 - 用户ID: {}, IP: {}", userId, clientIp);
             } else {
-                log.warn("退出登录时无法获取用户信息");
+                // 尝试从请求头获取token进行部分清理
+                if (token != null && !token.isEmpty()) {
+                    // log.info("userId为空但token存在，尝试清理token相关缓存 - IP: {}", clientIp);
+                    try {
+                        // 尝试从token获取userId
+                        Integer tokenUserId = cacheService.getUserIdFromSession(token);
+                        if (tokenUserId != null) {
+                            // 清理用户会话
+                            cacheService.evictUserSession(token);
+                            
+                            // 判断是管理员还是普通用户token
+                            boolean isAdminToken = token.contains(CommonConst.ADMIN_ACCESS_TOKEN);
+                            
+                            // 清理token映射和间隔检查
+                            if (isAdminToken) {
+                                cacheService.evictAdminToken(tokenUserId);
+                                cacheService.evictTokenInterval(tokenUserId, true);
+                            } else {
+                                cacheService.evictUserToken(tokenUserId);
+                                cacheService.evictTokenInterval(tokenUserId, false);
+                            }
+                            
+                            // 清理用户信息缓存
+                            cacheService.evictUser(tokenUserId);
+                            
+                            // 清除UserCacheManager中的用户缓存
+                            userCacheManager.removeUserByToken(token);
+                            userCacheManager.removeUserById(tokenUserId);
+                            
+                            // log.info("通过token清理用户缓存成功 - 用户ID: {}, IP: {}", tokenUserId, clientIp);
+                        } else {
+                            // 如果无法从token获取userId，只清理会话
+                            cacheService.evictUserSession(token);
+                            userCacheManager.removeUserByToken(token);
+                            // log.info("仅清理会话缓存 - IP: {}", clientIp);
+                        }
+                    } catch (Exception e) {
+                        log.warn("清理token缓存时发生异常: {}", e.getMessage());
+                    }
+                } else {
+                    log.warn("退出登录时无法获取用户信息和token - IP: {}", clientIp);
+                }
             }
 
-            return PoetryResult.success();
+            return PoetryResult.success("退出成功");
         } catch (Exception e) {
             log.error("退出登录失败", e);
-            return PoetryResult.fail("退出登录失败");
+            // 即使发生异常也返回成功，因为退出操作应该总是成功
+            return PoetryResult.success("退出成功");
         }
     }
 
@@ -415,9 +476,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         
         String filteredEmail = null;
         if (StringUtils.hasText(user.getEmail())) {
-            filteredEmail = XssFilterUtil.clean(user.getEmail());
+            // 邮箱地址不需要XSS过滤，因为邮箱格式是固定的，不会包含XSS攻击代码
+            // 直接使用原始邮箱地址，避免@符号被编码为&#64;
+            filteredEmail = user.getEmail().trim();
             if (!StringUtils.hasText(filteredEmail)) {
-                return PoetryResult.fail("邮箱不能为空或包含不安全内容！");
+                return PoetryResult.fail("邮箱不能为空！");
+            }
+            
+            // 简单验证邮箱格式
+            if (!filteredEmail.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
+                return PoetryResult.fail("邮箱格式不正确！");
             }
         }
         
@@ -649,12 +717,24 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     public PoetryResult getCodeForBind(String place, Integer flag) {
-        // XSS过滤处理
+        // XSS过滤处理（仅对非邮箱地址进行过滤）
         String filteredPlace = null;
         if (StringUtils.hasText(place)) {
-            filteredPlace = XssFilterUtil.clean(place);
-            if (!StringUtils.hasText(filteredPlace)) {
-                return PoetryResult.fail("输入内容不合法！");
+            if (flag == 2) {
+                // 如果是邮箱地址，不需要XSS过滤，因为邮箱格式是固定的，不会包含XSS攻击代码
+                // 直接使用原始邮箱地址，避免@符号被编码为&#64;
+                filteredPlace = place.trim();
+                
+                // 简单验证邮箱格式
+                if (!filteredPlace.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
+                    return PoetryResult.fail("邮箱格式不正确！");
+                }
+            } else {
+                // 非邮箱地址进行XSS过滤
+                filteredPlace = XssFilterUtil.clean(place);
+                if (!StringUtils.hasText(filteredPlace)) {
+                    return PoetryResult.fail("输入内容不合法！");
+                }
             }
         }
         
@@ -721,12 +801,24 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             return PoetryResult.fail("请输入验证码！");
         }
         
-        // XSS过滤处理
+        // XSS过滤处理（仅对非邮箱地址进行过滤）
         String filteredPlace = null;
         if (StringUtils.hasText(place)) {
-            filteredPlace = XssFilterUtil.clean(place);
-            if (!StringUtils.hasText(filteredPlace)) {
-                return PoetryResult.fail("输入内容不合法！");
+            if (flag == 2) {
+                // 如果是邮箱地址，不需要XSS过滤，因为邮箱格式是固定的，不会包含XSS攻击代码
+                // 直接使用原始邮箱地址，避免@符号被编码为&#64;
+                filteredPlace = place.trim();
+                
+                // 简单验证邮箱格式
+                if (!filteredPlace.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
+                    return PoetryResult.fail("邮箱格式不正确！");
+                }
+            } else {
+                // 非邮箱地址进行XSS过滤
+                filteredPlace = XssFilterUtil.clean(place);
+                if (!StringUtils.hasText(filteredPlace)) {
+                    return PoetryResult.fail("输入内容不合法！");
+                }
             }
         }
         
@@ -808,12 +900,24 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     public PoetryResult getCodeForForgetPassword(String place, Integer flag) {
-        // XSS过滤处理
+        // XSS过滤处理（仅对非邮箱地址进行过滤）
         String filteredPlace = null;
         if (StringUtils.hasText(place)) {
-            filteredPlace = XssFilterUtil.clean(place);
-            if (!StringUtils.hasText(filteredPlace)) {
-                return PoetryResult.fail("输入内容不合法！");
+            if (flag == 2) {
+                // 如果是邮箱地址，不需要XSS过滤，因为邮箱格式是固定的，不会包含XSS攻击代码
+                // 直接使用原始邮箱地址，避免@符号被编码为&#64;
+                filteredPlace = place.trim();
+                
+                // 简单验证邮箱格式
+                if (!filteredPlace.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
+                    return PoetryResult.fail("邮箱格式不正确！");
+                }
+            } else {
+                // 非邮箱地址进行XSS过滤
+                filteredPlace = XssFilterUtil.clean(place);
+                if (!StringUtils.hasText(filteredPlace)) {
+                    return PoetryResult.fail("输入内容不合法！");
+                }
             }
         }
         
@@ -850,12 +954,24 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
 
     @Override
     public PoetryResult updateForForgetPassword(String place, Integer flag, String code, String password) {
-        // XSS过滤处理
+        // XSS过滤处理（仅对非邮箱地址进行过滤）
         String filteredPlace = null;
         if (StringUtils.hasText(place)) {
-            filteredPlace = XssFilterUtil.clean(place);
-            if (!StringUtils.hasText(filteredPlace)) {
-                return PoetryResult.fail("输入内容不合法！");
+            if (flag == 2) {
+                // 如果是邮箱地址，不需要XSS过滤，因为邮箱格式是固定的，不会包含XSS攻击代码
+                // 直接使用原始邮箱地址，避免@符号被编码为&#64;
+                filteredPlace = place.trim();
+                
+                // 简单验证邮箱格式
+                if (!filteredPlace.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
+                    return PoetryResult.fail("邮箱格式不正确！");
+                }
+            } else {
+                // 非邮箱地址进行XSS过滤
+                filteredPlace = XssFilterUtil.clean(place);
+                if (!StringUtils.hasText(filteredPlace)) {
+                    return PoetryResult.fail("输入内容不合法！");
+                }
             }
         }
         
@@ -1115,9 +1231,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         }
         String filteredEmail = null;
         if (StringUtils.hasText(email)) {
-            filteredEmail = XssFilterUtil.clean(email);
+            // 邮箱地址不需要XSS过滤，因为邮箱格式是固定的，不会包含XSS攻击代码
+            // 直接使用原始邮箱地址，避免@符号被编码为&#64;
+            filteredEmail = email.trim();
             if (!StringUtils.hasText(filteredEmail)) {
-                return PoetryResult.fail("邮箱不能为空或包含不安全内容！");
+                return PoetryResult.fail("邮箱不能为空！");
+            }
+            
+            // 简单验证邮箱格式
+            if (!filteredEmail.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")) {
+                return PoetryResult.fail("邮箱格式不正确！");
             }
         }
         String filteredAvatar = null;

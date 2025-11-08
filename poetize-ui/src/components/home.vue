@@ -15,6 +15,7 @@
 
         <!-- 手机导航按钮 -->
         <div v-if="$common.mobile() || mobile"
+             key="mobile-menu"
              class="toolbar-mobile-menu"
              @click="toolbarDrawer = !toolbarDrawer"
              :class="{ enter: toolbar.enter }">
@@ -22,30 +23,20 @@
         </div>
 
         <!-- 导航列表 -->
-        <div v-else>
+        <div v-else key="desktop-menu">
           <ul class="scroll-menu">
             <!-- 遍历导航项并按配置顺序显示 -->
             <template v-for="(item, index) in orderedNavItems">
-              <!-- 首页 -->
-              <li v-if="item.name === '首页'" :key="'nav-'+index" 
-                  draggable="true" 
-                  @dragstart="handleNavDragStart($event, '/', '首页')"
-                  @click="goHome()">
-                <div class="my-menu">
-                  🏡 <span>首页</span>
-                </div>
-              </li>
-
-              <!-- 分类 -->
-              <el-dropdown v-if="item.name === '分类'" :key="'nav-'+index" :hide-timeout="500" placement="bottom">
+              <!-- 分类下拉菜单 -->
+              <el-dropdown v-if="item.type === 'dropdown'" :key="'nav-dropdown-'+index" :hide-timeout="500" placement="bottom">
                 <li>
                   <div class="my-menu">
-                    📑 <span>分类</span>
+                    {{item.icon}} <span>{{item.name}}</span>
                   </div>
                 </li>
                 <el-dropdown-menu slot="dropdown">
                   <el-dropdown-item v-for="(sort, sortIndex) in sortInfo" :key="sortIndex">
-                    <div draggable="true" 
+                    <div draggable="true"
                          @dragstart="handleNavDragStart($event, '/sort/' + sort.id, sort.sortName)"
                          @click="$router.push('/sort/' + sort.id)">
                       {{sort.sortName}}
@@ -54,60 +45,30 @@
                 </el-dropdown-menu>
               </el-dropdown>
 
-              <!-- 家 -->
-              <li v-if="item.name === '家'" :key="'nav-'+index" 
-                  draggable="true" 
-                  @dragstart="handleNavDragStart($event, '/love', '家')"
-                  @click="$router.push({path: '/love'})">
+              <!-- 特殊导航项（如联系我） -->
+              <li v-else-if="item.type === 'special' && item.link === '#chat'" :key="'nav-special-'+index" @click="goIm()">
                 <div class="my-menu">
-                  ❤️‍🔥 <span>家</span>
+                  {{item.icon}} <span>{{item.name}}</span>
                 </div>
               </li>
 
-              <!-- 友人帐 -->
-              <li v-if="item.name === '友人帐'" :key="'nav-'+index" 
-                  draggable="true" 
-                  @dragstart="handleNavDragStart($event, '/friends', '友人帐')"
-                  @click="$router.push({path: '/friends'})">
+              <!-- 首页 -->
+              <li v-else-if="item.link === '/'" :key="'nav-home-'+index"
+                  draggable="true"
+                  @dragstart="handleNavDragStart($event, item.link, item.name)"
+                  @click="goHome()">
                 <div class="my-menu">
-                  🤝 <span>友人帐</span>
+                  {{item.icon}} <span>{{item.name}}</span>
                 </div>
               </li>
 
-              <!-- 曲乐 -->
-              <li v-if="item.name === '曲乐'" :key="'nav-'+index" 
-                  draggable="true" 
-                  @dragstart="handleNavDragStart($event, '/music', '曲乐')"
-                  @click="$router.push({path: '/music'})">
+              <!-- 其他内部链接导航项 -->
+              <li v-else :key="'nav-link-'+index"
+                  draggable="true"
+                  @dragstart="handleNavDragStart($event, item.link, item.name)"
+                  @click="$router.push({path: item.link})">
                 <div class="my-menu">
-                  🎵 <span>曲乐</span>
-                </div>
-              </li>
-
-              <!-- 收藏夹 -->
-              <li v-if="item.name === '收藏夹'" :key="'nav-'+index" 
-                  draggable="true" 
-                  @dragstart="handleNavDragStart($event, '/favorites', '收藏夹')"
-                  @click="$router.push({path: '/favorites'})">
-                <div class="my-menu">
-                  📁 <span>收藏夹</span>
-                </div>
-              </li>
-
-              <!-- 留言 -->
-              <li v-if="item.name === '留言'" :key="'nav-'+index" 
-                  draggable="true" 
-                  @dragstart="handleNavDragStart($event, '/message', '留言')"
-                  @click="$router.push({path: '/message'})">
-                <div class="my-menu">
-                  📪 <span>留言</span>
-                </div>
-              </li>
-
-              <!-- 联系我 -->
-              <li v-if="item.name === '联系我'" :key="'nav-'+index" @click="goIm()">
-                <div class="my-menu">
-                  💬 <span>联系我</span>
+                  {{item.icon}} <span>{{item.name}}</span>
                 </div>
               </li>
             </template>
@@ -126,13 +87,14 @@
             <li>
               <!-- 未登录时显示粉色圆形登录按钮 -->
               <div v-if="$common.isEmpty(mainStore.currentUser)" 
+                   key="login-button"
                    class="circle-login-button"
                    @click="goToLogin()">
                 登录
               </div>
               
               <!-- 已登录时显示头像和自定义下拉菜单 -->
-              <div v-else class="avatar-dropdown-container">
+              <div v-else key="user-avatar" class="avatar-dropdown-container">
                 <el-avatar class="user-avatar" 
                           :size="36"
                           style="margin-top: 12px"
@@ -222,9 +184,9 @@
         <div class="my-setting">
           <div>
             <!-- 太阳按钮 -->
-            <i v-if="isDark" class="el-icon-sunny iconRotate" @click="changeColor()"></i>
+            <i v-if="isDark" key="sun-icon" class="el-icon-sunny iconRotate" @click="changeColor()"></i>
             <!-- 月亮按钮 -->
-            <i v-else class="fa fa-moon-o" aria-hidden="true" @click="changeColor()"></i>
+            <i v-else key="moon-icon" class="fa fa-moon-o" aria-hidden="true" @click="changeColor()"></i>
           </div>
           <div>
             <i class="fa fa-snowflake-o" aria-hidden="true" @click="changeMouseAnimation()"></i>
@@ -274,18 +236,11 @@
         <ul class="small-menu">
           <!-- 遍历导航项并按配置顺序显示 -->
           <template v-for="(item, index) in orderedNavItems">
-            <!-- 首页 -->
-            <li v-if="item.name === '首页'" :key="'mobile-nav-'+index" @click="goHomeMobile()">
-              <div>
-                🏡 <span>首页</span>
-              </div>
-            </li>
-
-            <!-- 分类 -->
-            <li v-if="item.name === '分类'" :key="'mobile-nav-'+index">
+            <!-- 分类下拉菜单 -->
+            <li v-if="item.type === 'dropdown'" :key="'mobile-nav-dropdown-'+index">
               <div @click="toggleSortMenu" class="sort-menu-header">
-                📑 <span>分类</span>
-                <i class="el-icon-arrow-right sort-menu-arrow" 
+                {{item.icon}} <span>{{item.name}}</span>
+                <i class="el-icon-arrow-right sort-menu-arrow"
                    :class="{'expanded': sortMenuExpanded}"></i>
               </div>
               <div class="sort-submenu" :class="{'collapsed': !sortMenuExpanded}">
@@ -298,45 +253,24 @@
               </div>
             </li>
 
-            <!-- 家 -->
-            <li v-if="item.name === '家'" :key="'mobile-nav-'+index" @click="smallMenu({path: '/love'})">
+            <!-- 特殊导航项（如联系我） -->
+            <li v-else-if="item.type === 'special' && item.link === '#chat'" :key="'mobile-nav-special-'+index" @click="goIm()">
               <div>
-                ❤️‍🔥 <span>家</span>
+                {{item.icon}} <span>{{item.name}}</span>
               </div>
             </li>
 
-            <!-- 友人帐 -->
-            <li v-if="item.name === '友人帐'" :key="'mobile-nav-'+index" @click="smallMenu({path: '/friends'})">
+            <!-- 首页 -->
+            <li v-else-if="item.link === '/'" :key="'mobile-nav-home-'+index" @click="goHomeMobile()">
               <div>
-                🤝 <span>友人帐</span>
+                {{item.icon}} <span>{{item.name}}</span>
               </div>
             </li>
 
-            <!-- 曲乐 -->
-            <li v-if="item.name === '曲乐'" :key="'mobile-nav-'+index" @click="smallMenu({path: '/music'})">
+            <!-- 其他内部链接导航项 -->
+            <li v-else :key="'mobile-nav-link-'+index" @click="smallMenu({path: item.link})">
               <div>
-                🎵 <span>曲乐</span>
-              </div>
-            </li>
-
-            <!-- 收藏夹 -->
-            <li v-if="item.name === '收藏夹'" :key="'mobile-nav-'+index" @click="smallMenu({path: '/favorites'})">
-              <div>
-                📁 <span>收藏夹</span>
-              </div>
-            </li>
-
-            <!-- 留言 -->
-            <li v-if="item.name === '留言'" :key="'mobile-nav-'+index" @click="smallMenu({path: '/message'})">
-              <div>
-                📪 <span>留言</span>
-              </div>
-            </li>
-
-            <!-- 联系我 -->
-            <li v-if="item.name === '联系我'" :key="'mobile-nav-'+index" @click="goIm()">
-              <div>
-                💬 <span>联系我</span>
+                {{item.icon}} <span>{{item.name}}</span>
               </div>
             </li>
           </template>
@@ -349,19 +283,19 @@
           </li>
 
           <!-- 登录/个人中心 -->
-          <li v-if="$common.isEmpty(mainStore.currentUser)" @click="goToLoginMobile()">
+          <li v-if="$common.isEmpty(mainStore.currentUser)" @click="goToLoginMobile()" key="mobile-login">
             <div>
               <i class="fa fa-sign-in" aria-hidden="true"></i> <span>登录</span>
             </div>
           </li>
 
-          <li v-if="!$common.isEmpty(mainStore.currentUser)" @click="smallMenu({path: '/user'})">
+          <li v-if="!$common.isEmpty(mainStore.currentUser)" @click="smallMenu({path: '/user'})" key="mobile-user">
             <div>
               <i class="fa fa-user-circle" aria-hidden="true"></i> <span>个人中心</span>
             </div>
           </li>
 
-          <li v-if="!$common.isEmpty(mainStore.currentUser)" @click="smallMenuLogout">
+          <li v-if="!$common.isEmpty(mainStore.currentUser)" @click="smallMenuLogout" key="mobile-logout">
             <div>
               <i class="fa fa-sign-out" aria-hidden="true"></i> <span>退出</span>
             </div>
@@ -597,18 +531,18 @@
             const navConfig = this.mainStore.webInfo.navConfig;
             // 处理空JSON对象或空字符串的情况
             if (navConfig === "{}" || navConfig === "" || navConfig === "[]") {
-              return this.defaultNavItems;
+              return this.defaultNavItems.filter(item => item.enabled !== false);
             }
             
-            // 正常解析导航配置
-            return JSON.parse(navConfig);
+            // 正常解析导航配置，只返回启用的导航项
+            return JSON.parse(navConfig).filter(item => item.enabled !== false);
           }
         } catch (e) {
           // 解析失败，使用默认配置
         }
         
-        // 如果出错或没有配置，返回默认导航项
-        return this.defaultNavItems;
+        // 如果出错或没有配置，返回默认导航项（只包含启用的）
+        return this.defaultNavItems.filter(item => item.enabled !== false);
       },
       defaultNavItems() {
         // 默认导航顺序
@@ -782,6 +716,26 @@
       logout() {
         this.$http.get(this.$constant.baseURL + "/user/logout")
           .then((res) => {
+            // 只有在退出接口成功返回后才清除token和用户信息
+            this.mainStore.loadCurrentUser( {});
+            this.mainStore.loadCurrentAdmin( {});
+            localStorage.removeItem("userToken");
+            localStorage.removeItem("adminToken");
+            
+            // 只有在需要登录的页面才跳转到首页，否则留在当前页面
+            const currentPath = this.$route.path;
+            const needsAuthPaths = ['/user', '/admin', '/verify'];
+            const needsRedirect = needsAuthPaths.some(path => currentPath.startsWith(path));
+            
+            if (needsRedirect) {
+              this.$router.push({path: '/'});
+            } else {
+              // 留在当前页面，显示退出成功提示
+              this.$message({
+                message: "退出成功",
+                type: "success"
+              });
+            }
           })
           .catch((error) => {
             this.$message({
@@ -789,25 +743,6 @@
               type: "error"
             });
           });
-        this.mainStore.loadCurrentUser( {});
-        this.mainStore.loadCurrentAdmin( {});
-        localStorage.removeItem("userToken");
-        localStorage.removeItem("adminToken");
-        
-        // 只有在需要登录的页面才跳转到首页，否则留在当前页面
-        const currentPath = this.$route.path;
-        const needsAuthPaths = ['/user', '/admin', '/verify'];
-        const needsRedirect = needsAuthPaths.some(path => currentPath.startsWith(path));
-        
-        if (needsRedirect) {
-          this.$router.push({path: '/'});
-        } else {
-          // 留在当前页面，显示退出成功提示
-          this.$message({
-            message: "退出成功",
-            type: "success"
-          });
-        }
       },
       getWebInfo() {
         this.$http.get(this.$constant.baseURL + "/webInfo/getWebInfo")

@@ -532,7 +532,7 @@ public class ThirdPartyOauthConfigServiceImpl extends ServiceImpl<ThirdPartyOaut
             // 等待所有检查完成
             scope.join();
             
-            log.info("所有OAuth平台状态检查完成，共{}个平台", statusMap.size());
+            // log.info("所有OAuth平台状态检查完成，共{}个平台", statusMap.size());
             
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

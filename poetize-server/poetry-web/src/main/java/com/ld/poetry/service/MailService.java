@@ -61,4 +61,16 @@ public interface MailService {
      * @return 是否发送成功
      */
     boolean sendMail(List<String> to, String subject, String content, boolean html, MailConfigDTO config);
+    
+    /**
+     * 按顺序尝试所有可用的邮箱配置发送邮件
+     * 该方法会依次尝试每个启用的邮箱配置，直到成功发送邮件或尝试完所有配置
+     * 
+     * @param to 收件人列表
+     * @param subject 邮件主题
+     * @param content 邮件内容
+     * @param html 是否HTML格式
+     * @return 是否发送成功
+     */
+    boolean sendMailWithSequentialRetry(List<String> to, String subject, String content, boolean html);
 }

@@ -91,10 +91,10 @@ public class CaptchaController {
             // 获取客户端IP
             String clientIp = IpUtil.getClientRealIp(request);
             
-            log.info("验证请求 - IP: {}, 指纹: {}, 回复评论: {}, 重试: {}, 轨迹点: {}, 点击延迟: {}ms", 
-                    clientIp, browserFingerprint != null ? browserFingerprint.substring(0, Math.min(8, browserFingerprint.length())) + "..." : "null",
-                    isReplyComment, retryCount, 
-                    mouseTrack != null ? mouseTrack.size() : 0, clickDelay);
+            // log.info("验证请求 - IP: {}, 指纹: {}, 回复评论: {}, 重试: {}, 轨迹点: {}, 点击延迟: {}ms", 
+            //         clientIp, browserFingerprint != null ? browserFingerprint.substring(0, Math.min(8, browserFingerprint.length())) + "..." : "null",
+            //         isReplyComment, retryCount, 
+            //         mouseTrack != null ? mouseTrack.size() : 0, clickDelay);
             
             // 执行验证
             Map<String, Object> result = captchaService.verifyCheckboxCaptcha(
@@ -180,11 +180,11 @@ public class CaptchaController {
             // 获取客户端IP
             String clientIp = IpUtil.getClientRealIp(request);
             
-            log.info("滑动验证请求 - IP: {}, 指纹: {}, 轨迹点: {}, 总耗时: {}ms, 距离: {}/{}", 
-                    clientIp, 
-                    browserFingerprint != null ? browserFingerprint.substring(0, Math.min(8, browserFingerprint.length())) + "..." : "null",
-                    slideTrack != null ? slideTrack.size() : 0, 
-                    totalTime, finalPosition, maxDistance);
+            // log.info("滑动验证请求 - IP: {}, 指纹: {}, 轨迹点: {}, 总耗时: {}ms, 距离: {}/{}", 
+            //         clientIp, 
+            //         browserFingerprint != null ? browserFingerprint.substring(0, Math.min(8, browserFingerprint.length())) + "..." : "null",
+            //         slideTrack != null ? slideTrack.size() : 0, 
+            //         totalTime, finalPosition, maxDistance);
             
             // 执行验证
             Map<String, Object> result = captchaService.verifySlideCaptcha(

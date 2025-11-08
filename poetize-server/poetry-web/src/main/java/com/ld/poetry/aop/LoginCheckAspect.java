@@ -53,6 +53,7 @@ public class LoginCheckAspect {
         String adminFlag = request.getHeader("X-Admin-Request");
         String internalService = request.getHeader("X-Internal-Service");
         String clientIp = PoetryUtil.getIpAddr(request);
+        String requestURI = request.getRequestURI();
         
         // 检查是否来自Docker内部网络
         boolean isInternalNetwork = DockerNetworkUtil.isInDockerNetwork(clientIp);

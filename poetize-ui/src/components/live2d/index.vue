@@ -14,6 +14,7 @@
 <script>
 import { computed } from 'vue'
 import { useLive2DStore } from '@/stores/live2d'
+import { useMainStore } from '@/stores/main'
 import Live2DWidget from './Live2DWidget.vue'
 import AIChatButton from './AIChatButton.vue'
 
@@ -39,16 +40,30 @@ export default {
   
   setup(props) {
     const store = useLive2DStore()
+    const mainStore = useMainStore()
     
     // 是否显示聊天窗口
     const showChat = computed(() => store.showChat)
     
     // 实际显示模式
     const mode = computed(() => {
+      // 检查看板娘总开关是否启用
+      const waifuEnabled = mainStore.webInfo?.enableWaifu !== false
+      
       if (props.mode === 'auto') {
-        // 自动模式：如果live2d启用则显示live2d，否则显示按钮
+        // 自动模式：如果看板娘总开关关闭，则不显示任何内容
+        if (!waifuEnabled) {
+          return 'disabled'
+        }
+        // 如果live2d启用则显示live2d，否则显示按钮
         return store.enabled ? 'live2d' : 'button'
       }
+      
+      // 对于非auto模式，也需要检查总开关
+      if (!waifuEnabled) {
+        return 'disabled'
+      }
+      
       return props.mode
     })
     

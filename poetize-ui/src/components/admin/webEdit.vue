@@ -101,7 +101,7 @@
 
         <!-- 看板娘显示模式 - 仅在看板娘开启时显示 -->
         <el-form-item v-if="webInfo.enableWaifu" label="显示模式" prop="waifuDisplayMode">
-          <el-radio-group v-model="webInfo.waifuDisplayMode">
+          <el-radio-group v-model="webInfo.waifuDisplayMode" @change="handleWaifuDisplayModeChange">
             <el-radio label="live2d">
               <span>Live2D看板娘</span>
               <span style="color: #909399; font-size: 12px; margin-left: 8px;">（完整动画角色）</span>
@@ -256,45 +256,6 @@
         <el-form-item label="首页横幅高度" prop="homePagePullUpHeight">
           <el-input-number v-model="webInfo.homePagePullUpHeight" :min="10" :max="100" style="width: 120px;"></el-input-number>
           <span style="margin-left: 8px; color: #909399;">vh</span>
-        </el-form-item>
-
-        <!-- 导航栏配置 -->
-        <el-form-item label="导航栏配置">
-          <el-popover
-            placement="top"
-            width="600"
-            trigger="hover">
-            <div slot="reference" style="cursor: help;">
-              <el-input 
-                v-model="navConfigText" 
-                placeholder="例如：首页,分类,家,友人帐,曲乐,收藏夹,留言,联系我">
-              </el-input>
-            </div>
-            <div>
-              <p style="margin-top: 0">请填写您希望显示的导航项，<b>以逗号分隔</b>。系统将按照您输入的顺序显示这些导航项。</p>
-              <p>可用的导航项包括：首页、分类、家、友人帐、曲乐、收藏夹、留言、联系我。</p>
-              
-              <!-- 导航栏预览 -->
-              <div class="nav-preview-section">
-                <div class="nav-preview-title">导航栏预览：</div>
-                <div class="nav-preview-container">
-                  <div 
-                    v-for="(item, index) in parsedNavItems" 
-                    :key="index"
-                    class="nav-item-preview">
-                    <span class="nav-item-icon">{{item.icon}}</span>
-                    <span class="nav-item-name">{{item.name}}</span>
-                    <span v-if="item.type === 'dropdown'" class="nav-item-dropdown">▼</span>
-                  </div>
-                </div>
-              </div>
-              
-              <div style="margin-top: 15px; display: flex; justify-content: space-between; align-items: center;">
-                <el-button size="mini" type="warning" @click="resetToDefaultNav">恢复默认</el-button>
-                <el-button size="mini" type="primary" @click="saveNavConfig" :loading="navLoading">单独保存导航栏</el-button>
-              </div>
-            </div>
-          </el-popover>
         </el-form-item>
 
         <!-- 移动端侧边栏配置 -->
@@ -1275,6 +1236,205 @@
       </el-card>
     </div>
 
+    <!-- 导航栏配置 -->
+    <div>
+      <el-tag effect="dark" class="my-tag">
+        <svg viewBox="0 0 1024 1024" width="20" height="20" style="vertical-align: -4px;">
+          <path
+            d="M767.1296 808.6528c16.8448 0 32.9728 2.816 48.0256 8.0384 20.6848 7.1168 43.52 1.0752 57.1904-15.9744a459.91936 459.91936 0 0 0 70.5024-122.88c7.8336-20.48 1.0752-43.264-15.9744-57.088-49.6128-40.192-65.0752-125.3888-31.3856-185.856a146.8928 146.8928 0 0 1 30.3104-37.9904c16.2304-14.5408 22.1696-37.376 13.9264-57.6a461.27104 461.27104 0 0 0-67.5328-114.9952c-13.6192-16.9984-36.4544-22.9376-57.0368-15.8208a146.3296 146.3296 0 0 1-48.0256 8.0384c-70.144 0-132.352-50.8928-145.2032-118.7328-4.096-21.6064-20.736-38.5536-42.4448-41.8304-22.0672-3.2768-44.6464-5.0176-67.6864-5.0176-21.4528 0-42.5472 1.536-63.232 4.4032-22.3232 3.1232-40.2432 20.48-43.52 42.752-6.912 46.6944-36.0448 118.016-145.7152 118.4256-17.3056 0.0512-33.8944-2.9696-49.3056-8.448-21.0432-7.4752-44.3904-1.4848-58.368 15.9232A462.14656 462.14656 0 0 0 80.4864 348.16c-7.6288 20.0192-2.7648 43.008 13.4656 56.9344 55.5008 47.8208 71.7824 122.88 37.0688 185.1392a146.72896 146.72896 0 0 1-31.6416 39.168c-16.8448 14.7456-23.0912 38.1952-14.5408 58.9312 16.896 41.0112 39.5776 79.0016 66.9696 113.0496 13.9264 17.3056 37.2736 23.1936 58.2144 15.7184 15.4112-5.4784 32-8.4992 49.3056-8.4992 71.2704 0 124.7744 49.408 142.1312 121.2928 4.9664 20.48 21.4016 36.0448 42.24 39.168 22.2208 3.328 44.9536 5.0688 68.096 5.0688 23.3984 0 46.4384-1.792 68.864-5.1712 21.3504-3.2256 38.144-19.456 42.7008-40.5504 14.8992-68.8128 73.1648-119.7568 143.7696-119.7568z"
+            fill="#8C7BFD"></path>
+          <path
+            d="M511.8464 696.3712c-101.3248 0-183.7568-82.432-183.7568-183.7568s82.432-183.7568 183.7568-183.7568 183.7568 82.432 183.7568 183.7568-82.432 183.7568-183.7568 183.7568z m0-265.1648c-44.8512 0-81.3568 36.5056-81.3568 81.3568S466.9952 593.92 511.8464 593.92s81.3568-36.5056 81.3568-81.3568-36.5056-81.3568-81.3568-81.3568z"
+            fill="#FFE37B"></path>
+        </svg>
+        导航栏配置
+      </el-tag>
+
+      <!-- 导航栏配置部分 -->
+      <el-card class="box-card" shadow="never" style="margin-top: 5px; border: none;">
+        <!-- 响应式表格 -->
+        <div class="responsive-table-container">
+          <el-table
+            :data="navItems"
+            border
+            style="width: 100%"
+            :class="{'mobile-table': isMobileDevice}"
+            size="small"
+            @row-click="handleNavRowClick"
+            @touchstart.native="handleTouchStart"
+            @touchend.native="handleTouchEnd">
+
+            <el-table-column
+              label="排序"
+              width="60"
+              align="center">
+              <template slot-scope="scope">
+                <span style="color: #909399;">{{ scope.$index + 1 }}</span>
+              </template>
+            </el-table-column>
+
+            <el-table-column
+              prop="name"
+              label="名称"
+              min-width="120">
+              <template slot-scope="scope">
+                <el-input v-model="scope.row.name" placeholder="导航项名称"></el-input>
+              </template>
+            </el-table-column>
+
+            <el-table-column
+              prop="icon"
+              label="图标"
+              min-width="100"
+              :class-name="isMobileDevice ? 'hidden-xs-only' : ''">
+              <template slot-scope="scope">
+                <el-input v-model="scope.row.icon" placeholder="🏡">
+                  <template slot="prepend">
+                    <span style="font-size: 18px;">{{scope.row.icon}}</span>
+                  </template>
+                </el-input>
+              </template>
+            </el-table-column>
+
+            <el-table-column
+              prop="link"
+              label="链接"
+              min-width="120"
+              :class-name="isMobileDevice ? 'hidden-xs-only' : ''">
+              <template slot-scope="scope">
+                <el-input v-model="scope.row.link" placeholder="/"></el-input>
+              </template>
+            </el-table-column>
+
+            <el-table-column
+              prop="type"
+              label="类型"
+              min-width="110"
+              :class-name="isMobileDevice ? 'hidden-xs-only' : ''">
+              <template slot-scope="scope">
+                <el-select v-model="scope.row.type" placeholder="请选择" style="width: 100%">
+                  <el-option label="普通链接" value="internal"></el-option>
+                  <el-option label="下拉菜单" value="dropdown"></el-option>
+                  <el-option label="特殊功能" value="special"></el-option>
+                </el-select>
+              </template>
+            </el-table-column>
+
+            <el-table-column
+              prop="enabled"
+              label="启用"
+              width="80"
+              align="center">
+              <template slot-scope="scope">
+                <el-switch v-model="scope.row.enabled"></el-switch>
+              </template>
+            </el-table-column>
+
+            <el-table-column
+              prop="operation"
+              label="操作"
+              min-width="180"
+              fixed="right">
+              <template slot-scope="scope">
+                <div>
+                  <el-button
+                    type="text"
+                    size="small"
+                    :disabled="scope.$index === 0"
+                    @click="moveNavItem(scope.$index, 'up')">
+                    <i class="el-icon-top"></i> 上移
+                  </el-button>
+                  <el-button
+                    type="text"
+                    size="small"
+                    :disabled="scope.$index === navItems.length - 1"
+                    @click="moveNavItem(scope.$index, 'down')">
+                    <i class="el-icon-bottom"></i> 下移
+                  </el-button>
+                  <el-button
+                    type="text"
+                    size="small"
+                    class="delete-btn"
+                    @click="deleteNavItem(scope.$index)">
+                    <i class="el-icon-delete"></i> 删除
+                  </el-button>
+                </div>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
+
+        <!-- 移动设备提示面板 -->
+        <div v-if="isMobileDevice" class="mobile-view-notice">
+          <div style="margin: 10px 0; padding: 8px 12px; background: #f0f9ff; border-radius: 3px; font-size: 13px;">
+            <i class="el-icon-mobile" style="color: #409EFF; margin-right: 6px;"></i>
+            <span style="color: #606266;">在移动设备上点击表格行可查看完整信息</span>
+          </div>
+        </div>
+
+        <!-- 导航栏预览 -->
+        <div style="margin-top: 20px; padding: 15px; background: #f5f7fa; border-radius: 4px;">
+          <div style="margin-bottom: 10px; font-weight: bold; color: #606266;">
+            <i class="el-icon-view"></i> 导航栏预览：
+          </div>
+          <div class="nav-preview-container">
+            <div
+              v-for="(item, index) in navItems.filter(i => i.enabled)"
+              :key="index"
+              class="nav-item-preview">
+              <span class="nav-item-icon">{{item.icon}}</span>
+              <span class="nav-item-name">{{item.name}}</span>
+              <span v-if="item.type === 'dropdown'" class="nav-item-dropdown">▼</span>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top: 37px; text-align: center;">
+          <el-button type="success" size="small" @click="addNavItem">添加导航项</el-button>
+        </div>
+        <div style="margin-top: 10px; margin-bottom: 22px; text-align: center;">
+          <el-button type="warning" @click="resetToDefaultNav">恢复默认</el-button>
+          <el-button type="primary" @click="saveNavConfig" :loading="navLoading">保存导航栏配置</el-button>
+        </div>
+
+        <!-- 导航项配置详情对话框（移动端） -->
+        <el-dialog
+          title="导航项配置详情"
+          :visible.sync="navDetailDialogVisible"
+          width="90%"
+          :close-on-click-modal="false">
+          <el-form v-if="currentNavItem" :model="currentNavItem" label-width="80px">
+            <el-form-item label="名称">
+              <el-input v-model="currentNavItem.name" placeholder="导航项名称"></el-input>
+            </el-form-item>
+            <el-form-item label="图标">
+              <el-input v-model="currentNavItem.icon" placeholder="例如: 🏡">
+                <template slot="prepend">
+                  <span style="font-size: 20px;">{{currentNavItem.icon}}</span>
+                </template>
+              </el-input>
+            </el-form-item>
+            <el-form-item label="链接">
+              <el-input v-model="currentNavItem.link" placeholder="例如: /"></el-input>
+            </el-form-item>
+            <el-form-item label="类型">
+              <el-select v-model="currentNavItem.type" placeholder="请选择" style="width: 100%">
+                <el-option label="普通链接" value="internal"></el-option>
+                <el-option label="下拉菜单" value="dropdown"></el-option>
+                <el-option label="特殊功能" value="special"></el-option>
+              </el-select>
+            </el-form-item>
+            <el-form-item label="启用">
+              <el-switch v-model="currentNavItem.enabled"></el-switch>
+            </el-form-item>
+          </el-form>
+          <span slot="footer" class="dialog-footer">
+            <el-button @click="navDetailDialogVisible = false">确 定</el-button>
+          </span>
+        </el-dialog>
+      </el-card>
+    </div>
+
     <!-- 添加API配置 -->
     <div>
       <el-tag effect="dark" class="my-tag">
@@ -2039,8 +2199,11 @@ const uploadPicture = () => import( "../common/uploadPicture");
         apiDetailForm: {
           id: null
         },
-        navConfigText: "首页,分类,家,友人帐,曲乐,收藏夹,留言,联系我",
+        navItems: [],
         navLoading: false,
+        navDetailDialogVisible: false,
+        currentNavItem: null,
+        currentNavItemIndex: -1,
         // 移动端侧边栏配置
         mobileDrawerDialogVisible: false,
         drawerConfig: {
@@ -2198,21 +2361,6 @@ const uploadPicture = () => import( "../common/uploadPicture");
           enabled: this.thirdLoginConfig[platform.type]?.enabled || false,
           developerUrl: platform.developerUrl
         }));
-      },
-      parsedNavItems() {
-        // 处理空字符串情况
-        if (!this.navConfigText.trim()) {
-          return [];
-        }
-        
-        // 分割文本并移除前后空格
-        const navNames = this.navConfigText.split(',').map(name => name.trim());
-        
-        // 根据名称查找匹配的导航项
-        return navNames.map(name => {
-          const foundItem = this.defaultNavItems.find(item => item.name === name);
-          return foundItem || { name: name, icon: "🔗", link: "/", type: "internal" };
-        });
       }
     },
 
@@ -2410,12 +2558,15 @@ const uploadPicture = () => import( "../common/uploadPicture");
                 }
               }
               
-              // 解析导航栏配置并转换为文本
+              // 解析导航栏配置
               try {
-                const navItems = JSON.parse(this.webInfo.navConfig || "[]");
-                if (navItems.length > 0) {
-                  // 提取出导航项名称并转为文本
-                  this.navConfigText = navItems.map(item => item.name).join(',');
+                const parsedNavItems = JSON.parse(this.webInfo.navConfig || "[]");
+                if (parsedNavItems.length > 0) {
+                  // 直接加载到navItems数组
+                  this.navItems = parsedNavItems.map((item, index) => ({
+                    ...item,
+                    enabled: item.enabled !== false // 确保 enabled 是布尔值
+                  }));
                 } else {
                   this.resetToDefaultNav();
                 }
@@ -2423,6 +2574,9 @@ const uploadPicture = () => import( "../common/uploadPicture");
                 console.error("解析导航栏配置失败:", e);
                 this.resetToDefaultNav();
               }
+              
+              // 更新mainStore中的webInfo，确保Live2D组件能立即响应变化
+              this.mainStore.setWebInfo({...this.webInfo});
             }
         } catch (error) {
             this.$message({
@@ -2435,13 +2589,6 @@ const uploadPicture = () => import( "../common/uploadPicture");
       submitForm(formName) {
         this.$refs[formName].validate((valid) => {
           if (valid) {
-            // 构建导航项数组
-            const navItems = this.parsedNavItems.map((item, index) => ({
-              ...item,
-              order: index + 1,
-              enabled: true
-            }));
-            
             // 只发送基本信息字段，不包括公告、随机名称等专门管理的字段
             const basicInfoToUpdate = {
               id: this.webInfo.id,
@@ -2458,7 +2605,6 @@ const uploadPicture = () => import( "../common/uploadPicture");
               homePagePullUpHeight: this.webInfo.homePagePullUpHeight,
               apiEnabled: this.webInfo.apiEnabled,
               apiKey: this.webInfo.apiKey,
-              navConfig: JSON.stringify(navItems),
               footerBackgroundImage: this.webInfo.footerBackgroundImage,
               footerBackgroundConfig: JSON.stringify(this.footerBgConfig),
               email: this.webInfo.email,
@@ -2468,7 +2614,7 @@ const uploadPicture = () => import( "../common/uploadPicture");
               autoNightEnd: this.webInfo.autoNightEnd,
               enableGrayMode: this.webInfo.enableGrayMode
             };
-            
+
             this.updateWebInfo(basicInfoToUpdate);
           } else {
             this.$message({
@@ -2711,6 +2857,8 @@ const uploadPicture = () => import( "../common/uploadPicture");
           Promise.all(promises)
             .then(() => {
               this.getWebInfo();
+              // 更新mainStore中的webInfo，确保Live2D组件能立即响应变化
+              this.mainStore.setWebInfo({...this.webInfo});
               this.$message({
                 message: "保存成功！",
                 type: "success"
@@ -4035,24 +4183,27 @@ const uploadPicture = () => import( "../common/uploadPicture");
         this.getApiConfig();
       },
       resetToDefaultNav() {
-        this.navConfigText = "首页,分类,家,友人帐,曲乐,收藏夹,留言,联系我";
-      },
-      saveNavConfig() {
-        this.navLoading = true;
-        
-        // 构建导航项数组
-        const navItems = this.parsedNavItems.map((item, index) => ({
+        this.navItems = this.defaultNavItems.map((item, index) => ({
           ...item,
           order: index + 1,
           enabled: true
         }));
-        
+      },
+      saveNavConfig() {
+        this.navLoading = true;
+
+        // 构建导航项数组，添加order字段
+        const navItems = this.navItems.map((item, index) => ({
+          ...item,
+          order: index + 1
+        }));
+
         // 更新WebInfo对象中的navConfig
         const param = {
           id: this.webInfo.id,
           navConfig: JSON.stringify(navItems)
         };
-        
+
         this.$http.post(this.$constant.baseURL + "/webInfo/updateWebInfo", param, true)
           .then((res) => {
             this.$message({
@@ -4060,6 +4211,15 @@ const uploadPicture = () => import( "../common/uploadPicture");
               type: "success"
             });
             this.navLoading = false;
+            // 更新本地webInfo和store中的配置
+            this.webInfo.navConfig = JSON.stringify(navItems);
+            this.mainStore.webInfo.navConfig = JSON.stringify(navItems);
+            
+            // 重新获取完整的webInfo以确保所有组件都能获取到最新配置
+            this.getWebInfo().then(() => {
+              // 确保store中的数据也是最新的
+              this.mainStore.loadWebInfo(this.webInfo);
+            });
           })
           .catch((error) => {
             this.$message({
@@ -4068,6 +4228,54 @@ const uploadPicture = () => import( "../common/uploadPicture");
             });
             this.navLoading = false;
           });
+      },
+      // 添加导航项
+      addNavItem() {
+        this.navItems.push({
+          name: "新导航",
+          icon: "🔗",
+          link: "/",
+          type: "internal",
+          enabled: true
+        });
+      },
+      // 删除导航项
+      deleteNavItem(index) {
+        this.$confirm('确定要删除这个导航项吗?', '提示', {
+          confirmButtonText: '确定',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }).then(() => {
+          this.navItems.splice(index, 1);
+          this.$message({
+            message: '删除成功',
+            type: 'success'
+          });
+        }).catch(() => {});
+      },
+      // 移动导航项
+      moveNavItem(index, direction) {
+        if (direction === 'up' && index > 0) {
+          // 上移
+          const temp = this.navItems[index];
+          this.$set(this.navItems, index, this.navItems[index - 1]);
+          this.$set(this.navItems, index - 1, temp);
+        } else if (direction === 'down' && index < this.navItems.length - 1) {
+          // 下移
+          const temp = this.navItems[index];
+          this.$set(this.navItems, index, this.navItems[index + 1]);
+          this.$set(this.navItems, index + 1, temp);
+        }
+      },
+      // 处理导航项行点击事件（移动端）
+      handleNavRowClick(row, column, event) {
+        // 如果是移动设备且不是操作列，则打开详情对话框
+        if (this.isMobileDevice && column.property !== 'operation') {
+          const index = this.navItems.indexOf(row);
+          this.currentNavItem = row; // 直接引用，不拷贝
+          this.currentNavItemIndex = index;
+          this.navDetailDialogVisible = true;
+        }
       },
       // 打开开发者中心页面
       openDeveloperCenter(url) {
@@ -4078,7 +4286,12 @@ const uploadPicture = () => import( "../common/uploadPicture");
         }
       },
       handleWaifuChange(value) {
+        // 只更新本地状态，不立即更新mainStore，避免在保存前就显示效果
         this.webInfo.enableWaifu = value;
+      },
+      handleWaifuDisplayModeChange(value) {
+        // 只更新本地状态，不立即更新mainStore，避免在保存前就显示效果
+        this.webInfo.waifuDisplayMode = value;
       },
       handleThirdLoginToggle(value) {
         this.thirdLoginConfig.enable = value;
