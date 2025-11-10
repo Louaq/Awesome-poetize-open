@@ -36,13 +36,13 @@ public class SitemapController {
     @GetMapping(value = "/sitemap.xml", produces = MediaType.APPLICATION_XML_VALUE)
     public ResponseEntity<String> getSitemap(HttpServletRequest request) {
         try {
-            log.info("收到sitemap.xml请求，来源IP: {}", getClientIpAddress(request));
+            // log.info("收到sitemap.xml请求，来源IP: {}", getClientIpAddress(request));
             
             // 生成sitemap内容
             String sitemapContent = sitemapService.generateSitemap();
             
             if (StringUtils.hasText(sitemapContent)) {
-                log.info("成功返回sitemap.xml，长度: {} 字符", sitemapContent.length());
+                // log.info("成功返回sitemap.xml，长度: {} 字符", sitemapContent.length());
                 
                 // 设置响应头
                 HttpHeaders headers = new HttpHeaders();
@@ -65,22 +65,22 @@ public class SitemapController {
         }
     }
 
-    /**
-     * 获取客户端真实IP地址
-     */
-    private String getClientIpAddress(HttpServletRequest request) {
-        String xForwardedFor = request.getHeader("X-Forwarded-For");
-        if (StringUtils.hasText(xForwardedFor) && !"unknown".equalsIgnoreCase(xForwardedFor)) {
-            return xForwardedFor.split(",")[0].trim();
-        }
+    // /**
+    //  * 获取客户端真实IP地址
+    //  */
+    // private String getClientIpAddress(HttpServletRequest request) {
+    //     String xForwardedFor = request.getHeader("X-Forwarded-For");
+    //     if (StringUtils.hasText(xForwardedFor) && !"unknown".equalsIgnoreCase(xForwardedFor)) {
+    //         return xForwardedFor.split(",")[0].trim();
+    //     }
         
-        String xRealIp = request.getHeader("X-Real-IP");
-        if (StringUtils.hasText(xRealIp) && !"unknown".equalsIgnoreCase(xRealIp)) {
-            return xRealIp;
-        }
+    //     String xRealIp = request.getHeader("X-Real-IP");
+    //     if (StringUtils.hasText(xRealIp) && !"unknown".equalsIgnoreCase(xRealIp)) {
+    //         return xRealIp;
+    //     }
         
-        return request.getRemoteAddr();
-    }
+    //     return request.getRemoteAddr();
+    // }
 }
 
 

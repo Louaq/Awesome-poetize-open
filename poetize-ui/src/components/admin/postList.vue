@@ -493,7 +493,7 @@ import { getAdminLanguageMapping, getAdminLanguageName } from '@/utils/languageU
       // 删除翻译后更新sitemap
       async updateSitemapAfterTranslationDelete(articleId, deletedLanguages) {
         try {
-          // 调用Java后端的sitemap代理接口，Java会转发给Python服务
+          // 调用Java后端的sitemap接口，sitemap功能已迁移到Java端
           const sitemapUrl = this.$constant.baseURL + '/admin/article/updateSitemap';
           
           // 为每个删除的语言发送移除请求
@@ -502,7 +502,7 @@ import { getAdminLanguageMapping, getAdminLanguageName } from '@/utils/languageU
               await this.$http.post(sitemapUrl, {
                 articleId: articleId,
                 action: 'remove',
-                language: language  // 传递语言参数，让Python服务知道要移除哪个语言版本
+                language: language  // 传递语言参数，让Java端知道要移除哪个语言版本
               }, true);
               
             } catch (error) {

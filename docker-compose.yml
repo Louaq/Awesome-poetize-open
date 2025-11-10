@@ -116,9 +116,12 @@ services:
         max-file: "3"
     environment:
       - TZ=Asia/Shanghai
+      # Python服务端口
       - PORT=5000
+      # Java服务主机名和端口
       - JAVA_BACKEND_HOST=poetize-java
       - JAVA_BACKEND_PORT=8081
+      # 前端域名，用于第三方登录的重定向请求
       - FRONTEND_HOST=example.com
       - FRONTEND_PROTOCOL=https
       - NGINX_URL=http://nginx/flush_seo_cache
@@ -159,6 +162,7 @@ services:
   #     dockerfile: docker/translation_model/Dockerfile
   #   container_name: poetize-translation-model
   #   environment:
+  #     - TZ=Asia/Shanghai
   #     - OLLAMA_HOST=0.0.0.0:11434
   #     - OLLAMA_ORIGINS=*
   #     - OLLAMA_MODELS=qwen3:0.6b
@@ -167,8 +171,11 @@ services:
   #     - "11434:11434"
   #   volumes:
   #     - ollama_data:/root/.ollama
+  #     - /etc/localtime:/etc/localtime:ro
+  #     - /etc/timezone:/etc/timezone:ro
   #   networks:
-  #     - poetize-network
+  #     poetize-network:
+  #       ipv4_address: 172.28.147.11
   #   restart: always
   #   healthcheck:
   #     test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
@@ -192,22 +199,20 @@ services:
       - /etc/timezone:/etc/timezone:ro
     environment:
       - TZ=Asia/Shanghai
-      - JAVA_OPTS=-Xmx256m -Xms128m -XX:MaxMetaspaceSize=96m -XX:CompressedClassSpaceSize=48m -Xss512k -XX:+UseG1GC -XX:MaxGCPauseMillis=20 -XX:InitiatingHeapOccupancyPercent=35 -XX:+DisableExplicitGC
+      # Java配置
+      - JAVA_OPTS=-Xmx768m -Xms512m -XX:MaxMetaspaceSize=192m -XX:CompressedClassSpaceSize=128m -Xss512k -XX:+UseZGC -XX:+UnlockExperimentalVMOptions -XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0 -XX:+DisableExplicitGC
       - SPRING_DATASOURCE_URL=jdbc:mariadb://mysql:3306/poetize?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
       - SPRING_DATASOURCE_USERNAME=poetize
       - SPRING_DATASOURCE_PASSWORD=poetize123
       - SPRING_DATASOURCE_DRIVER_CLASS_NAME=org.mariadb.jdbc.Driver
       - SERVER_PORT=8081
       - PYTHON_SERVICE_URL=http://poetize-python:5000
+      # AES加密密钥，需与前端一致
       - POETIZE_AES_KEY=${POETIZE_AES_KEY:-sarasarasarasara}
-      - TRANSLATION_LOCAL_URL=http://poetize-python:5000/api/translate
-      - TRANSLATION_LOCAL_ENABLED=true
-      - LOCAL_ENABLE=true
-      - LOCAL_UPLOADURL=/app/static
-      - LOCAL_DOWNLOADURL=/static
       - PRERENDER_URL=http://poetize-prerender:4000/render
       - PRERENDER_PAGES_URL=http://poetize-prerender:4000/render/pages
       - SITE_URL=http://example.com
+      # 容器网络网段，用于判断请求是否为内网服务的请求
       - DOCKER_SUBNET=172.28.147.0/28
       # Redis配置
       - SPRING_REDIS_HOST=redis

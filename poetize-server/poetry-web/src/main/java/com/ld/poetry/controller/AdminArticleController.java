@@ -287,10 +287,10 @@ public class AdminArticleController {
     }
     
     /**
-     * 更新文章sitemap（代理接口）
+     * 更新文章sitemap
      */
     /**
-     * 手动更新文章sitemap（已迁移到Java端）
+     * 手动更新文章sitemap
      */
     @PostMapping("/article/updateSitemap")
     @LoginCheck(1)

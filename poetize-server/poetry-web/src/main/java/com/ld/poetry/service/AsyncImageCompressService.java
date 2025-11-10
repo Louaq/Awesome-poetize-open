@@ -7,6 +7,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -26,87 +28,109 @@ public class AsyncImageCompressService {
     /**
      * 异步压缩单个图片
      */
-    @Async("virtualThreadTaskExecutor")
+    @Async
     public CompletableFuture<ImageCompressUtil.CompressResult> compressImageAsync(MultipartFile file) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                
+
                 ImageCompressUtil.CompressResult result = ImageCompressUtil.smartCompress(file);
-                
+
                 // 更新统计信息
                 totalProcessed.incrementAndGet();
                 totalSaved.addAndGet(result.getOriginalSize() - result.getCompressedSize());
-                
-                
+
+
                 return result;
-                
+
             } catch (IOException e) {
                 totalErrors.incrementAndGet();
                 log.error("图片压缩失败: {}, 错误: {}", file.getOriginalFilename(), e.getMessage());
                 throw new RuntimeException("图片压缩失败", e);
             }
-        });
+        }, java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
     }
 
     /**
      * 异步压缩图片（自定义参数）
      */
-    @Async("virtualThreadTaskExecutor")
+    @Async
     public CompletableFuture<ImageCompressUtil.CompressResult> compressImageAsync(
             MultipartFile file, int maxWidth, int maxHeight, float quality, long targetSize) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                
-                ImageCompressUtil.CompressResult result = 
+
+                ImageCompressUtil.CompressResult result =
                         ImageCompressUtil.smartCompress(file, maxWidth, maxHeight, quality, targetSize);
-                
+
                 // 更新统计信息
                 totalProcessed.incrementAndGet();
                 totalSaved.addAndGet(result.getOriginalSize() - result.getCompressedSize());
-                
-                
+
+
                 return result;
-                
+
             } catch (IOException e) {
                 totalErrors.incrementAndGet();
                 log.error("图片压缩失败: {}, 错误: {}", file.getOriginalFilename(), e.getMessage());
                 throw new RuntimeException("图片压缩失败", e);
             }
-        });
+        }, java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
     }
 
     /**
      * 批量异步压缩图片
+     * 使用CompletableFuture并发处理所有文件
      */
-    @Async("virtualThreadTaskExecutor")
+    @Async
     public CompletableFuture<BatchCompressResult> batchCompressAsync(MultipartFile[] files) {
         return CompletableFuture.supplyAsync(() -> {
             long startTime = System.currentTimeMillis();
             BatchCompressResult batchResult = new BatchCompressResult();
-            
+
             log.info("开始批量压缩 {} 个图片文件", files.length);
-            
-            for (MultipartFile file : files) {
+
+            // 为每个文件创建一个CompletableFuture
+            List<CompletableFuture<ImageCompressUtil.CompressResult>> futures = new ArrayList<>();
+
+            for (int i = 0; i < files.length; i++) {
+                final MultipartFile file = files[i];
+
+                // 使用虚拟线程执行每个压缩任务
+                futures.add(CompletableFuture.supplyAsync(() -> {
+                    try {
+                        return ImageCompressUtil.smartCompress(file);
+                    } catch (IOException e) {
+                        throw new RuntimeException("压缩文件失败: " + file.getOriginalFilename(), e);
+                    }
+                }, java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()));
+            }
+
+            // 等待所有任务完成
+            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0])).join();
+
+            // 收集结果
+            for (int i = 0; i < files.length; i++) {
+                MultipartFile file = files[i];
                 try {
-                    ImageCompressUtil.CompressResult result = ImageCompressUtil.smartCompress(file);
+                    ImageCompressUtil.CompressResult result = futures.get(i).get();
                     batchResult.addSuccess(result);
                 } catch (Exception e) {
-                    batchResult.addError(file.getOriginalFilename(), e.getMessage());
-                    log.warn("批量压缩失败: {}, 错误: {}", file.getOriginalFilename(), e.getMessage());
+                    batchResult.addError(file.getOriginalFilename(), e.getCause().getMessage());
+                    log.warn("批量压缩失败: {}, 错误: {}", file.getOriginalFilename(), e.getCause().getMessage());
                 }
             }
-            
+
             long duration = System.currentTimeMillis() - startTime;
             batchResult.setProcessingTime(duration);
-            
+
             log.info("批量压缩完成: 成功 {}, 跳过 {}, 失败 {}, 耗时 {}ms",
-                     batchResult.getSuccessCount(), 
-                     batchResult.getSkippedCount(), 
-                     batchResult.getErrorCount(),
-                     duration);
-            
+                    batchResult.getSuccessCount(),
+                    batchResult.getSkippedCount(),
+                    batchResult.getErrorCount(),
+                    duration);
+
             return batchResult;
-        });
+        }, java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
     }
 
     /**
@@ -195,4 +219,4 @@ public class AsyncImageCompressService {
             return totalProcessed > 0 ? (double) totalErrors / totalProcessed * 100 : 0;
         }
     }
-} 
+}

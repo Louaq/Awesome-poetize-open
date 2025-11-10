@@ -1070,7 +1070,7 @@ public class CacheService {
             // 设置记录的过期时间为7天
             redisUtil.expire(recordsKey, 7 * 24 * 3600);
             
-            log.info("访问记录已保存到Redis: ip={}, userId={}, province={}", ip, userId, province);
+            // log.info("访问记录已保存到Redis: ip={}, userId={}, province={}", ip, userId, province);
             
         } catch (Exception e) {
             log.error("记录访问信息到Redis失败: ip={}, userId={}", ip, userId, e);

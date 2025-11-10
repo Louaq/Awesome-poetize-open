@@ -81,7 +81,7 @@ public class CommonQuery {
     
             // 记录每次访问 - 使用 LockManager 替代 String.intern()，避免内存泄漏
             lockManager.executeWithLock("saveHistory:" + ipUser, () -> {
-                log.info("[saveHistory] 记录访问到Redis: {}", ipUser);
+                // log.info("[saveHistory] 记录访问到Redis: {}", ipUser);
                 
                 // 解析IP地理位置信息
                 String nation = null, province = null, city = null;
@@ -107,7 +107,7 @@ public class CommonQuery {
                 // 记录访问信息到Redis（不立即写数据库）
                 cacheService.recordVisitToRedis(ip, userId, nation, province, city);
                 
-                log.info("[saveHistory] 访问记录已保存到Redis缓存，等待定时同步到数据库: {}", ipUser);
+                // log.info("[saveHistory] 访问记录已保存到Redis缓存，等待定时同步到数据库: {}", ipUser);
             });
         } catch (Exception e) {
             log.error("[saveHistory] 保存访问记录时发生异常: {}", e.getMessage(), e);

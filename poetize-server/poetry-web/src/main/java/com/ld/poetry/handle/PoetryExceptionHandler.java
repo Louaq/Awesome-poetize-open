@@ -4,6 +4,7 @@ import com.alibaba.fastjson.JSON;
 import com.ld.poetry.config.PoetryResult;
 import com.ld.poetry.enums.CodeMsg;
 import com.ld.poetry.utils.PoetryUtil;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -29,6 +30,25 @@ import java.util.stream.Collectors;
 public class PoetryExceptionHandler {
 
     /**
+     * 专门处理内容协商异常
+     */
+    @ExceptionHandler(value = org.springframework.web.HttpMediaTypeNotAcceptableException.class, produces = "application/json;charset=UTF-8")
+    @ResponseBody
+    public PoetryResult handleHttpMediaTypeNotAcceptableException(
+            org.springframework.web.HttpMediaTypeNotAcceptableException ex) {
+        HttpServletRequest request = PoetryUtil.getRequest();
+        String requestUrl = request != null ? request.getRequestURL().toString() : "unknown";
+        String clientIp = PoetryUtil.getCurrentClientIp();
+        String acceptHeader = request != null ? request.getHeader("Accept") : "null";
+        String userAgent = request != null ? request.getHeader("User-Agent") : "null";
+
+        log.warn("内容协商失败 - IP: {}, URL: {}, Accept: {}, User-Agent: {}, 原因: {}",
+                clientIp, requestUrl, acceptHeader, userAgent, ex.getMessage());
+
+        return PoetryResult.fail(406, "请求的响应格式不支持，请使用JSON格式");
+    }
+
+    /**
      * 全局异常统一处理入口
      * 
      * @param ex 捕获的异常对象
@@ -38,7 +58,7 @@ public class PoetryExceptionHandler {
     @ResponseBody
     public PoetryResult handleException(Exception ex) {
         String requestUrl = PoetryUtil.getRequest().getRequestURL().toString();
-        
+
         // 登录异常：属于正常业务场景，仅记录警告日志
         if (ex instanceof PoetryLoginException) {
             log.warn("登录验证失败 - URL: {}, 原因: {}", requestUrl, ex.getMessage());
@@ -48,7 +68,7 @@ public class PoetryExceptionHandler {
         // 记录异常详情供排查问题
         log.error("请求异常 - URL: {}", requestUrl);
         log.error("异常详情：", ex);
-        
+
         // 业务运行时异常：返回业务错误信息
         if (ex instanceof PoetryRuntimeException) {
             return PoetryResult.fail(ex.getMessage());
@@ -60,7 +80,7 @@ public class PoetryExceptionHandler {
             Map<String, String> fieldErrors = validEx.getFieldErrors()
                     .stream()
                     .collect(Collectors.toMap(
-                            FieldError::getField, 
+                            FieldError::getField,
                             FieldError::getDefaultMessage
                     ));
             return PoetryResult.fail(JSON.toJSONString(fieldErrors));

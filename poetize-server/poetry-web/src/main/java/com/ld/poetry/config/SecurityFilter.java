@@ -36,9 +36,6 @@ public class SecurityFilter extends OncePerRequestFilter {
     // 拉黑时长（小时）
     private static final int BLACKLIST_DURATION_HOURS = 24;
 
-    // 攻击计数重置时间（小时）- 超过此时间未攻击则重置计数
-    private static final int ATTACK_COUNT_RESET_HOURS = 1;
-    
     // 内部服务标识
     private static final Set<String> INTERNAL_SERVICES = Set.of(
         "poetize-python",
@@ -133,6 +130,11 @@ public class SecurityFilter extends OncePerRequestFilter {
         else if (isInvalidApiCall(request)) {
             isMaliciousRequest = true;
             attackType = "恶意API探测";
+        }
+        // 检查异常Accept头扫描
+        else if (isSuspiciousAcceptHeader(request)) {
+            isMaliciousRequest = true;
+            attackType = "异常Accept头扫描";
         }
         
         if (isMaliciousRequest) {
@@ -273,13 +275,6 @@ public class SecurityFilter extends OncePerRequestFilter {
     }
     
     /**
-     * 验证IP地址是否有效（简化版本，主要逻辑已移至IpUtil）
-     */
-    private boolean isValidIP(String ip) {
-        return IpUtil.isValidIpFormat(ip) && !"unknown".equalsIgnoreCase(ip);
-    }
-    
-    /**
      * 检查IP是否被拉黑
      */
     private boolean isIPBlacklisted(String ip) {
@@ -367,7 +362,78 @@ public class SecurityFilter extends OncePerRequestFilter {
                 return true;
             }
         }
-        
+
+        return false;
+    }
+
+    /**
+     * 检查是否为异常Accept头扫描
+     * 检测请求中包含不支持的响应格式或异常格式组合
+     */
+    private boolean isSuspiciousAcceptHeader(HttpServletRequest request) {
+        String acceptHeader = request.getHeader("Accept");
+
+        if (acceptHeader == null || acceptHeader.trim().isEmpty()) {
+            // 没有Accept头是正常的，返回false
+            return false;
+        }
+
+        String lowerAccept = acceptHeader.toLowerCase();
+
+        // 1. 单独请求XML格式（对于JSON API应用来说可疑）
+        if (lowerAccept.equals("application/xml") ||
+            lowerAccept.equals("text/xml") ||
+            (lowerAccept.contains("application/xml") && !lowerAccept.contains("application/json"))) {
+            log.warn("检测到可疑Accept头 (XML): {} from IP: {}, URI: {}",
+                    acceptHeader, getClientIpAddress(request), request.getRequestURI());
+            return true;
+        }
+
+        // 2. 包含多种异常格式的组合
+        Set<String> suspiciousFormats = Set.of(
+            "application/soap+xml",      // SOAP XML
+            "application/xml-dtd",       // XML DTD
+            "application/xhtml+xml",     // XHTML
+            "text/csv",                  // CSV
+            "text/xml",                  // XML
+            "application/x-protobuf",    // Protobuf
+            "application/x-msgpack",     // MessagePack
+            "application/x-yaml",        // YAML
+            "text/yaml"
+        );
+
+        for (String format : suspiciousFormats) {
+            if (lowerAccept.contains(format)) {
+                log.warn("检测到可疑Accept头 ({}): {} from IP: {}, URI: {}",
+                        format, acceptHeader, getClientIpAddress(request), request.getRequestURI());
+                return true;
+            }
+        }
+
+        // 3. 检查包含*/*的异常组合（扫描器常用）
+        if (lowerAccept.contains("*/*")) {
+            String userAgent = request.getHeader("User-Agent");
+            if (userAgent != null) {
+                String lowerUA = userAgent.toLowerCase();
+                // 检查是否包含常见的扫描器User-Agent
+                if (lowerUA.contains("scanner") || lowerUA.contains("scan") ||
+                    lowerUA.contains("bot") || lowerUA.contains("crawler") ||
+                    lowerUA.contains("nmap") || lowerUA.contains("masscan") ||
+                    lowerUA.contains("acunetix") || lowerUA.contains("nessus")) {
+                    log.warn("检测到扫描器Accept头 (*/* + 扫描器UA): Accept={}, User-Agent={}, IP: {}",
+                            acceptHeader, userAgent, getClientIpAddress(request));
+                    return true;
+                }
+            }
+        }
+
+        // 4. 异常大的Accept头（可能的模糊测试）
+        if (acceptHeader.length() > 500) {
+            log.warn("检测到异常长的Accept头 ({} 字符): {} from IP: {}, URI: {}",
+                    acceptHeader.length(), acceptHeader, getClientIpAddress(request), request.getRequestURI());
+            return true;
+        }
+
         return false;
     }
 }

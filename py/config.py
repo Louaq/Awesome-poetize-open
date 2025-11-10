@@ -43,7 +43,7 @@ JAVA_CONFIG_URL = os.environ.get('JAVA_CONFIG_URL', f"{BASE_BACKEND_URL}")
 JAVA_AUTH_URL = os.environ.get('JAVA_AUTH_URL', f"{BASE_BACKEND_URL}/user/checkAdminAuth")
 
 # 从Java后端获取前端URL的接口
-JAVA_SITE_URL_API = f"{JAVA_BACKEND_URL}/webInfo/getSeoConfig/nginx"
+JAVA_SITE_URL_API = f"{JAVA_BACKEND_URL}/seo/getSeoConfig/nginx"
 
 # 从Java后端获取前端URL
 async def get_frontend_url_from_java():

@@ -6,12 +6,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 
 import jakarta.annotation.PostConstruct;
-import javax.imageio.ImageIO;
-import java.util.Arrays;
+import java.io.IOException;
 
 /**
  * WebP图片格式支持配置
- * 初始化WebP编码器和解码器
+ * 验证cwebp命令行工具是否可用
+ * 由于移除了webp-imageio JNI依赖（避免Alpine环境下的兼容性问题），
+ * 现在通过外部cwebp命令行工具实现WebP转换
  */
 @Slf4j
 @Configuration
@@ -32,36 +33,26 @@ public class WebPConfig {
         }
         
         try {
-            // 尝试初始化WebP支持
-            log.info("初始化WebP图像格式支持...");
+            // 验证cwebp命令行工具是否可用
+            log.info("验证cwebp命令行工具是否可用...");
             
-            // 检查是否成功加载
-            String[] writerFormats = ImageIO.getWriterFormatNames();
-            String[] readerFormats = ImageIO.getReaderFormatNames();
+            ProcessBuilder processBuilder = new ProcessBuilder("cwebp", "-version");
+            processBuilder.redirectErrorStream(true);
+            Process process = processBuilder.start();
             
-            if (writerFormats != null && readerFormats != null) {
-                log.info("系统支持的图像写入格式: {}", Arrays.toString(writerFormats));
-                log.info("系统支持的图像读取格式: {}", Arrays.toString(readerFormats));
-                
-                boolean webpWriteSupported = Arrays.asList(writerFormats).contains("webp");
-                boolean webpReadSupported = Arrays.asList(readerFormats).contains("webp");
-                
-                if (webpWriteSupported && webpReadSupported) {
-                    log.info("WebP格式支持已成功初始化，可以进行WebP转换");
-                } else {
-                    log.warn("WebP格式支持未完全初始化，图像仍将使用标准格式");
-                    if (!webpWriteSupported) {
-                        log.warn("WebP编码器未找到，无法转换为WebP格式");
-                    }
-                    if (!webpReadSupported) {
-                        log.warn("WebP解码器未找到，无法读取WebP格式图片");
-                    }
-                }
+            int exitCode = process.waitFor();
+            if (exitCode == 0) {
+                log.info("cwebp命令行工具可用，WebP转换功能正常");
             } else {
-                log.warn("无法获取系统支持的图像格式信息");
+                log.warn("cwebp命令执行异常，退出代码: {}，WebP转换将使用备用方案", exitCode);
             }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("cwebp版本检查被中断", e);
+        } catch (IOException e) {
+            log.warn("cwebp命令行工具不可用: {}，WebP转换将使用备用方案", e.getMessage());
         } catch (Exception e) {
             log.error("WebP支持初始化失败: {}，图像将使用标准格式", e.getMessage());
         }
     }
-} 
+}

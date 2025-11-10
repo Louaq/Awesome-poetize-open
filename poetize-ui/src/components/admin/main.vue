@@ -205,7 +205,7 @@
       <!-- 封禁IP列表 -->
       <div style="margin-top: 40px;">
         <div class="history-title">
-          封禁IP列表
+          验证码封禁IP列表
           <el-button type="text" 
                      style="float: right; margin-top: -5px; color: #409EFF;"
                      @click="refreshBlockedIps"

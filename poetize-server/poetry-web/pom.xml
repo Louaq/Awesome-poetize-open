@@ -15,12 +15,7 @@
     <description>最美博客系统 LeapYa维护版 - Web模块</description>
 
     <dependencies>
-        <!-- 添加WebP支持库 -->
-        <dependency>
-            <groupId>org.sejda.imageio</groupId>
-            <artifactId>webp-imageio</artifactId>
-            <version>0.1.6</version>
-        </dependency>
+        <!-- WebP支持通过cwebp命令行工具实现，避免JNI库在Alpine环境下的兼容性问题 -->
 
         <!-- TwelveMonkeys - 支持多种图片格式（TIFF, BMP, PSD, SVG等） -->
         <dependency>

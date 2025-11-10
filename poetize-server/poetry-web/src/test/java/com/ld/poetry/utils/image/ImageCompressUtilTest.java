@@ -9,11 +9,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 
@@ -151,29 +149,28 @@ class ImageCompressUtilTest {
     }
 
     @Test
-    @DisplayName("测试WebP格式（如果支持）")
+    @DisplayName("测试WebP格式支持（使用cwebp工具）")
     void testWebpCompression() throws IOException {
-        // WebP需要额外库支持
+        // WebP现在通过cwebp命令行工具实现，不依赖webp-imageio库
+        // 创建测试图片数据
         BufferedImage testImage = createTestImage(500, 500);
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        try {
-            ImageIO.write(testImage, "webp", baos);
-            byte[] imageData = baos.toByteArray();
+        ImageIO.write(testImage, "jpg", baos);  // 先转为JPEG作为输入
+        byte[] imageData = baos.toByteArray();
 
-            MockMultipartFile file = new MockMultipartFile(
-                "test.webp",
-                "test.webp",
-                "image/webp",
-                imageData
-            );
+        MockMultipartFile file = new MockMultipartFile(
+            "test.webp",
+            "test.webp",
+            "image/webp",
+            imageData
+        );
 
-            ImageCompressUtil.CompressResult result = ImageCompressUtil.smartCompress(file);
+        ImageCompressUtil.CompressResult result = ImageCompressUtil.smartCompress(file);
 
-            assertNotNull(result, "WebP压缩结果不应为null");
-        } catch (Exception e) {
-            // 如果不支持WebP，跳过测试
-            System.out.println("WebP格式不支持，跳过测试: " + e.getMessage());
-        }
+        assertNotNull(result, "WebP压缩结果不应为null");
+        // 验证结果格式应该是webp
+        assertTrue(result.getContentType().contains("webp"), 
+                "结果应该是WebP格式");
     }
 
     @Test

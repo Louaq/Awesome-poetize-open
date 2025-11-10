@@ -3478,6 +3478,7 @@ check_and_fix_network_conflict() {
     sed_i "s|ipv4_address: 172\.28\.147\.8|ipv4_address: $base_ip.8|g" docker-compose.yml
     sed_i "s|ipv4_address: 172\.28\.147\.9|ipv4_address: $base_ip.9|g" docker-compose.yml
     sed_i "s|ipv4_address: 172\.28\.147\.10|ipv4_address: $base_ip.10|g" docker-compose.yml
+    sed_i "s|ipv4_address: 172\.28\.147\.11|ipv4_address: $base_ip.11|g" docker-compose.yml
     
     # 更新Python服务的DOCKER_SUBNET环境变量
     sed_i "s|DOCKER_SUBNET=172\.28\.147\.0/28|DOCKER_SUBNET=$new_subnet|g" docker-compose.yml
@@ -4660,7 +4661,9 @@ EOF
   
   # 3. 添加/更新Java环境变量以优化JVM内存使用
   info "更新Java服务JVM内存参数..."
-  local JAVA_OPTS="-Xmx$JAVA_XMX -Xms$JAVA_XMS -XX:MaxMetaspaceSize=$JAVA_METASPACE -XX:CompressedClassSpaceSize=$JAVA_CLASS_SPACE -Xss$JAVA_XSS -XX:+UseG1GC -XX:MaxGCPauseMillis=200 -XX:InitiatingHeapOccupancyPercent=35 -XX:+DisableExplicitGC"
+  # 使用ZGC垃圾收集器，更适合容器化环境，减少GC停顿时间
+  # 添加容器化优化参数，提高在Docker环境中的性能和稳定性
+  local JAVA_OPTS="-Xmx$JAVA_XMX -Xms$JAVA_XMS -XX:MaxMetaspaceSize=$JAVA_METASPACE -XX:CompressedClassSpaceSize=$JAVA_CLASS_SPACE -Xss$JAVA_XSS -XX:+UseZGC -XX:+UnlockExperimentalVMOptions -XX:+ExitOnOutOfMemoryError -XX:MaxRAMPercentage=75.0 -XX:+DisableExplicitGC"
   
   # 直接替换已存在的JAVA_OPTS行
   if grep -q "JAVA_OPTS=" docker-compose.yml; then

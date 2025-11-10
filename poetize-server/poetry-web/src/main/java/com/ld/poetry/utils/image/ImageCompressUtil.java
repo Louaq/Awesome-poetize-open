@@ -15,6 +15,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Iterator;
+import java.util.concurrent.*;
+import java.nio.file.*;
 
 /**
  * 图片压缩工具类
@@ -25,6 +27,35 @@ public class ImageCompressUtil {
 
     // 用于测试时注入模拟对象
     private static SysConfigService testSysConfigService = null;
+
+    // 虚拟线程池 - 限制并发数量避免资源竞争
+    private static final ExecutorService VIRTUAL_THREAD_EXECUTOR =
+        Executors.newVirtualThreadPerTaskExecutor();
+
+    // 信号量 - 限制同时执行的cwebp命令数量（防止CPU和磁盘I/O过载）
+    // 根据CPU核心数动态调整，设为核心数的2倍，最少2个，最多16个
+    private static final Semaphore CWEBP_SEMAPHORE = new Semaphore(
+        Math.max(2, Math.min(16, Runtime.getRuntime().availableProcessors() * 2))
+    );
+
+    // 静态初始化块 - 注册JVM关闭钩子
+    static {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            log.info("正在关闭图片压缩工具的虚拟线程池...");
+            VIRTUAL_THREAD_EXECUTOR.shutdown();
+            try {
+                if (!VIRTUAL_THREAD_EXECUTOR.awaitTermination(5, TimeUnit.SECONDS)) {
+                    log.warn("虚拟线程池关闭超时，强制关闭");
+                    VIRTUAL_THREAD_EXECUTOR.shutdownNow();
+                }
+                log.info("虚拟线程池已关闭");
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.error("关闭虚拟线程池时被中断", e);
+                VIRTUAL_THREAD_EXECUTOR.shutdownNow();
+            }
+        }));
+    }
 
     // 压缩配置常量
     private static final int MAX_WIDTH = 1920;        // 最大宽度
@@ -325,22 +356,9 @@ public class ImageCompressUtil {
         } catch (Exception e) {
             log.warn("cwebp有损转换失败: {}, 尝试备用方案", e.getMessage());
         }
-        
-        // 备用方案1：使用ImageIO的WebP编码器
-        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-            boolean success = ImageIO.write(image, "webp", baos);
-            
-            if (success && baos.size() > 0) {
-                byte[] webpData = baos.toByteArray();
-                log.info("使用ImageIO转换为WebP格式，转换后大小: {}KB", webpData.length / 1024);
-                return webpData;
-            }
-        } catch (Exception e) {
-            log.warn("ImageIO WebP转换失败: {}", e.getMessage());
-        }
-        
-        // 备用方案2：使用高质量JPEG压缩
-        log.info("WebP转换失败，使用JPEG格式");
+
+        // 备用方案：使用高质量JPEG压缩
+        log.info("cwebp转换失败，使用JPEG格式作为备用方案");
         return compressJPEG(image, 0.9f);
     }
 
@@ -360,41 +378,25 @@ public class ImageCompressUtil {
             log.warn("cwebp无损转换失败: {}, 尝试备用方案", e.getMessage());
         }
         
-        // 备用方案1：尝试使用ImageIO的WebP编码器（但无法保证无损）
-        try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
-            boolean success = ImageIO.write(image, "webp", baos);
-            
-            if (success && baos.size() > 0) {
-                byte[] webpData = baos.toByteArray();
-                log.warn("使用ImageIO转换为WebP格式(可能为有损)，转换后大小: {}KB", webpData.length / 1024);
-                return webpData;
-            }
-        } catch (Exception e) {
-            log.warn("ImageIO WebP转换失败: {}", e.getMessage());
-        }
-        
-        // 备用方案2：使用PNG格式（真正的无损）
-        log.info("WebP转换失败，使用PNG格式(真正无损)");
+        // 备用方案：使用PNG格式
+        log.info("cwebp转换失败，使用PNG格式作为备用方案");
         ByteArrayOutputStream pngBaos = new ByteArrayOutputStream();
         ImageIO.write(image, "png", pngBaos);
         return pngBaos.toByteArray();
     }
 
     /**
-     * 使用cwebp命令行工具转换图片（安全的命令执行）
+     * 使用cwebp命令行工具转换图片（安全的命令执行，使用虚拟线程）
      * @param image 图片对象
      * @param lossless 是否无损压缩
      * @return WebP格式的字节数组，失败返回null
      */
     private static byte[] convertToWebPUsingCwebp(BufferedImage image, boolean lossless) throws IOException {
-        java.io.File tempInputFile = null;
-        java.io.File tempOutputFile = null;
+        // 创建临时文件
+        java.io.File tempInputFile = java.io.File.createTempFile("img_input_", ".png");
+        java.io.File tempOutputFile = java.io.File.createTempFile("img_output_", ".webp");
 
         try {
-            // 创建临时文件
-            tempInputFile = java.io.File.createTempFile("img_input_", ".png");
-            tempOutputFile = java.io.File.createTempFile("img_output_", ".webp");
-
             // 严格验证文件路径，防止路径穿越攻击
             String inputPath = tempInputFile.getAbsolutePath();
             String outputPath = tempOutputFile.getAbsolutePath();
@@ -422,7 +424,7 @@ public class ImageCompressUtil {
                 throw new IOException("创建临时输入文件失败");
             }
 
-            // 构建cwebp命令 - 使用白名单方式，只允许预定义的参数
+            // 构建cwebp命令
             ProcessBuilder processBuilder;
             if (lossless) {
                 // 无损模式：-lossless -z 9 (最高压缩比)
@@ -456,59 +458,72 @@ public class ImageCompressUtil {
             processBuilder.environment().remove("ENV");
             processBuilder.environment().remove("PROFILER");
 
-            // 禁用文件创建继承
-            processBuilder.inheritIO();
+            // 使用虚拟线程池执行cwebp命令
+            // 使用信号量控制并发数量，避免资源竞争
+            return VIRTUAL_THREAD_EXECUTOR.submit(() -> {
+                // 获取信号量许可，限制并发数
+                CWEBP_SEMAPHORE.acquire();
+                try {
+                    // 禁用文件创建继承
+                    processBuilder.inheritIO();
 
-            // 执行命令
-            processBuilder.redirectErrorStream(true);
-            Process process = processBuilder.start();
+                    // 执行命令
+                    processBuilder.redirectErrorStream(true);
+                    Process process = processBuilder.start();
 
-            // 设置超时机制，防止进程无限期挂起
-            // 等待30秒超时
-            boolean finished = process.waitFor(30, java.util.concurrent.TimeUnit.SECONDS);
-            if (!finished) {
-                log.warn("cwebp命令执行超时，强制终止进程");
-                process.destroyForcibly();
-                return null;
-            }
+                    // 在虚拟线程中等待命令完成，支持中断和取消
+                    boolean finished = process.waitFor(30, TimeUnit.SECONDS);
+                    if (!finished) {
+                        log.warn("cwebp命令执行超时，强制终止进程");
+                        process.destroyForcibly();
+                        return null;
+                    }
 
-            // 读取命令输出（用于日志）
-            StringBuilder output = new StringBuilder();
-            try (java.io.BufferedReader reader = new java.io.BufferedReader(
-                    new java.io.InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
+                    // 等待命令完成
+                    int exitCode = process.exitValue();
+
+                    if (exitCode != 0) {
+                        log.warn("cwebp命令执行失败，退出代码: {}", exitCode);
+                        return null;
+                    }
+
+                    // 读取输出文件
+                    if (!tempOutputFile.exists() || tempOutputFile.length() == 0) {
+                        log.warn("cwebp未生成输出文件或文件为空");
+                        return null;
+                    }
+
+                    // 验证输出文件大小合理性（不能超过输入文件10倍）
+                    if (tempOutputFile.length() > tempInputFile.length() * 10) {
+                        log.warn("cwebp生成的输出文件异常大，可能存在安全问题");
+                        return null;
+                    }
+
+                    return Files.readAllBytes(tempOutputFile.toPath());
+
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.error("cwebp命令执行被中断", e);
+                    return null;
+                } catch (Exception e) {
+                    log.error("cwebp命令执行失败: {}", e.getMessage());
+                    return null;
+                } finally {
+                    // 释放信号量许可
+                    CWEBP_SEMAPHORE.release();
                 }
-            }
+            }).get(35, TimeUnit.SECONDS); // 35秒总超时（包括文件操作）
 
-            // 等待命令完成
-            int exitCode = process.exitValue();
-
-            if (exitCode != 0) {
-                log.warn("cwebp命令执行失败，退出代码: {}, 输出: {}", exitCode, output);
-                return null;
-            }
-
-            // 读取输出文件
-            if (!tempOutputFile.exists() || tempOutputFile.length() == 0) {
-                log.warn("cwebp未生成输出文件或文件为空");
-                return null;
-            }
-
-            // 验证输出文件大小合理性（不能超过输入文件10倍）
-            if (tempOutputFile.length() > tempInputFile.length() * 10) {
-                log.warn("cwebp生成的输出文件异常大，可能存在安全问题");
-                return null;
-            }
-
-            byte[] webpData = java.nio.file.Files.readAllBytes(tempOutputFile.toPath());
-
-            return webpData;
-
+        } catch (ExecutionException e) {
+            log.error("虚拟线程执行失败: {}", e.getMessage());
+            return null;
+        } catch (TimeoutException e) {
+            log.error("虚拟线程执行超时", e);
+            return null;
         } catch (InterruptedException e) {
+            // 如果获取信号量时被打断
             Thread.currentThread().interrupt();
-            log.error("cwebp命令执行被中断", e);
+            log.error("获取cwebp信号量许可时被中断", e);
             return null;
         } catch (Exception e) {
             log.error("cwebp命令执行失败: {}", e.getMessage());

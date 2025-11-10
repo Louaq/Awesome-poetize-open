@@ -42,9 +42,9 @@ public class LoginCheckAspect {
     private final ConcurrentHashMap<Integer, Long> adminLogThrottle = new ConcurrentHashMap<>();
     
     /**
-     * 日志记录间隔（毫秒），默认1分钟
+     * 日志记录间隔（毫秒），默认3分钟
      */
-    private static final long LOG_INTERVAL_MS = TimeUnit.MINUTES.toMillis(1);
+    private static final long LOG_INTERVAL_MS = TimeUnit.MINUTES.toMillis(3);
 
     @Around("@annotation(loginCheck)")
     public Object around(ProceedingJoinPoint joinPoint, LoginCheck loginCheck) throws Throwable {
@@ -185,7 +185,7 @@ public class LoginCheckAspect {
         
         // 如果是第一次请求或距离上次记录超过指定间隔，则记录日志
         if (lastLogTime == null || (now - lastLogTime) >= LOG_INTERVAL_MS) {
-            log.info("管理员请求 - IP: {}, 用户: {} (限流：1分钟内的其他请求已省略)", clientIp, username);
+            log.info("管理员请求 - IP: {}, 用户: {} (限流：3分钟内的其他请求已省略)", clientIp, username);
             adminLogThrottle.put(userId, now);
             
             // 定期清理过期的记录，避免内存泄漏
