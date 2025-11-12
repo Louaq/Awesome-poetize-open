@@ -8,7 +8,6 @@
 - 支持内部网络和外部网络的访问控制
 - 支持备用IP验证机制
 """
-import functools
 import httpx
 import logging
 import time
@@ -17,7 +16,10 @@ import ipaddress
 from fastapi import Request, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
-from config import JAVA_AUTH_URL
+from config import JAVA_BACKEND_URL
+
+# 构建Java认证URL
+JAVA_AUTH_URL = f"{JAVA_BACKEND_URL}/user/checkAdminAuth"
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

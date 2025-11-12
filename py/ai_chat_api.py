@@ -71,8 +71,6 @@ def get_ai_chat_config():
         logger.error(f"聊天配置获取出错: {str(e)}")
         return DEFAULT_AI_CHAT_CONFIG, DEFAULT_AI_CHAT_CONFIG
 
-# save_ai_chat_config() 已删除 - 配置保存已迁移到Java后端
-
 async def test_ai_chat_connection(config):
     """
     测试AI聊天API连接

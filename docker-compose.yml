@@ -6,6 +6,7 @@ services:
       dockerfile: Dockerfile
     container_name: poetize-nginx
     logging:
+      driver: json-file
       options:
         max-size: "50m"
         max-file: "3"
@@ -111,6 +112,7 @@ services:
       dockerfile: docker/python/Dockerfile
     container_name: poetize-python
     logging:
+      driver: json-file
       options:
         max-size: "50m"
         max-file: "3"
@@ -190,6 +192,7 @@ services:
       dockerfile: docker/java/Dockerfile
     container_name: poetize-java
     logging:
+      driver: json-file
       options:
         max-size: "50m"
         max-file: "3"
@@ -254,6 +257,7 @@ services:
     image: redis:7-alpine
     container_name: poetize-redis
     logging:
+      driver: json-file
       options:
         max-size: "50m"
         max-file: "3"
@@ -283,6 +287,7 @@ services:
       dockerfile: docker/mysql/Dockerfile
     container_name: poetize-mariadb
     logging:
+      driver: json-file
       options:
         max-size: "50m"
         max-file: "3"
@@ -314,6 +319,7 @@ services:
       dockerfile: Dockerfile
     container_name: poetize-prerender
     logging:
+      driver: json-file
       options:
         max-size: "50m"
         max-file: "3"

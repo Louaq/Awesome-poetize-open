@@ -13,10 +13,8 @@ Mem0 免费版：每月 1000 次 API 调用
 """
 
 import os
-import json
 import logging
 from typing import Dict, List, Optional, Any
-from datetime import datetime
 import httpx
 
 logger = logging.getLogger('memory_manager')

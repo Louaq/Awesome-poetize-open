@@ -4,16 +4,12 @@ AI配置客户端
 """
 
 import logging
-import os
 from typing import Dict, Any, Optional
 import httpx
 from cache_helper import get_cache_helper
+from config import JAVA_BACKEND_URL
 
 logger = logging.getLogger(__name__)
-
-# Java后端服务地址
-JAVA_BACKEND_URL = os.getenv('JAVA_BACKEND_URL', 'http://localhost:8081')
-
 
 class AiConfigClient:
     """AI配置客户端（通过Java API获取）"""

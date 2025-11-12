@@ -5,7 +5,6 @@ Redis OAuth状态管理器
 - OAuth状态生成和验证
 - 基于Redis的分布式存储
 - 自动过期清理
-- 与原有接口兼容
 """
 
 import time

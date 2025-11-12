@@ -16,7 +16,6 @@ REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', '123456')
 REDIS_DB = int(os.environ.get('REDIS_DB', 0))
 REDIS_MAX_CONNECTIONS = int(os.environ.get('REDIS_MAX_CONNECTIONS', 20))
 
-
 # 自动检测后端地址
 def detect_backend_url():
     # 1. 优先使用环境变量
@@ -30,17 +29,8 @@ def detect_backend_url():
     default_url = "http://localhost:8081"
     return default_url
 
-# 自动获取基础URL
-BASE_BACKEND_URL = os.environ.get('JAVA_BACKEND_BASE_URL', detect_backend_url())
-
-# API端点
-JAVA_BACKEND_URL = os.environ.get('JAVA_BACKEND_URL', BASE_BACKEND_URL)
-
-# 配置同步API
-JAVA_CONFIG_URL = os.environ.get('JAVA_CONFIG_URL', f"{BASE_BACKEND_URL}")
-
-# Java验证API
-JAVA_AUTH_URL = os.environ.get('JAVA_AUTH_URL', f"{BASE_BACKEND_URL}/user/checkAdminAuth")
+# 自动获取Java后端基础URL
+JAVA_BACKEND_URL = detect_backend_url()
 
 # 从Java后端获取前端URL的接口
 JAVA_SITE_URL_API = f"{JAVA_BACKEND_URL}/seo/getSeoConfig/nginx"
@@ -190,5 +180,5 @@ async def init_frontend_url():
 PYTHON_SERVICE_PORT = int(os.environ.get('PORT', 5000))
 
 # 输出检测到的配置
-logger.info(f"后端URL: {BASE_BACKEND_URL}")
+logger.info(f"后端URL: {JAVA_BACKEND_URL}")
 logger.info(f"服务端口: {PYTHON_SERVICE_PORT}")

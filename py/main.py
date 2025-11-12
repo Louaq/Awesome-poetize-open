@@ -1,19 +1,16 @@
 """
 POETIZE博客系统 - FastAPI后端服务
-支持SEO优化、第三方登录、邮件发送等功能
+支持第三方登录、AI聊天、多语言翻译等功能
 
 主要功能模块：
-- SEO优化和搜索引擎推送
 - 第三方OAuth登录 (GitHub, Google, Twitter, Yandex, Gitee)
-- 邮件配置管理和发送服务
-- 智能验证码服务
 - 多语言翻译
-- AI聊天配置
+- AI聊天
+- 多语言摘要
 """
 
 import os
 import logging
-import asyncio
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
@@ -26,7 +23,6 @@ from redis_oauth_state_manager import oauth_state_manager
 
 from ai_chat_api import register_ai_chat_api  # 处理AI聊天功能（非配置管理）
 from translation_api import register_translation_api  # 处理翻译功能（非配置管理）
-from auth_decorator import admin_required  # 导入管理员权限验证装饰器
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)

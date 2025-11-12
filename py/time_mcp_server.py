@@ -11,10 +11,9 @@
 - 节假日查询
 """
 
-import asyncio
 import logging
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Dict
 from zoneinfo import ZoneInfo
 

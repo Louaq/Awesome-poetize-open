@@ -95,4 +95,4 @@ RUN node --version && npm --version && npx --version && \
 EXPOSE 5000
 
 # 使用Uvicorn启动FastAPI应用
-CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5000", "--workers", "4"]
+CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5000", "--workers", "4", "--access-log", "false"]

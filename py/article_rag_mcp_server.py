@@ -10,11 +10,9 @@ POETIZE文章知识库 MCP 服务器
 - 文章资源访问
 - 文章统计
 """
-import asyncio
 import json
 import logging
 import sys
-import os
 from typing import List
 from fastmcp import FastMCP, Context
 import httpx
@@ -24,7 +22,7 @@ from config import JAVA_BACKEND_URL
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 从环境变量或配置文件读取后端URL
+# 读取后端URL
 BACKEND_URL = JAVA_BACKEND_URL
 
 # 创建FastMCP实例
