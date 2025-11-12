@@ -1,8 +1,8 @@
 #!/bin/bash
 ## 作者: LeapYa
-## 修改时间: 2025-11-10
+## 修改时间: 2025-11-12
 ## 描述: Poetize 博客系统全局管理命令
-## 版本: 1.7.1
+## 版本: 1.7.2
 
 # 定义颜色
 RED='\033[0;31m'
@@ -1374,32 +1374,36 @@ reinstall_latest_system() {
 # 恢复完整备份
 restore_full_backup() {
     info "开始恢复用户数据和配置..."
-    
+
     # 检查全局变量BACKUP_DIR是否有效
     if [ -z "$BACKUP_DIR" ] || [ ! -d "$BACKUP_DIR" ]; then
         error "备份目录无效或不存在: $BACKUP_DIR"
         return 1
     fi
-    
+
     local latest_backup="$BACKUP_DIR"
     info "使用备份目录: $latest_backup"
-    
-    # 执行实际恢复操作
-    perform_restore_operations "$latest_backup"
-    
+
+    # 执行实际恢复操作，传入false表示恢复数据库凭据（用于更新流程）
+    perform_restore_operations "$latest_backup" "false"
+
     return 0
 }
 
 # 用户手动恢复数据
 restore_data() {
     local backup_path="$1"
-    
+
+    # 查找项目目录
+    find_project_dir
+
+    local project_name=$(basename "$(pwd)")
     # 如果未指定备份路径，查找最新的备份目录
     if [ -z "$backup_path" ]; then
         info "未指定备份路径，正在查找最新的备份目录..."
         
         # 查找/tmp目录中的poetize备份目录
-        local latest_backup=$(find /tmp -maxdepth 1 -type d -name "poetize_backup_*" -printf "%T@ %p\n" 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
+        local latest_backup=$(find /tmp -maxdepth 1 -type d -name "poetize_update_backup_${project_name}*" -printf "%T@ %p\n" 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
         
         if [ -z "$latest_backup" ]; then
             error "未找到任何备份目录"
@@ -1409,7 +1413,7 @@ restore_data() {
             printf "\n"
             printf "${YELLOW}示例:${NC}\n"
             printf "  poetize -restore                    # 恢复最新备份\n"
-            printf "  poetize -restore /tmp/poetize_backup_20231201_120000\n"
+            printf "  poetize -restore /tmp/poetize_update_backup_${project_name}_20231201_120000\n"
             printf "\n"
             return 1
         fi
@@ -1423,9 +1427,6 @@ restore_data() {
         error "备份路径不存在: $backup_path"
         return 1
     fi
-    
-    # 查找项目目录
-    find_project_dir
     
     # 显示备份信息
     if [ -f "$backup_path/backup_manifest.txt" ]; then
@@ -1450,8 +1451,8 @@ restore_data() {
             ;;
     esac
     
-    # 执行实际恢复操作
-    if perform_restore_operations "$backup_path"; then
+    # 执行实际恢复操作，传入true表示跳过数据库凭据恢复
+    if perform_restore_operations "$backup_path" "true"; then
         success "数据恢复完成"
         info "建议重启服务以确保所有更改生效:"
         printf "  ${CYAN}poetize -restart${NC}\n"
@@ -1464,17 +1465,22 @@ restore_data() {
 # 执行实际恢复操作的通用函数
 perform_restore_operations() {
     local backup_dir="$1"
-    
+    local skip_db_credentials="${2:-false}"  # 默认为false，即恢复数据库凭据
+
     info "开始从 $backup_dir 恢复数据..."
-    
+
     # 1. 恢复数据库凭据
-    info "恢复数据库凭据..."
-    if [ -f "$backup_dir/.config/db_credentials.txt" ]; then
-        mkdir -p ".config"
-        cp "$backup_dir/.config/db_credentials.txt" ".config/"
-        success "数据库凭据恢复完成"
+    if [ "$skip_db_credentials" = "true" ]; then
+        info "跳过数据库凭据恢复（保持当前配置）"
     else
-        warning "备份中未找到数据库凭据文件"
+        info "恢复数据库凭据..."
+        if [ -f "$backup_dir/.config/db_credentials.txt" ]; then
+            mkdir -p ".config"
+            cp "$backup_dir/.config/db_credentials.txt" ".config/"
+            success "数据库凭据恢复完成"
+        else
+            warning "备份中未找到数据库凭据文件"
+        fi
     fi
     
     # 2. 恢复数据库
